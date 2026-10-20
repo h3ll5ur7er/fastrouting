@@ -32,7 +32,11 @@ def find_traxide() -> Path | None:
         Path(__file__).parent / "bin" / executable,
         Path(found) if (found := shutil.which("traxide")) else None,
     ]
-    return next((c for c in candidates if c is not None and c.is_file()), None)
+    found = next((c for c in candidates if c is not None and c.is_file()), None)
+    if found is not None and not os.access(found, os.X_OK):
+        # KiCad's package manager unpacks the bundled binary without its mode.
+        found.chmod(found.stat().st_mode | 0o111)
+    return found
 
 
 def route_board(board: "pcbnew.BOARD", traxide: Path, folder: Path) -> Outcome:

@@ -9,6 +9,7 @@ on:
       - "crates/**"
       - "Cargo.*"
       - "rust-toolchain.toml"
+      - "kicad-plugin/**"
       - ".github/workflows/binaries.yml"
 
 env:
@@ -83,3 +84,37 @@ jobs:
         with:
           name: traxide-macos-universal
           path: dist/
+
+  kicad:
+    name: KiCad plugin packages
+    needs: [build, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+          merge-multiple: true
+      # One package per platform, each with its traxide in plugins/bin, to
+      # install with KiCad's Plugin and Content Manager → Install from File.
+      - name: Assemble
+        run: |
+          package() { # target, platform
+            folder="packages/$1"
+            mkdir -p "$folder/plugins/bin"
+            cp kicad-plugin/plugins/*.py "$folder/plugins/"
+            cp built/traxide-$1/traxide built/traxide-$1/traxide.exe "$folder/plugins/bin/" 2>/dev/null || true
+            chmod +x "$folder"/plugins/bin/*
+            jq --arg platform "$2" '.versions[0].platforms = [$platform]' kicad-plugin/metadata.json > "$folder/metadata.json"
+            (cd "$folder" && zip -qr "../traxide-kicad-$1.zip" .)
+          }
+          package x86_64-unknown-linux-musl linux
+          package aarch64-unknown-linux-musl linux
+          package x86_64-pc-windows-msvc windows
+          package aarch64-pc-windows-msvc windows
+          package macos-universal macos
+          for zip in packages/*.zip; do unzip -l "$zip" | grep -q "plugins/bin/traxide" || { echo "no traxide in $zip"; exit 1; }; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: traxide-kicad-packages
+          path: packages/*.zip
