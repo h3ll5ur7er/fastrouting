@@ -245,3 +245,170 @@ fn keepouts_of_a_footprint_on_the_back_mirror_with_it() {
     assert_eq!(r3.layer, Some(layer(&design, "B.Cu")));
     assert_eq!(r3.scope, KeepoutScope::ViasOnly);
 }
+
+/// `fixture` from the workspace's boards, with `edit` applied to its bytes.
+fn edited_board(fixture: &str, edit: impl Fn(Vec<u8>) -> Vec<u8>) -> tempfile::TempPath {
+    let original = std::fs::read(format!(
+        "{}/../../../fixtures/boards/{fixture}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .expect("fixture");
+    let path = tempfile::Builder::new()
+        .suffix(".dsn")
+        .tempfile()
+        .expect("temp file")
+        .into_temp_path();
+    std::fs::write(&path, edit(original)).expect("writable");
+    path
+}
+
+fn replaced(bytes: Vec<u8>, from: &[u8], to: &[u8]) -> Vec<u8> {
+    let at = bytes
+        .windows(from.len())
+        .position(|w| w == from)
+        .expect("present");
+    [&bytes[..at], to, &bytes[at + from.len()..]].concat()
+}
+
+#[test]
+fn reads_designs_written_in_latin_1() {
+    // "Across" renamed to "Acrèss" in Latin-1, where è is the single byte E8.
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(bytes, b"(net Across", b"(net Acr\xe8ss")
+    });
+    let design = load_design(&board).expect("readable");
+    assert!(design.nets.iter().any(|n| n.name == "Acrèss"));
+}
+
+#[test]
+fn a_file_that_is_no_specctra_design_says_so() {
+    let board = edited_board("two-nets.dsn", |_| {
+        b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1 binary".to_vec()
+    });
+    let error = load_design(&board).unwrap_err();
+    assert!(
+        error.to_string().contains("not a Specctra design"),
+        "{error}"
+    );
+}
+
+#[test]
+fn rules_may_be_spread_over_several_lists_and_say_clear_for_clearance() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(rule (width 200) (clearance 200))",
+            b"(rule (width 200)) (rule (clear 300)) (rule (clear 100 (type smd_smd)))",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    let class = &design.rules.classes[design.rules.default_class.index()];
+    assert_eq!((class.track_width, class.clearance), (mm(0.2), mm(0.3)));
+}
+
+#[test]
+fn the_signal_boundary_is_where_routing_may_go() {
+    // The board is 30 × 20 mm; its signal boundary keeps 1 mm inside.
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(via ",
+            b"(boundary (rect signal 1000 -19000 29000 -1000))\n    (via ",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    assert_eq!(
+        design.outline.bounds(),
+        Rect {
+            min: Point::new(mm(1.0), mm(1.0)),
+            max: Point::new(mm(29.0), mm(19.0)),
+        }
+    );
+}
+
+#[test]
+fn reads_wires_written_as_polyline_paths() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(wiring)",
+            b"(wiring (wire (polyline_path F.Cu 200 6000 -10000 24000 -10000) (net Across)))",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    assert_eq!(
+        design.existing.tracks[0].path,
+        [
+            Point::new(mm(6.0), mm(10.0)),
+            Point::new(mm(24.0), mm(10.0))
+        ]
+    );
+}
+
+#[test]
+fn pins_of_a_net_may_quote_their_pin_names() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(bytes, b"(pins R1-2 R2-1)", b"(pins R1-\"2\" R2-1)")
+    });
+    let design = load_design(&board).expect("readable");
+    let across = design.nets.iter().position(|n| n.name == "Across");
+    assert_eq!(pad(&design, "R1-2").net.map(|n| n.index()), across);
+}
+
+#[test]
+fn a_pad_polygon_of_two_points_is_a_line_as_wide_as_its_aperture() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(shape (rect F.Cu -500 -600 500 600))",
+            b"(shape (polygon F.Cu 100 0 -500 0 500))",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    let copper = &pad(&design, "R1-1").copper[0];
+    assert!(
+        matches!(copper.shape, Shape::Capsule { radius: 50_000, .. }),
+        "{copper:?}"
+    );
+}
+
+#[test]
+fn reads_circ_as_circle() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(shape (rect F.Cu -500 -600 500 600))",
+            b"(shape (circ F.Cu 1000))",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    let copper = &pad(&design, "R1-1").copper[0];
+    assert!(
+        matches!(
+            copper.shape,
+            Shape::Capsule {
+                radius: 500_000,
+                ..
+            }
+        ),
+        "{copper:?}"
+    );
+}
+
+#[test]
+fn a_class_without_a_name_or_nets_changes_nothing() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(net Down (pins R3-1 R4-2))",
+            b"(net Down (pins R3-1 R4-2))\n    (class (circuit (use_via \"Via[0-1]_600:300_um\")) (rule (width 900)))",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    assert!(
+        design
+            .nets
+            .iter()
+            .all(|n| n.class == design.rules.default_class)
+    );
+}

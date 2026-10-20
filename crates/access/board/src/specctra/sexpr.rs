@@ -73,6 +73,23 @@ impl Sexp {
     }
 }
 
+/// Keywords that tools spell differently, with the spelling the reader uses.
+const SYNONYMS: &[(&str, &str)] = &[
+    ("circ", "circle"),
+    ("clear", "clearance"),
+    // Freerouting writes wires this way.
+    ("polyline_path", "path"),
+];
+
+/// Keywords are case-insensitive, as some tools write (PCB …), and some have
+/// synonyms.
+fn canonical_keyword(token: &mut String) {
+    token.make_ascii_lowercase();
+    if let Some((_, canonical)) = SYNONYMS.iter().find(|(synonym, _)| synonym == token) {
+        *token = (*canonical).to_owned();
+    }
+}
+
 /// Parses one top-level list. Specctra files may redefine their quote character
 /// with `(string_quote X)`, where X is a bare character, so quoting is stateful.
 pub(crate) fn parse(text: &str) -> Result<Sexp, BoardError> {
@@ -132,6 +149,9 @@ pub(crate) fn parse(text: &str) -> Result<Sexp, BoardError> {
                         token.push(next);
                         chars.next();
                     }
+                    if items.is_empty() {
+                        canonical_keyword(&mut token);
+                    }
                     token
                 };
                 items.push(Sexp::Atom { text, line });
@@ -181,6 +201,25 @@ mod tests {
     fn the_default_quote_can_be_declared_as_a_bare_character() {
         let root = parse("(pcb (parser (string_quote \")) (net \"a b\"))").expect("valid");
         assert_eq!(atoms(root.child("net").expect("net")), ["a b"]);
+    }
+
+    #[test]
+    fn keywords_are_read_in_any_case_and_names_keep_theirs() {
+        let root = parse("(PCB Board (Structure (Layer F.Cu)))").expect("valid");
+        assert_eq!(root.keyword(), Some("pcb"));
+        let layer = root
+            .child("structure")
+            .and_then(|s| s.child("layer"))
+            .expect("found in any case");
+        assert_eq!(atoms(layer), ["F.Cu"]);
+        assert_eq!(atoms(&root), ["Board"]);
+    }
+
+    #[test]
+    fn synonyms_read_as_the_keyword_they_stand_for() {
+        let root = parse("(rule (clear 2) (CIRC x))").expect("valid");
+        assert!(root.child("clearance").is_some());
+        assert!(root.child("circle").is_some());
     }
 
     #[test]

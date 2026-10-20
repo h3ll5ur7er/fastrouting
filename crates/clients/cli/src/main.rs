@@ -154,6 +154,12 @@ fn summarise(report: &RouteReport, output: &std::path::Path) -> ExitCode {
     for (net, from, to) in &report.unrouted {
         println!("  unrouted: {net} from {from} to {to}");
     }
+    if report.violations_before_routing > 0 {
+        println!(
+            "Note: the board broke {} rules before routing, in the copper it came with; they are as they were.",
+            report.violations_before_routing
+        );
+    }
     let broken: Vec<&Violation> = report
         .verdict
         .violations

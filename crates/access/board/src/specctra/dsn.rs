@@ -9,9 +9,18 @@ use traxide_contracts::{
 };
 
 pub fn parse_dsn(text: &str) -> Result<Design, BoardError> {
+    let not_a_design = |line| BoardError::Invalid {
+        line,
+        message: "not a Specctra design: expected (pcb …)".into(),
+    };
+    // Other programs save other things as .dsn too, such as OrCAD schematics.
+    let text = text.trim_start_matches('\u{feff}');
+    if !text.trim_start().starts_with('(') {
+        return Err(not_a_design(1));
+    }
     let root = sexpr::parse(text)?;
     if root.keyword() != Some("pcb") {
-        return Err(root.invalid("not a Specctra design: expected (pcb …)"));
+        return Err(not_a_design(root.line()));
     }
     DsnReader::new(&root)?.read()
 }
@@ -143,7 +152,18 @@ impl<'a> DsnReader<'a> {
                     Rect::around(corners).ok_or_else(|| sexp.invalid("empty rect"))?,
                 ))
             }
-            Some("polygon") => Shape::Polygon(self.polygon(sexp, &args[2..])?),
+            Some("polygon") => {
+                let points = self.units.points(&args[2..])?;
+                // Some tools draw a slot or a thin pad as a polygon of one or two
+                // points, which the aperture's width makes a line.
+                match points.as_slice() {
+                    [a] => Shape::circle(*a, self.units.length(number(1)?)?.max(1)),
+                    [a, b] => {
+                        Shape::track(Segment::new(*a, *b), self.units.length(number(1)?)?.max(1))
+                    }
+                    _ => Shape::Polygon(self.polygon(sexp, &args[2..])?),
+                }
+            }
             Some("path") => {
                 let width = self.units.length(number(1)?)?;
                 match self.units.points(&args[2..])?.as_slice() {
@@ -173,12 +193,19 @@ impl<'a> DsnReader<'a> {
         Polygon::new(points).ok_or_else(|| sexp.invalid("a polygon needs at least three points"))
     }
 
+    /// The signal boundary, which routing must stay inside, where the design has
+    /// one; otherwise the board's outline (the `pcb` boundary).
     fn outline(&self) -> Result<Polygon, BoardError> {
-        let boundary = self.structure.required_child("boundary")?;
-        let shape = boundary
-            .args()
-            .first()
-            .ok_or_else(|| boundary.invalid("empty boundary"))?;
+        let first = self.structure.required_child("boundary")?;
+        let shape_of = |boundary: &'a Sexp| boundary.args().first();
+        let signal = self
+            .structure
+            .children("boundary")
+            .filter_map(shape_of)
+            .find(|shape| shape.args().first().and_then(Sexp::atom) == Some("signal"));
+        let shape = signal
+            .or_else(|| shape_of(first))
+            .ok_or_else(|| first.invalid("empty boundary"))?;
         let polygon = match shape.keyword() {
             Some("path" | "polygon") => {
                 self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
@@ -377,8 +404,8 @@ impl<'a> DsnReader<'a> {
         padstacks: &HashMap<&str, Vec<LayeredShape>>,
         via_kinds: &mut ViaKinds,
     ) -> Result<CompiledClasses<'a>, BoardError> {
-        let board_rule = self.structure.required_child("rule")?;
-        let (width, clearance) = self.rule(board_rule, None)?;
+        let board_rules: Vec<&Sexp> = self.structure.children("rule").collect();
+        let (width, clearance) = self.rule(self.structure, &board_rules, None)?;
         let mut default_vias = Vec::new();
         for via in self.structure.children("via") {
             for name in via.args() {
@@ -394,11 +421,12 @@ impl<'a> DsnReader<'a> {
         let mut class_of_net = HashMap::new();
         for class in self.root.required_child("network")?.children("class") {
             let id = NetClassId::from_index(classes.len());
-            let name = class.arg_atom(0, "class name")?;
-            let (track_width, clearance) = match class.child("rule") {
-                Some(rule) => self.rule(rule, Some((width, clearance)))?,
-                None => (width, clearance),
+            // Some tools write a class without a name, which no net can be in.
+            let Some(name) = class.args().first().and_then(Sexp::atom) else {
+                continue;
             };
+            let rules: Vec<&Sexp> = class.children("rule").collect();
+            let (track_width, clearance) = self.rule(class, &rules, Some((width, clearance)))?;
             let mut vias = Vec::new();
             for use_via in class
                 .children("circuit")
@@ -450,15 +478,24 @@ impl<'a> DsnReader<'a> {
         }
     }
 
-    /// The width and the general clearance of a `(rule …)`; clearances limited to
-    /// a `(type …)` of object refine pad-to-pad spacing, which routing never sets.
-    fn rule(&self, rule: &Sexp, defaults: Option<(i32, i32)>) -> Result<(i32, i32), BoardError> {
+    /// The width and the general clearance that the `(rule …)` lists of `owner`
+    /// set together, as some tools write one list per rule. Clearances limited to a `(type …)` of object refine pad-to-pad
+    /// spacing, which routing never sets.
+    fn rule(
+        &self,
+        owner: &Sexp,
+        rules: &[&Sexp],
+        defaults: Option<(i32, i32)>,
+    ) -> Result<(i32, i32), BoardError> {
         let length = |keyword: &str, default: Option<i32>| -> Result<i32, BoardError> {
-            let general = rule.children(keyword).find(|c| c.child("type").is_none());
+            let general = rules
+                .iter()
+                .flat_map(|rule| rule.children(keyword))
+                .find(|item| item.child("type").is_none());
             match (general.and_then(|c| c.args().first()), default) {
                 (Some(value), _) => self.units.length(value),
                 (None, Some(default)) => Ok(default),
-                (None, None) => Err(rule.invalid(format!("rule without a {keyword}"))),
+                (None, None) => Err(owner.invalid(format!("rules without a {keyword}"))),
             }
         };
         Ok((
@@ -478,8 +515,11 @@ impl<'a> DsnReader<'a> {
                     .flat_map(|pins| pins.args())
                     .map(|pin| {
                         let pin_name = pin.atom().ok_or_else(|| pin.invalid("expected a pin"))?;
+                        // A pin's name may be quoted after its component's:
+                        // X14-"D-" for the pin declared as "D-".
+                        let unquoted = pin_name.replace('"', "");
                         pad_by_name
-                            .get(pin_name)
+                            .get(&unquoted)
                             .copied()
                             .ok_or_else(|| pin.invalid(format!("unknown pin {pin_name}")))
                     })

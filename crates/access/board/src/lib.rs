@@ -56,9 +56,13 @@ fn extension(path: &Path) -> Option<&str> {
     path.extension().and_then(|e| e.to_str())
 }
 
+/// The file's text: UTF-8, as KiCad writes, or else Latin-1, as some older
+/// tools do, which maps every byte to the character of the same number.
 fn read(path: &Path) -> Result<String, BoardError> {
-    std::fs::read_to_string(path).map_err(|source| BoardError::Io {
+    let bytes = std::fs::read(path).map_err(|source| BoardError::Io {
         path: path.into(),
         source,
-    })
+    })?;
+    Ok(String::from_utf8(bytes)
+        .unwrap_or_else(|error| error.into_bytes().iter().map(|&b| char::from(b)).collect()))
 }

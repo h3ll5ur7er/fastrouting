@@ -6,7 +6,10 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
-use traxide_contracts::{Connection, Design, Event, NetClassId, RoutingResult, Stage, Verdict};
+use traxide_contracts::{
+    Connection, CopperItem, Design, Event, NetClassId, Routes, RoutingResult, Stage, Verdict,
+    Violation,
+};
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Publisher};
 use traxide_layout_access::Layout;
@@ -37,6 +40,9 @@ pub struct RouteReport {
     /// The independent check of the stored routes. Unconnected pads follow from
     /// unrouted connections; any other violation is a bug of the router.
     pub verdict: Verdict,
+    /// Rules the board broke before routing, between its pads and the copper it
+    /// came with, which routing leaves as they are.
+    pub violations_before_routing: usize,
     pub cancelled: bool,
     pub elapsed: Duration,
 }
@@ -49,6 +55,22 @@ pub enum RouteError {
     Profile(#[from] ProfileError),
     #[error("no net class named {name}; there are {}", known.join(", "))]
     UnknownNetClass { name: String, known: Vec<String> },
+}
+
+/// Whether `violation` involves copper routing added, which comes after the
+/// design's existing copper in the verified routes. Unconnected pads always do:
+/// connecting them is routing's job.
+fn involves_new_copper(violation: &Violation, existing: &Routes) -> bool {
+    let is_new = |item: &CopperItem| match *item {
+        CopperItem::Pad(_) => false,
+        CopperItem::Track(index) => index >= existing.tracks.len(),
+        CopperItem::Via(index) => index >= existing.vias.len(),
+    };
+    match violation {
+        Violation::Clearance { a, b, .. } => is_new(a) || is_new(b),
+        Violation::Edge { item, .. } | Violation::Keepout { item, .. } => is_new(item),
+        Violation::Unconnected { .. } => true,
+    }
 }
 
 fn net_classes_named(design: &Design, names: &[String]) -> Result<Vec<NetClassId>, RouteError> {
@@ -103,11 +125,16 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());
-    let verdict = traxide_verification::verify(
+    let full_verdict = traxide_verification::verify(
         &design,
         &traxide_rules::compile(&design, Purpose::Verification),
         &everything,
     );
+    let (violations, before_routing): (Vec<Violation>, Vec<Violation>) = full_verdict
+        .violations
+        .into_iter()
+        .partition(|v| involves_new_copper(v, &design.existing));
+    let verdict = Verdict { violations };
     events.publish(Event::StageStarted(Stage::Storing));
     traxide_board_access::store_routes(&job.output, &design, &routes)?;
     let named = |c: &Connection| {
@@ -123,6 +150,7 @@ pub fn route(
         tracks: routes.tracks.len(),
         vias: routes.vias.len(),
         verdict,
+        violations_before_routing: before_routing.len(),
         cancelled: cancel.is_cancelled(),
         elapsed: started.elapsed(),
     })

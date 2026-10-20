@@ -107,3 +107,26 @@ fn an_unknown_net_class_to_leave_unrouted_is_an_error_naming_the_known_ones() {
         "no net class named Pwr; there are default, kicad_default, Power"
     );
 }
+
+#[test]
+fn rules_the_board_broke_before_routing_are_not_counted_as_the_routers() {
+    // An existing track of Across crosses a pad of Down.
+    let folder = tempfile::tempdir().expect("temp dir");
+    let output = folder.path().join("board.ses");
+    let report = route(
+        &job("existing-violation.dsn", &output),
+        &Silent,
+        &CancelToken::new(),
+    )
+    .expect("routable");
+    assert_eq!(report.violations_before_routing, 1);
+    assert!(
+        report
+            .verdict
+            .violations
+            .iter()
+            .all(|v| matches!(v, traxide_contracts::Violation::Unconnected { .. })),
+        "{:?}",
+        report.verdict
+    );
+}
