@@ -39,18 +39,37 @@ class Tht:
 
 
 @dataclass(frozen=True)
+class NetClass:
+    """A net class for the nets whose names match `pattern`."""
+    name: str
+    pattern: str
+    track: float
+    clearance: float
+
+
+@dataclass(frozen=True)
 class Recipe:
-    """How to build a board, and the rules of its default net class. KiCad keeps
-    net classes in the project, not in the board, so they are applied when the
-    board is saved with its project (roundtrip.py)."""
+    """How to build a board, the rules of its net classes and its custom rules
+    (the text of a .kicad_dru). KiCad keeps net classes in the project, not in
+    the board, so they are applied when the board is saved with its project
+    (roundtrip.py)."""
     build: object
     track: float = 0.2
     clearance: float = 0.2
+    classes: tuple[NetClass, ...] = ()
+    custom_rules: str | None = None
 
     def apply_rules(self, board) -> None:
-        default_class = board.GetDesignSettings().m_NetSettings.GetDefaultNetclass()
+        settings = board.GetDesignSettings().m_NetSettings
+        default_class = settings.GetDefaultNetclass()
         default_class.SetTrackWidth(MM(self.track))
         default_class.SetClearance(MM(self.clearance))
+        for spec in self.classes:
+            net_class = pcbnew.NETCLASS(spec.name)
+            net_class.SetTrackWidth(MM(spec.track))
+            net_class.SetClearance(MM(spec.clearance))
+            settings.SetNetclass(spec.name, net_class)
+            settings.SetNetclassPatternAssignment(spec.pattern, spec.name)
 
 
 class BoardBuilder:
@@ -148,6 +167,38 @@ def crossing() -> pcbnew.BOARD:
     builder.footprint("TP3", 15, 5, pad("DOWN"))
     builder.footprint("TP4", 15, 25, pad("DOWN"))
     return builder.board
+
+
+def isolation() -> pcbnew.BOARD:
+    """A high-voltage net that two signals must cross, at the distance the
+    board's custom rules ask (ISOLATION_RULES)."""
+    builder = BoardBuilder(40, 30)
+    pad = lambda net: [Smd("1", 0, 0, 1.2, 1.2, net)]
+    builder.footprint("TP1", 5, 8, pad("HV"))
+    builder.footprint("TP2", 35, 22, pad("HV"))
+    builder.footprint("TP3", 5, 22, pad("SIG1"))
+    builder.footprint("TP4", 35, 8, pad("SIG1"))
+    builder.footprint("TP5", 20, 3, pad("SIG2"))
+    builder.footprint("TP6", 20, 27, pad("SIG2"))
+    return builder.board
+
+
+ISOLATION_RULES = """(version 1)
+# Signals keep 3 mm from the high-voltage net, on every layer.
+(rule "HV isolation"
+    (constraint clearance (min 3mm))
+    (condition "A.NetClass == 'HV' && B.NetClass != 'HV'"))
+(rule "SIG2 is wide"
+    (constraint track_width (min 0.4mm))
+    (condition "A.NetName == 'SIG2'"))
+(rule "HV away from the edge"
+    (constraint edge_clearance (min 2mm))
+    (condition "A.NetClass == 'HV'"))
+# traxide cannot tell a pad from a track, so this may only keep copper apart.
+(rule "pads close"
+    (constraint clearance (min 0.1mm))
+    (condition "A.Type == 'Pad' && B.Type == 'Pad'"))
+"""
 
 
 KEY_PITCH = 19.05
@@ -291,6 +342,11 @@ RECIPES = {
     "keyboard-tkl": Recipe(keyboard_tkl, track=0.2, clearance=0.15),
     "placements": Recipe(placements),
     "crossing": Recipe(crossing),
+    "isolation": Recipe(
+        isolation,
+        classes=(NetClass("HV", "HV", track=0.5, clearance=0.3),),
+        custom_rules=ISOLATION_RULES,
+    ),
     "matrix-3x4": Recipe(lambda: key_matrix(3, 4)),
     "matrix-6x17": Recipe(lambda: key_matrix(6, 17)),
 }

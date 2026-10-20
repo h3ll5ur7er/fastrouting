@@ -67,6 +67,43 @@ fn a_board_without_its_project_follows_kicads_defaults() {
     assert_eq!(design.rules, board("crossing.kicad_pcb").rules);
 }
 
+/// A copy of the crossing board in `folder`, with `custom_rules` beside it.
+fn crossing_with_custom_rules(folder: &Path, custom_rules: &str) -> std::path::PathBuf {
+    for extension in ["kicad_pcb", "kicad_pro"] {
+        std::fs::copy(
+            fixture(&format!("crossing.{extension}")),
+            folder.join(format!("crossing.{extension}")),
+        )
+        .expect("copied");
+    }
+    std::fs::write(folder.join("crossing.kicad_dru"), custom_rules).expect("written");
+    folder.join("crossing.kicad_pcb")
+}
+
+#[test]
+fn custom_rules_come_from_the_rules_file_beside_the_board() {
+    let folder = tempfile::tempdir().expect("temporary folder");
+    let board = crossing_with_custom_rules(
+        folder.path(),
+        "(version 1)\n(rule wide (constraint clearance (min 1mm)) (condition \"A.NetName == 'DOWN'\"))",
+    );
+    let custom = load_design(&board).expect("valid").rules.custom;
+    assert_eq!(custom.len(), 1);
+    assert_eq!(custom[0].name, "wide");
+    assert_eq!(custom[0].limits.min, Some(MM));
+}
+
+#[test]
+fn broken_custom_rules_are_refused_with_their_line() {
+    let folder = tempfile::tempdir().expect("temporary folder");
+    let board = crossing_with_custom_rules(
+        folder.path(),
+        "(version 1)\n(rule r\n  (constraint clearance (min 1)))",
+    );
+    let error = load_design(&board).unwrap_err().to_string();
+    assert!(error.contains("custom rules, line 3"), "{error}");
+}
+
 #[test]
 fn the_boards_own_tracks_and_vias_are_existing_copper() {
     let design = board("crossing.routed.kicad_pcb");
@@ -255,6 +292,18 @@ mod storing {
                 .map(<[Point]>::to_vec)
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn a_routed_board_keeps_the_custom_rules_of_the_board() {
+        let folder = tempfile::tempdir().expect("temporary folder");
+        let rules = "(version 1)\n(rule wide (constraint clearance (min 1mm)))";
+        let input = crossing_with_custom_rules(folder.path(), rules);
+        let output = folder.path().join("routed.kicad_pcb");
+        let design = load_design(&input).expect("valid");
+        store_routes(&output, &input, &design, &routes(&design)).expect("stored");
+        let copied = std::fs::read_to_string(folder.path().join("routed.kicad_dru"));
+        assert_eq!(copied.expect("copied beside the routed board"), rules);
     }
 
     #[test]

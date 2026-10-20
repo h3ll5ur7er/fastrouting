@@ -1,5 +1,5 @@
 use super::project::{Project, nanometres};
-use super::sexpr;
+use super::{rules, sexpr};
 use crate::BoardError;
 use crate::sexp::Sexp;
 use std::collections::HashMap;
@@ -20,12 +20,17 @@ pub(crate) struct Board {
     pub net_numbers: Option<HashMap<String, String>>,
 }
 
-pub(crate) fn read(text: &str, project: Option<&str>) -> Result<Board, BoardError> {
+/// The board in `text`, with the rules of its project and its custom rules.
+pub(crate) fn read(
+    text: &str,
+    project: Option<&str>,
+    custom_rules: Option<&str>,
+) -> Result<Board, BoardError> {
     let root = sexpr::parse(text.trim_start_matches('\u{feff}'))?;
     if root.keyword() != Some("kicad_pcb") {
         return Err(root.invalid("not a KiCad board: expected (kicad_pcb …)"));
     }
-    Reader::new(&root, Project::read(project)?)?.read()
+    Reader::new(&root, Project::read(project)?)?.read(custom_rules)
 }
 
 /// How far an arc may bulge beyond the straight segments it is read as.
@@ -104,7 +109,7 @@ impl<'a> Reader<'a> {
         })
     }
 
-    fn read(mut self) -> Result<Board, BoardError> {
+    fn read(mut self, custom_rules: Option<&str>) -> Result<Board, BoardError> {
         // Nets numbered in the board keep their order.
         for net in self.root.children("net") {
             if let Some(name) = net.args().get(1).and_then(Sexp::atom)
@@ -113,7 +118,7 @@ impl<'a> Reader<'a> {
                 self.net(name);
             }
         }
-        let rules = self.rules();
+        let mut rules = self.rules();
         let mut pads = Vec::new();
         for footprint in self.root.children("footprint") {
             self.footprint(footprint, &mut pads)?;
@@ -128,6 +133,19 @@ impl<'a> Reader<'a> {
             }
         }
         let outline = self.outline()?;
+        if let Some(text) = custom_rules {
+            let names = rules::Names {
+                classes: &rules.classes,
+                nets: &self.nets,
+                layers: &self.layers,
+            };
+            rules.custom = rules::read(text, &names).map_err(|error| match error {
+                BoardError::Syntax { line, message } | BoardError::Invalid { line, message } => {
+                    BoardError::CustomRules { line, message }
+                }
+                other => other,
+            })?;
+        }
         for (index, pad) in pads.iter().enumerate() {
             if let Some(net) = pad.net {
                 self.nets[net.index()]
@@ -184,6 +202,8 @@ impl<'a> Reader<'a> {
             classes,
             default_class: NetClassId::from_index(0),
             edge_clearance: self.project.edge_clearance,
+            hole_clearance: self.project.hole_clearance,
+            custom: Vec::new(),
         }
     }
 
@@ -561,6 +581,7 @@ impl ViaKinds {
                     shape: Shape::circle(Point::default(), diameter),
                 })
                 .collect(),
+            drill: Some(drill),
         });
         self.sizes.push(ViaSize { diameter, drill });
         ViaKindId::from_index(self.kinds.len() - 1)
@@ -875,7 +896,7 @@ mod tests {
                 (gr_rect (start 0 0) (end 10 10) (layer "Edge.Cuts"))
                 {items})"#
         );
-        read(&text, None).expect("valid board").design
+        read(&text, None, None).expect("valid board").design
     }
 
     fn net_names(design: &Design) -> Vec<&str> {
@@ -998,7 +1019,7 @@ mod tests {
             (gr_line (start 0 10) (end 0 0) (layer "Edge.Cuts"))
             (gr_arc (start 10 0) (mid 15 5) (end 10 10) (layer "Edge.Cuts"))
             (gr_line (start 0 10) (end 10 10) (layer "Edge.Cuts")))"#;
-        let design = read(text, None).expect("valid").design;
+        let design = read(text, None, None).expect("valid").design;
         let bounds = design.outline.bounds();
         assert_eq!(bounds.min, Point::new(0, 0));
         assert_eq!(bounds.max, Point::new(15 * MM, 10 * MM));
@@ -1035,7 +1056,7 @@ mod tests {
     fn a_board_without_a_closed_outline_is_refused() {
         let text = r#"(kicad_pcb (layers (0 "F.Cu" signal))
             (gr_line (start 0 0) (end 10 0) (layer "Edge.Cuts")))"#;
-        assert!(read(text, None).is_err());
-        assert!(read("(kicad_sch)", None).is_err());
+        assert!(read(text, None, None).is_err());
+        assert!(read("(kicad_sch)", None, None).is_err());
     }
 }

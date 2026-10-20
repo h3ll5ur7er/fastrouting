@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
 
-const DEFAULT_RECIPES: &[&str] = &["placements", "crossing", "matrix-3x4"];
+const DEFAULT_RECIPES: &[&str] = &["placements", "crossing", "matrix-3x4", "isolation"];
 
 pub fn run(args: &[String]) -> Result<()> {
     let kicad = Kicad::from_args(args);
@@ -36,39 +36,14 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
     let out = root.join("target/e2e").join(recipe);
     std::fs::create_dir_all(&out)?;
     kicad.export(root, &out, recipe)?;
+    // Specctra DSN has no words for KiCad's custom rules, so a board that has
+    // them is routed from its own file only.
+    let custom_rules = out.join(format!("{recipe}.kicad_dru")).is_file();
+    let mut summary = String::new();
+    if !custom_rules {
+        summary = through_dsn(kicad, root, traxide, recipe, &out)?;
+    }
     let started = Instant::now();
-    let routed = Command::new(traxide)
-        .arg("route")
-        .arg("--quiet")
-        .arg(out.join(format!("{recipe}.dsn")))
-        .output()?;
-    let seconds = started.elapsed().as_secs_f64();
-    let summary = String::from_utf8_lossy(&routed.stdout)
-        .lines()
-        .next()
-        .unwrap_or_default()
-        .to_owned();
-    ensure!(
-        routed.status.success(),
-        "traxide did not route everything:\n{}",
-        String::from_utf8_lossy(&routed.stdout)
-    );
-    let judgement = kicad.judge(
-        root,
-        &out,
-        recipe,
-        &format!("{recipe}.ses"),
-        &format!("{recipe}.routed"),
-    )?;
-    ensure!(
-        judgement.is_clean(),
-        "KiCad's DRC found {} violations and {} unconnected items:\n  {}",
-        judgement.violations.len(),
-        judgement.unconnected.len(),
-        [judgement.violations, judgement.unconnected]
-            .concat()
-            .join("\n  ")
-    );
     let direct = Command::new(traxide)
         .arg("route")
         .arg("--quiet")
@@ -76,6 +51,7 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
         .arg("-o")
         .arg(out.join(format!("{recipe}.direct.kicad_pcb")))
         .output()?;
+    let seconds = started.elapsed().as_secs_f64();
     ensure!(
         direct.status.success(),
         "traxide did not route the KiCad board completely:\n{}{}",
@@ -92,6 +68,15 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .concat()
             .join("\n  ")
     );
+    if custom_rules {
+        return Ok(format!(
+            "routed from the board file by its custom rules in {seconds:.2} s, clean in KiCad's DRC ({})",
+            first_line(&direct.stdout)
+                .split(" → ")
+                .next()
+                .unwrap_or_default()
+        ));
+    }
     let through_plugin =
         kicad.route_with_plugin(root, &out, recipe, &kicad.traxide_for_kicad(root)?)?;
     ensure!(
@@ -104,7 +89,60 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .join("\n  ")
     );
     Ok(format!(
-        "clean in KiCad's DRC, from the board file and through the KiCad plugin too; routed in {seconds:.2} s ({})",
-        summary.split(" → ").next().unwrap_or_default()
+        "clean in KiCad's DRC, from the board file and through the KiCad plugin too; {summary}"
     ))
+}
+
+/// Routes the recipe's DSN export and has KiCad judge the imported session;
+/// says how long routing took.
+fn through_dsn(
+    kicad: &Kicad,
+    root: &Path,
+    traxide: &Path,
+    recipe: &str,
+    out: &Path,
+) -> Result<String> {
+    let started = Instant::now();
+    let routed = Command::new(traxide)
+        .arg("route")
+        .arg("--quiet")
+        .arg(out.join(format!("{recipe}.dsn")))
+        .output()?;
+    let seconds = started.elapsed().as_secs_f64();
+    ensure!(
+        routed.status.success(),
+        "traxide did not route everything:\n{}",
+        String::from_utf8_lossy(&routed.stdout)
+    );
+    let judgement = kicad.judge(
+        root,
+        out,
+        recipe,
+        &format!("{recipe}.ses"),
+        &format!("{recipe}.routed"),
+    )?;
+    ensure!(
+        judgement.is_clean(),
+        "KiCad's DRC found {} violations and {} unconnected items:\n  {}",
+        judgement.violations.len(),
+        judgement.unconnected.len(),
+        [judgement.violations, judgement.unconnected]
+            .concat()
+            .join("\n  ")
+    );
+    Ok(format!(
+        "routed in {seconds:.2} s ({})",
+        first_line(&routed.stdout)
+            .split(" → ")
+            .next()
+            .unwrap_or_default()
+    ))
+}
+
+fn first_line(output: &[u8]) -> String {
+    String::from_utf8_lossy(output)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_owned()
 }

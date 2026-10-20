@@ -20,7 +20,8 @@ mod verdict;
 pub use constraints::ConstraintSet;
 pub use corridors::Corridors;
 pub use design::{
-    Design, DesignRules, Keepout, KeepoutScope, Layer, LayerShape, Net, NetClass, Pad, ViaKind,
+    Condition, Constraint, CustomRule, Design, DesignRules, Item, Keepout, KeepoutScope, Layer,
+    LayerShape, Limits, Net, NetClass, Pad, ViaKind,
 };
 pub use events::{Event, Stage};
 pub use ids::{ConnectionId, LayerId, NetClassId, NetId, PadId, ViaKindId};

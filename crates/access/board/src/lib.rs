@@ -15,7 +15,10 @@ use traxide_contracts::{Design, Routes};
 pub fn load_design(path: &Path) -> Result<Design, BoardError> {
     match extension(path) {
         Some("dsn") => specctra::parse_dsn(&read(path)?),
-        Some("kicad_pcb") => kicad::parse_kicad_pcb(&read(path)?, project(path)?.as_deref()),
+        Some("kicad_pcb") => {
+            let beside = Beside::of(path)?;
+            kicad::parse_kicad_pcb(&read(path)?, beside.rule_files())
+        }
         _ => Err(BoardError::UnsupportedFormat {
             path: path.into(),
             expected: "a Specctra design (.dsn) or a KiCad board (.kicad_pcb)",
@@ -55,15 +58,20 @@ pub fn store_routes(
             specctra::write_ses(&name, design, &everything)
         }
         (Some("kicad_pcb"), Some("kicad_pcb")) => {
-            let project = project(board)?;
-            let text = kicad::add_routes(&read(board)?, project.as_deref(), design, routes)?
+            let beside = Beside::of(board)?;
+            let text = kicad::add_routes(&read(board)?, beside.rule_files(), design, routes)?
                 .ok_or_else(|| BoardError::Changed { path: board.into() })?;
-            // KiCad finds a board's rules in the project of the same name.
-            let beside = path.with_extension("kicad_pro");
-            if let Some(project) = project
-                && beside != board.with_extension("kicad_pro")
-            {
-                write(&beside, &project)?;
+            // KiCad finds a board's rules in the files of the same name.
+            for (extension, rules) in [
+                (PROJECT, &beside.project),
+                (CUSTOM_RULES, &beside.custom_rules),
+            ] {
+                let copy = path.with_extension(extension);
+                if let Some(rules) = rules
+                    && copy != board.with_extension(extension)
+                {
+                    write(&copy, rules)?;
+                }
             }
             text
         }
@@ -95,14 +103,32 @@ pub fn load_routes(path: &Path, design: &Design) -> Result<Routes, BoardError> {
     }
 }
 
-/// The text of the KiCad project next to the board at `board`, where the rules
-/// are; `None` if there is none.
-fn project(board: &Path) -> Result<Option<String>, BoardError> {
-    let project = board.with_extension("kicad_pro");
-    if project.is_file() {
-        read(&project).map(Some)
-    } else {
-        Ok(None)
+const PROJECT: &str = "kicad_pro";
+const CUSTOM_RULES: &str = "kicad_dru";
+
+/// The texts of the files next to a KiCad board that hold its rules.
+struct Beside {
+    project: Option<String>,
+    custom_rules: Option<String>,
+}
+
+impl Beside {
+    fn of(board: &Path) -> Result<Self, BoardError> {
+        let text = |extension| {
+            let path = board.with_extension(extension);
+            path.is_file().then(|| read(&path)).transpose()
+        };
+        Ok(Self {
+            project: text(PROJECT)?,
+            custom_rules: text(CUSTOM_RULES)?,
+        })
+    }
+
+    fn rule_files(&self) -> kicad::RuleFiles<'_> {
+        kicad::RuleFiles {
+            project: self.project.as_deref(),
+            custom_rules: self.custom_rules.as_deref(),
+        }
     }
 }
 

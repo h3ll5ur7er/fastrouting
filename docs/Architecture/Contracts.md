@@ -69,7 +69,10 @@ classDiagram
 | `Job`, `Profile` | Clients, Profile Access | Managers |
 | `Event` | Managers | Clients (progress, congestion maps, committed batches, finished) |
 
-`Design` is format-neutral. Whatever a DSN file, a `.kicad_pcb` or the KiCad IPC API calls things, Board Access translates them into it. Rules arrive in `Design.rules` as a `RuleSource` close to their origin; only the Rules Engine interprets them.
+`Design` is format-neutral. Whatever a DSN file, a `.kicad_pcb` or the KiCad IPC API calls things, Board Access translates them into it. Rules arrive in `Design.rules` (`DesignRules`) close to their origin; only the Rules Engine interprets them:
+
+- the net classes, each with its width, clearance and vias, and the board's edge and hole clearances;
+- custom rules (`CustomRule`), in the order the board states them: a `Constraint` (clearance, track width, via diameter, hole size, edge or hole clearance) with its `Limits` (min, opt, max) and a `Condition` over the two items it compares (`Item::A`, `Item::B`): their net class, their net, the layers, combined with `All`, `Any` and `Not`. Board Access resolves names and wildcards to ids; a test it cannot express is `Condition::Unknown`, which may hold or not. How the Rules Engine compiles them is in [[Research/KiCad-integration#custom-rules]].
 
 ## Service contracts
 

@@ -19,8 +19,11 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as folder:
         outcome = route_board(board, traxide, Path(folder))
     pcbnew.SaveBoard(str(routed), board)
-    # Saving wrote a project with KiCad's default rules; the board's own are in its project.
+    # Saving wrote a project with KiCad's default rules; the board's own are in
+    # its project and its custom rules.
     shutil.copy(board_file.with_suffix(".kicad_pro"), routed.with_suffix(".kicad_pro"))
+    if board_file.with_suffix(".kicad_dru").is_file():
+        shutil.copy(board_file.with_suffix(".kicad_dru"), routed.with_suffix(".kicad_dru"))
     items = list(board.GetTracks())
     vias = [item for item in items if item.GetClass() == "PCB_VIA"]
     length = sum(item.GetLength() for item in items if item.GetClass() != "PCB_VIA")
