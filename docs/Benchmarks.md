@@ -39,6 +39,16 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Far edges skipped at a glance (M2, TRX-48)
+
+Stack samples of Issue110-RelayModule showed nearly all of its time in checking a track's clearance to pads drawn as polygons of dozens of edges, each edge with the exact test, at 33 µs per node expanded. Two segments whose bounding boxes lie the distance apart along an axis are now passed over at once, a polygon keeps its bounding box, and a shape far from a polygon skips its edges altogether. The routes are byte for byte the same:
+
+| Board | Before | **After** |
+| --- | ---: | ---: |
+| Issue110-RelayModule, 81 of 88 | 132 s | **40 s** |
+| Issue015-StackOverflow, complete | 46 s | **40 s** |
+| keyboard-tkl, complete | 1.8 s | **1.9 s** |
+
 ## Negotiation that goes round in circles (M2, TRX-48)
 
 On congested corpus boards the routed count rose, then swung back and forth: Issue039 between 135 and 151 of 204 connections for as long as it was let run, as connections took each other's ways in turn, each up to 20 times. Negotiation now ends once two rounds of rip-ups, as many as there are connections each, have routed no more connections than the best so far; the connections left search without ripping up others. Measured on this machine:

@@ -76,6 +76,9 @@ impl Segment {
 
     /// Whether any point of this segment is closer than `distance` to `other`.
     pub fn is_closer_than(self, other: Self, distance: i64) -> bool {
+        if self.bounds().is_apart_from(other.bounds(), distance) {
+            return false;
+        }
         // Two segments that don't cross are closest at an endpoint of one of them.
         self.intersects(other)
             || other.is_point_closer_than(self.a, distance)

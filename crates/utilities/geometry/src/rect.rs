@@ -38,6 +38,16 @@ impl Rect {
         }
     }
 
+    /// Whether the rectangles lie at least `distance` apart along an axis, so
+    /// that no point of one is closer than `distance` to any of the other.
+    pub fn is_apart_from(self, other: Self, distance: i64) -> bool {
+        let gap = |low: i32, high: i32| i64::from(low) - i64::from(high) >= distance;
+        gap(other.min.x, self.max.x)
+            || gap(self.min.x, other.max.x)
+            || gap(other.min.y, self.max.y)
+            || gap(self.min.y, other.max.y)
+    }
+
     pub fn intersects(self, other: Self) -> bool {
         self.min.x <= other.max.x
             && other.min.x <= self.max.x
@@ -62,6 +72,29 @@ impl Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rectangles_a_gap_apart_are_apart_by_that_gap_and_no_more() {
+        let a = Rect {
+            min: Point::new(0, 0),
+            max: Point::new(10, 10),
+        };
+        let b = Rect {
+            min: Point::new(15, 3),
+            max: Point::new(20, 30),
+        };
+        assert!(a.is_apart_from(b, 5) && b.is_apart_from(a, 5));
+        assert!(!a.is_apart_from(b, 6));
+        let below = Rect {
+            min: Point::new(-20, 12),
+            max: Point::new(-1, 13),
+        };
+        assert!(a.is_apart_from(below, 2));
+        assert!(
+            !a.is_apart_from(below, 3),
+            "only the larger gap along one axis counts"
+        );
+    }
 
     fn rect(x1: i32, y1: i32, x2: i32, y2: i32) -> Rect {
         Rect {

@@ -50,12 +50,21 @@ impl Shape {
             ) => s.is_closer_than(*t, clearance + i64::from(*r) + i64::from(*q)),
             (Self::Capsule { segment, radius }, Self::Polygon(polygon))
             | (Self::Polygon(polygon), Self::Capsule { segment, radius }) => {
+                if polygon
+                    .bounds()
+                    .is_apart_from(segment.bounds(), clearance + i64::from(*radius))
+                {
+                    return false;
+                }
                 polygon.contains(segment.a)
                     || polygon
                         .edges()
                         .any(|edge| edge.is_closer_than(*segment, clearance + i64::from(*radius)))
             }
             (Self::Polygon(p), Self::Polygon(q)) => {
+                if p.bounds().is_apart_from(q.bounds(), clearance) {
+                    return false;
+                }
                 p.contains(q.points()[0])
                     || q.contains(p.points()[0])
                     || p.edges()

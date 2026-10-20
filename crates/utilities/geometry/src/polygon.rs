@@ -4,12 +4,15 @@ use crate::{Point, Rect, Segment};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Polygon {
     points: Vec<Point>,
+    /// Kept, as every distance check starts with it.
+    bounds: Rect,
 }
 
 impl Polygon {
     /// `None` for fewer than three points: those enclose no area.
     pub fn new(points: Vec<Point>) -> Option<Self> {
-        (points.len() >= 3).then_some(Self { points })
+        let bounds = Rect::around(points.iter().copied())?;
+        (points.len() >= 3).then_some(Self { points, bounds })
     }
 
     pub fn rectangle(rect: Rect) -> Self {
@@ -20,6 +23,7 @@ impl Polygon {
                 rect.max,
                 Point::new(rect.min.x, rect.max.y),
             ],
+            bounds: rect,
         }
     }
 
@@ -36,11 +40,14 @@ impl Polygon {
     }
 
     pub fn bounds(&self) -> Rect {
-        Rect::around(self.points.iter().copied()).expect("a polygon has at least three points")
+        self.bounds
     }
 
     /// Points on the boundary count as inside.
     pub fn contains(&self, p: Point) -> bool {
+        if !self.bounds.contains(p) {
+            return false;
+        }
         let mut inside = false;
         for edge in self.edges() {
             if edge.is_point_closer_than(p, 1) {
@@ -72,8 +79,11 @@ impl Polygon {
     }
 
     pub fn map(&self, f: impl Fn(Point) -> Point) -> Self {
+        let points: Vec<Point> = self.points.iter().map(|&p| f(p)).collect();
         Self {
-            points: self.points.iter().map(|&p| f(p)).collect(),
+            bounds: Rect::around(points.iter().copied())
+                .unwrap_or_else(|| unreachable!("as many points as before")),
+            points,
         }
     }
 }
