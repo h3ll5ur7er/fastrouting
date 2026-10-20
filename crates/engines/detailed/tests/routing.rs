@@ -267,3 +267,37 @@ fn gives_up_when_two_connections_need_the_same_only_way() {
     assert_eq!(result.unrouted.len(), 1);
     assert_legal(&design, &result.routes);
 }
+
+#[test]
+fn a_connection_searched_from_its_tighter_end_still_runs_from_its_first_pad() {
+    // The small pad offers fewer ways in than the large through-hole pad, so the
+    // search starts there; the routes must still read from A1 to A2.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .tht("A1", Some("A"), at(4.0, 5.0), 2.2)
+        .smd("A2", Some("A"), at(15.0, 5.0), 0.3, 0)
+        .keepout(
+            wall(at(9.5, 0.0), at(10.5, 10.0)),
+            Some(0),
+            KeepoutScope::Everything,
+        )
+        .build();
+    let routes = route(&design, &[("A1", "A2")]).routes;
+    assert_eq!(
+        routes.vias.len(),
+        1,
+        "A1 reaches the bottom layer itself; one via back up"
+    );
+    let starts: Vec<Point> = routes.tracks.iter().map(|t| t.path[0]).collect();
+    let ends: Vec<Point> = routes
+        .tracks
+        .iter()
+        .map(|t| *t.path.last().expect("a path"))
+        .collect();
+    assert_eq!(starts[0], at(4.0, 5.0));
+    assert_eq!(ends[ends.len() - 1], at(15.0, 5.0));
+    assert_eq!(
+        routes.vias[0].position, ends[0],
+        "the via joins the two tracks"
+    );
+    assert_legal(&design, &routes);
+}

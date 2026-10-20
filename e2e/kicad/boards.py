@@ -19,6 +19,16 @@ class Smd:
 
 
 @dataclass(frozen=True)
+class Npth:
+    """A non-plated hole, such as a switch's centre post: no copper, no net."""
+    number: str
+    x: float
+    y: float
+    drill: float
+    net: None = None
+
+
+@dataclass(frozen=True)
 class Tht:
     number: str
     x: float
@@ -26,6 +36,21 @@ class Tht:
     diameter: float
     drill: float
     net: str | None = None
+
+
+@dataclass(frozen=True)
+class Recipe:
+    """How to build a board, and the rules of its default net class. KiCad keeps
+    net classes in the project, not in the board, so they are applied when the
+    board is saved with its project (roundtrip.py)."""
+    build: object
+    track: float = 0.2
+    clearance: float = 0.2
+
+    def apply_rules(self, board) -> None:
+        default_class = board.GetDesignSettings().m_NetSettings.GetDefaultNetclass()
+        default_class.SetTrackWidth(MM(self.track))
+        default_class.SetClearance(MM(self.clearance))
 
 
 class BoardBuilder:
@@ -73,7 +98,13 @@ class BoardBuilder:
     def _pad(self, footprint, spec):
         pad = pcbnew.PAD(footprint)
         pad.SetNumber(spec.number)
-        if isinstance(spec, Smd):
+        if isinstance(spec, Npth):
+            pad.SetAttribute(pcbnew.PAD_ATTRIB_NPTH)
+            pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+            pad.SetSize(pcbnew.VECTOR2I(MM(spec.drill), MM(spec.drill)))
+            pad.SetDrillSize(pcbnew.VECTOR2I(MM(spec.drill), MM(spec.drill)))
+            pad.SetLayerSet(pad.UnplatedHoleMask())
+        elif isinstance(spec, Smd):
             pad.SetAttribute(pcbnew.PAD_ATTRIB_SMD)
             pad.SetShape(pcbnew.PAD_SHAPE_RECTANGLE)
             pad.SetSize(pcbnew.VECTOR2I(MM(spec.width), MM(spec.height)))
@@ -146,9 +177,120 @@ def key_matrix(rows: int, columns: int, copper_layers: int = 2) -> pcbnew.BOARD:
     return builder.board
 
 
+# The physical layout of an ISO tenkeyless keyboard (88 keys), in key units of
+# 19.05 mm: (x, y, width, height) of each key, row by row as the matrix wires them.
+ISO_TKL = [
+    [(0, 0, 1, 1)] + [(x, 0, 1, 1) for x in (2, 3, 4, 5, 6.5, 7.5, 8.5, 9.5, 11, 12, 13, 14, 15.25, 16.25, 17.25)],
+    [(x, 1.25, 1, 1) for x in range(13)] + [(13, 1.25, 2, 1)] + [(x, 1.25, 1, 1) for x in (15.25, 16.25, 17.25)],
+    [(0, 2.25, 1.5, 1)] + [(1.5 + i, 2.25, 1, 1) for i in range(12)] + [(13.75, 2.25, 1.25, 2)]
+    + [(x, 2.25, 1, 1) for x in (15.25, 16.25, 17.25)],
+    [(0, 3.25, 1.75, 1)] + [(1.75 + i, 3.25, 1, 1) for i in range(12)],
+    [(0, 4.25, 1.25, 1), (1.25, 4.25, 1, 1)] + [(2.25 + i, 4.25, 1, 1) for i in range(10)]
+    + [(12.25, 4.25, 2.75, 1), (16.25, 4.25, 1, 1)],
+    [(0, 5.25, 1.25, 1), (1.25, 5.25, 1.25, 1), (2.5, 5.25, 1.25, 1), (3.75, 5.25, 6.25, 1)]
+    + [(x, 5.25, 1.25, 1) for x in (10, 11.25, 12.5, 13.75)] + [(x, 5.25, 1, 1) for x in (15.25, 16.25, 17.25)],
+]
+
+
+def mx_switch(column: str, key: str) -> list:
+    return [
+        Tht("1", -3.81, -2.54, 2.2, 1.5, column),
+        Tht("2", 2.54, -5.08, 2.2, 1.5, key),
+        Npth("", 0, 0, 4.0),
+        Npth("", -5.08, 0, 1.75),
+        Npth("", 5.08, 0, 1.75),
+    ]
+
+
+def r0402(a: str, b: str) -> list:
+    return [Smd("1", -0.5, 0, 0.5, 0.55, a), Smd("2", 0.5, 0, 0.5, 0.55, b)]
+
+
+def qfn60(pins: dict[int, str]) -> list:
+    """A 7 × 7 mm QFN-60 with 0.4 mm pitch, as the RP2350A: pin 1 at the top
+    of the left side, counting anti-clockwise, and a ground pad in the middle."""
+    pads = []
+    for index in range(60):
+        side, position = divmod(index, 15)
+        offset = -2.8 + 0.4 * position
+        # 0.7 mm long, so the corner pads of two sides keep 0.15 mm apart.
+        x, y, width, height = [
+            (-3.4, offset, 0.7, 0.2),
+            (offset, 3.4, 0.2, 0.7),
+            (3.4, -offset, 0.7, 0.2),
+            (-offset, -3.4, 0.2, 0.7),
+        ][side]
+        pads.append(Smd(str(index + 1), x, y, width, height, pins.get(index + 1)))
+    pads.append(Smd("61", 0, 0, 3.4, 3.4, "GND"))
+    return pads
+
+
+def keyboard_tkl() -> pcbnew.BOARD:
+    """An ISO tenkeyless keyboard as hobbyists build it: 88 MX switches with a
+    diode each (NKRO), a 6 × 17 matrix, and an RP2350-like MCU with USB-C,
+    QSPI flash, crystal and regulator in a strip along the top, on four layers."""
+    unit, top = KEY_PITCH, 24.0
+    builder = BoardBuilder(18.25 * unit + 4, top + 6.25 * unit + 2, copper_layers=4)
+    for row, keys in enumerate(ISO_TKL):
+        for column, (x, y, w, h) in enumerate(keys):
+            key = f"K{row}_{column}"
+            cx, cy = 2 + (x + w / 2) * unit, top + (y + h / 2) * unit
+            number = sum(len(r) for r in ISO_TKL[:row]) + column + 1
+            builder.footprint(f"SW{number}", cx, cy, mx_switch(f"COL{column}", key))
+            # Below the switch's centre, where real boards put the diode: clear of its holes.
+            builder.footprint(f"D{number}", cx, cy + 6.5, [
+                Smd("1", -1.65, 0, 0.9, 1.2, f"ROW{row}"),
+                Smd("2", 1.65, 0, 0.9, 1.2, key),
+            ], back=True)
+    pins = {16 + i: f"ROW{i}" for i in range(6)} | {22 + i: f"COL{i}" for i in range(9)}
+    pins |= {6 + i: f"COL{9 + i}" for i in range(8)}
+    pins |= {1: "3V3", 2: "3V3", 3: "XIN", 4: "XOUT", 5: "1V1", 14: "3V3"}
+    pins |= {31: "QSPI_SS", 32: "QSPI_SD1", 33: "QSPI_SD2", 34: "QSPI_SD0", 35: "QSPI_SCLK", 36: "QSPI_SD3",
+             38: "3V3", 40: "1V1", 44: "3V3"}
+    pins |= {52: "USB_DP", 53: "USB_DM", 50: "3V3"}
+    mcu_x, mcu_y = 180.0, 13.0
+    builder.footprint("U1", mcu_x, mcu_y, qfn60(pins))
+    builder.footprint("J1", mcu_x, 3.2, [
+        Smd(str(i + 1), -1.25 + 0.5 * i, 0, 0.3, 1.0, net)
+        for i, net in enumerate(["GND", "CC1", "USB_DP_C", "USB_DM_C", "CC2", "VBUS"])
+    ])
+    builder.footprint("R1", mcu_x - 1.0, 6.8, r0402("USB_DP_C", "USB_DP"), rotation=90)
+    builder.footprint("R2", mcu_x + 1.0, 6.8, r0402("USB_DM_C", "USB_DM"), rotation=90)
+    builder.footprint("R3", mcu_x - 5.0, 3.5, r0402("CC1", "GND"))
+    builder.footprint("R4", mcu_x + 5.0, 3.5, r0402("CC2", "GND"))
+    builder.footprint("U3", 166.0, 5.0, [
+        Smd("1", -0.95, 1.1, 0.6, 1.0, "VBUS"), Smd("2", 0, 1.1, 0.6, 1.0, "GND"),
+        Smd("3", 0.95, 1.1, 0.6, 1.0, "VBUS"), Smd("4", 0.95, -1.1, 0.6, 1.0),
+        Smd("5", -0.95, -1.1, 0.6, 1.0, "3V3"),
+    ])
+    builder.footprint("C1", 162.0, 5.0, r0402("VBUS", "GND"), rotation=90)
+    builder.footprint("C2", 170.0, 5.0, r0402("3V3", "GND"), rotation=90)
+    builder.footprint("Y1", 168.0, 14.0, [
+        Smd("1", -1.1, 0.8, 1.2, 1.0, "XIN"), Smd("2", 1.1, 0.8, 1.2, 1.0, "GND"),
+        Smd("3", 1.1, -0.8, 1.2, 1.0, "XOUT"), Smd("4", -1.1, -0.8, 1.2, 1.0, "GND"),
+    ])
+    builder.footprint("C3", 164.0, 16.0, r0402("XIN", "GND"))
+    builder.footprint("C4", 164.0, 11.0, r0402("XOUT", "GND"))
+    builder.footprint("U2", 195.0, 13.0, [
+        Smd(str(i + 1), -1.905 + 1.27 * i, 2.7, 0.6, 1.5, net)
+        for i, net in enumerate(["QSPI_SS", "QSPI_SD1", "QSPI_SD2", "GND"])
+    ] + [
+        Smd(str(i + 5), 1.905 - 1.27 * i, -2.7, 0.6, 1.5, net)
+        for i, net in enumerate(["QSPI_SD0", "QSPI_SCLK", "QSPI_SD3", "3V3"])
+    ])
+    builder.footprint("C5", 195.0, 19.0, r0402("3V3", "GND"))
+    builder.footprint("C6", 175.0, 19.5, r0402("3V3", "GND"))
+    builder.footprint("C7", 185.0, 19.5, r0402("3V3", "GND"))
+    builder.footprint("C8", 186.0, 8.0, r0402("3V3", "GND"), rotation=90)
+    builder.footprint("C9", 173.0, 9.0, r0402("1V1", "GND"), rotation=90)
+    builder.footprint("C10", 187.5, 13.0, r0402("1V1", "GND"), rotation=90)
+    return builder.board
+
+
 RECIPES = {
-    "placements": placements,
-    "crossing": crossing,
-    "matrix-3x4": lambda: key_matrix(3, 4),
-    "matrix-6x17": lambda: key_matrix(6, 17),
+    "keyboard-tkl": Recipe(keyboard_tkl, track=0.2, clearance=0.15),
+    "placements": Recipe(placements),
+    "crossing": Recipe(crossing),
+    "matrix-3x4": Recipe(lambda: key_matrix(3, 4)),
+    "matrix-6x17": Recipe(lambda: key_matrix(6, 17)),
 }

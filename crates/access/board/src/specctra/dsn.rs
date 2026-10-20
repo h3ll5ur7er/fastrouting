@@ -27,6 +27,11 @@ struct LayeredShape {
     shape: Shape,
 }
 
+struct Image<'a> {
+    pins: Vec<Pin<'a>>,
+    keepouts: Vec<(KeepoutScope, LayeredShape)>,
+}
+
 struct Pin<'a> {
     padstack: &'a str,
     id: &'a str,
@@ -73,7 +78,7 @@ impl<'a> DsnReader<'a> {
 
     fn read(self) -> Result<Design, BoardError> {
         let padstacks = self.padstacks()?;
-        let mut pads = self.pads(&padstacks)?;
+        let (mut pads, footprint_keepouts) = self.placed(&padstacks)?;
         let pad_by_name: HashMap<String, PadId> = pads
             .iter()
             .enumerate()
@@ -95,7 +100,7 @@ impl<'a> DsnReader<'a> {
         let existing = self.wiring(&nets, &padstacks, &mut via_kinds)?;
         Ok(Design {
             outline: self.outline()?,
-            keepouts: self.keepouts()?,
+            keepouts: [self.keepouts()?, footprint_keepouts].concat(),
             layers: self.layers,
             nets,
             pads,
@@ -190,6 +195,17 @@ impl<'a> DsnReader<'a> {
     }
 
     fn keepouts(&self) -> Result<Vec<Keepout>, BoardError> {
+        let keepouts = self.keepouts_in(self.structure)?;
+        Ok(keepouts
+            .into_iter()
+            .flat_map(|(scope, LayeredShape { layers, shape })| {
+                self.keepouts_on(&layers, shape.map(to_board), scope)
+            })
+            .collect())
+    }
+
+    /// The keepouts listed in `parent`, the structure or an image, as Specctra states them.
+    fn keepouts_in(&self, parent: &Sexp) -> Result<Vec<(KeepoutScope, LayeredShape)>, BoardError> {
         let scopes = [
             ("keepout", KeepoutScope::Everything),
             ("wire_keepout", KeepoutScope::TracksOnly),
@@ -197,27 +213,35 @@ impl<'a> DsnReader<'a> {
         ];
         let mut keepouts = Vec::new();
         for (keyword, scope) in scopes {
-            for keepout in self.structure.children(keyword) {
+            for keepout in parent.children(keyword) {
                 let shape = keepout
                     .args()
                     .iter()
                     .find(|a| matches!(a.keyword(), Some("circle" | "rect" | "polygon" | "path")))
                     .ok_or_else(|| keepout.invalid("keepout without a shape"))?;
-                let LayeredShape { layers, shape } = self.shape(shape)?;
-                let shape = shape.map(to_board);
-                let layer = if layers.len() == self.layers.len() {
-                    None
-                } else {
-                    layers.first().copied()
-                };
-                keepouts.push(Keepout {
-                    layer,
-                    shape,
-                    scope,
-                });
+                keepouts.push((scope, self.shape(shape)?));
             }
         }
         Ok(keepouts)
+    }
+
+    /// One keepout for all layers, or one per layer it covers.
+    fn keepouts_on(&self, layers: &[LayerId], shape: Shape, scope: KeepoutScope) -> Vec<Keepout> {
+        if layers.len() == self.layers.len() {
+            return vec![Keepout {
+                layer: None,
+                shape,
+                scope,
+            }];
+        }
+        layers
+            .iter()
+            .map(|&layer| Keepout {
+                layer: Some(layer),
+                shape: shape.clone(),
+                scope,
+            })
+            .collect()
     }
 
     fn padstacks(&self) -> Result<HashMap<&'a str, Vec<LayeredShape>>, BoardError> {
@@ -236,7 +260,7 @@ impl<'a> DsnReader<'a> {
             .collect()
     }
 
-    fn images(&self) -> Result<HashMap<&'a str, Vec<Pin<'a>>>, BoardError> {
+    fn images(&self) -> Result<HashMap<&'a str, Image<'a>>, BoardError> {
         let library = self.root.required_child("library")?;
         library
             .children("image")
@@ -246,7 +270,13 @@ impl<'a> DsnReader<'a> {
                     .children("pin")
                     .map(|pin| self.pin(pin))
                     .collect::<Result<_, _>>()?;
-                Ok((name, pins))
+                Ok((
+                    name,
+                    Image {
+                        pins,
+                        keepouts: self.keepouts_in(image)?,
+                    },
+                ))
             })
             .collect()
     }
@@ -269,13 +299,18 @@ impl<'a> DsnReader<'a> {
         })
     }
 
-    fn pads(&self, padstacks: &HashMap<&str, Vec<LayeredShape>>) -> Result<Vec<Pad>, BoardError> {
+    /// The pads and keepouts of every placed component.
+    fn placed(
+        &self,
+        padstacks: &HashMap<&str, Vec<LayeredShape>>,
+    ) -> Result<(Vec<Pad>, Vec<Keepout>), BoardError> {
         let images = self.images()?;
         let last_layer = self.layers.len() - 1;
         let mut pads = Vec::new();
+        let mut keepouts = Vec::new();
         for component in self.root.required_child("placement")?.children("component") {
             let image_name = component.arg_atom(0, "image name")?;
-            let pins = images
+            let image = images
                 .get(image_name)
                 .ok_or_else(|| component.invalid(format!("unknown image {image_name}")))?;
             for place in component.children("place") {
@@ -294,7 +329,20 @@ impl<'a> DsnReader<'a> {
                     rotation_degrees,
                     mirror_x: back,
                 };
-                for pin in pins {
+                // Placing a component on the back mirrors its layer stack too.
+                let layer_on_side = |l: LayerId| {
+                    if back {
+                        LayerId::from_index(last_layer - l.index())
+                    } else {
+                        l
+                    }
+                };
+                for (scope, LayeredShape { layers, shape }) in &image.keepouts {
+                    let layers: Vec<LayerId> = layers.iter().map(|&l| layer_on_side(l)).collect();
+                    let shape = shape.map(|p| to_board(placement.apply(p)));
+                    keepouts.extend(self.keepouts_on(&layers, shape, *scope));
+                }
+                for pin in &image.pins {
                     let shapes = padstacks.get(pin.padstack).ok_or_else(|| {
                         place.invalid(format!("unknown padstack {}", pin.padstack))
                     })?;
@@ -304,14 +352,6 @@ impl<'a> DsnReader<'a> {
                         mirror_x: false,
                     };
                     let to_absolute = local.then(placement);
-                    // Placing a component on the back mirrors its layer stack too.
-                    let layer_on_side = |l: LayerId| {
-                        if back {
-                            LayerId::from_index(last_layer - l.index())
-                        } else {
-                            l
-                        }
-                    };
                     let copper = shapes
                         .iter()
                         .flat_map(|s| s.layers.iter().map(move |&l| (l, &s.shape)))
@@ -329,7 +369,7 @@ impl<'a> DsnReader<'a> {
                 }
             }
         }
-        Ok(pads)
+        Ok((pads, keepouts))
     }
 
     fn rules(

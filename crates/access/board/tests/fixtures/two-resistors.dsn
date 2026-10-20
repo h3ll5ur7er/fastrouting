@@ -44,11 +44,13 @@
     (image "Resistor_THT:R_Axial"
       (pin Round[A]Pad_1800_um 1 -1270 0)
       (pin Round[A]Pad_1800_um 2 1270 0)
+      (keepout "" (circle F.Cu 2000 0 3000))
     )
     (image "Resistor_SMD:R_0603"
       (outline (path signal 50  -1500 800  1500 800))
       (pin Rect[T]Pad_1000x1200_um 1 -1000 0)
       (pin Rect[T]Pad_1000x1200_um (rotate 90) 2 1000 0)
+      (via_keepout "" (circle F.Cu 500 0 1000))
     )
     (padstack Round[A]Pad_1800_um
       (shape (circle F.Cu 1800))

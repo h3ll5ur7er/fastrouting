@@ -13,6 +13,25 @@ time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 
 The machine: a 4-core cloud container (x86-64), one thread used.
 
+## The keyboard: a 4-layer RP2350 ISO TKL (M1)
+
+The board traxide was started for, as `e2e/kicad/boards.py` builds it (`keyboard-tkl`): 88 MX switches in the ISO tenkeyless layout with a diode each (NKRO, 6 × 17 matrix), an RP2350-like MCU (QFN-60, 0.4 mm pitch) with USB-C, series resistors, QSPI flash, crystal, regulator and decoupling, on four signal layers; tracks 0.2 mm, clearance 0.15 mm.
+
+| Board | Connections | Routed | Tracks | Vias | Time | KiCad 10 DRC |
+| --- | --- | --- | --- | --- | --- | --- |
+| keyboard-tkl | 315 | **315** | 423 | 109 | **17.7 s** | **clean, nothing unconnected** |
+
+![keyboard-tkl routed by traxide, imported into KiCad 10: top copper red, inner layers orange and green, bottom copper blue](images/keyboard-tkl.png)
+
+![The RP2350's fan-out: 0.4 mm pitch pins escaping on all four layers](images/keyboard-tkl-mcu.png)
+
+What it took, each found by routing this board:
+
+- **Search from the tighter end.** The first attempt never finished: searches into the MCU's 0.4 mm pitch pins flooded the board, because the way into a hemmed-in pin is far longer than the straight distance. Searching from the end with fewer ways in or out (the pin, 9 access states, against 1936 for a switch pad) floods only the pocket around the pin.
+- **Keepouts of footprints.** KiCad exports a footprint's non-plated holes, a switch's centre post and pegs, as keepouts of its image; traxide now reads them, placed and mirrored with their footprint.
+
+The time is spent in a handful of long searches, as on the matrices: global routing corridors ([[TRX-26]]) and parallel batches ([[TRX-27]]) come next. The comparison with Freerouting 2.5 on this board runs in CI ([[TRX-15]]), where Freerouting can be downloaded.
+
 ## Octilinear estimate and weighted search (M1)
 
 October 2026: the search estimates the remaining cost by octilinear instead of straight distance, and ranks states by that estimate weighted with the profile's `heuristic_weight` ([[Profiles]]).

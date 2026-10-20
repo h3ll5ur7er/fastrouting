@@ -33,6 +33,19 @@ pub(crate) fn to_routes(steps: &[Step], net: NetId, width: i32) -> Routes {
     routes
 }
 
+/// The same path walked the other way: each via now belongs to the step that
+/// follows it in the new direction.
+pub(crate) fn reversed(steps: Vec<Step>) -> Vec<Step> {
+    let count = steps.len();
+    (0..count)
+        .map(|j| {
+            let step = steps[count - 1 - j];
+            let via = if j == 0 { None } else { steps[count - j].via };
+            Step { via, ..step }
+        })
+        .collect()
+}
+
 fn finish(routes: &mut Routes, stretch: &mut Vec<Point>, net: NetId, layer: LayerId, width: i32) {
     let path = straightened(std::mem::take(stretch));
     if path.len() >= 2 {
@@ -120,6 +133,29 @@ mod tests {
             (LayerId(0), LayerId(1))
         );
         assert_eq!(routes.tracks[1].path, [Point::new(5, 0), Point::new(9, 0)]);
+    }
+
+    #[test]
+    fn a_reversed_path_has_its_via_at_the_same_place() {
+        let forward = vec![
+            step(0, 0, 0, None),
+            step(5, 0, 0, None),
+            step(5, 0, 1, Some(0)),
+            step(9, 0, 1, None),
+        ];
+        let backward = reversed(forward);
+        assert_eq!(
+            backward,
+            [
+                step(9, 0, 1, None),
+                step(5, 0, 1, None),
+                step(5, 0, 0, Some(0)),
+                step(0, 0, 0, None)
+            ]
+        );
+        let routes = to_routes(&backward, NetId(3), 5);
+        assert_eq!(routes.vias.len(), 1);
+        assert_eq!(routes.vias[0].position, Point::new(5, 0));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use crate::grid::{DIRECTIONS, Grid, Node};
-use crate::path::Step;
+use crate::path::{self, Step};
 use crate::scratch::Stamped;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -119,6 +119,30 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         if let Some(direct) = self.direct_line() {
             return Some(direct);
         }
+        let (from_access, to_access) = (self.access(self.from), self.access(self.to));
+        // A search floods everything cheaper than the way into its target. Into a
+        // pad hemmed in by its neighbours, such as a pin of a fine-pitch chip,
+        // that is most of the board; out of it, only the pocket around it. So
+        // the search starts at the end with fewer ways in or out.
+        if to_access.len() < from_access.len() {
+            let backwards = Search {
+                from: self.to,
+                to: self.from,
+                ..self
+            };
+            return backwards
+                .search(to_access, from_access, scratch)
+                .map(path::reversed);
+        }
+        self.search(from_access, to_access, scratch)
+    }
+
+    fn search(
+        self,
+        start: Vec<(State, i64)>,
+        target: Vec<(State, i64)>,
+        scratch: &mut Scratch,
+    ) -> Option<Vec<Step>> {
         let layers = self.design.layers.len();
         let nodes = self.grid.node_count();
         scratch.best.reset(nodes * layers * HEADINGS);
@@ -126,14 +150,14 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         scratch.edge_extra.reset(nodes * layers * DIRECTIONS.len());
         scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
-        for (state, cost) in self.access(self.to) {
+        for (state, cost) in target {
             scratch.finish.set(self.layer_node(state), cost);
         }
 
         let mut best_target = i64::MAX;
         let mut target_came = None;
         let mut open = BinaryHeap::new();
-        for (state, cost) in self.access(self.from) {
+        for (state, cost) in start {
             let slot = self.slot(state);
             if cost < scratch.best.get(slot as usize).unwrap_or(i64::MAX) {
                 scratch.best.set(slot as usize, cost);

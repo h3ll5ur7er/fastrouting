@@ -1,6 +1,6 @@
 use traxide_board_access::{BoardError, load_design, specctra};
 use traxide_contracts::geometry::{Point, Rect, Shape};
-use traxide_contracts::{Design, LayerId, Pad};
+use traxide_contracts::{Design, KeepoutScope, LayerId, Pad};
 
 fn two_resistors() -> Design {
     load_design(
@@ -217,4 +217,31 @@ fn boards_from_other_tools_keep_the_board_wide_clearance_from_the_edge() {
     .replace("KiCad's Pcbnew", "Some Other CAD");
     let design = specctra::parse_dsn(&text).expect("valid");
     assert_eq!(design.rules.edge_clearance, 200_100);
+}
+
+#[test]
+fn keepouts_of_a_footprint_move_with_it() {
+    // KiCad exports a footprint's non-plated holes, such as a switch's centre
+    // post, as keepouts of its image.
+    let design = two_resistors();
+    let hole = design
+        .keepouts
+        .iter()
+        .find(|k| k.shape == Shape::circle(Point::new(mm(25.0), mm(12.0)), mm(2.0)))
+        .expect("the keepout of R2's image, 3 mm above its origin");
+    assert_eq!(hole.layer, Some(layer(&design, "F.Cu")));
+    assert_eq!(hole.scope, KeepoutScope::Everything);
+}
+
+#[test]
+fn keepouts_of_a_footprint_on_the_back_mirror_with_it() {
+    let design = two_resistors();
+    // R3 sits on the back, rotated by 90°: the image's (0, 1 mm) lands 1 mm to its left.
+    let r3 = design
+        .keepouts
+        .iter()
+        .find(|k| k.shape == Shape::circle(Point::new(mm(14.0), mm(10.0)), mm(0.5)))
+        .expect("the via keepout of R3's image");
+    assert_eq!(r3.layer, Some(layer(&design, "B.Cu")));
+    assert_eq!(r3.scope, KeepoutScope::ViasOnly);
 }

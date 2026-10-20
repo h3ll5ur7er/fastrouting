@@ -32,9 +32,9 @@ def pads_of(board) -> list[dict]:
 
 def main(output: Path) -> None:
     output.mkdir(parents=True, exist_ok=True)
-    for name, build in RECIPES.items():
+    for name, recipe in RECIPES.items():
         board_file = output / f"{name}.kicad_pcb"
-        pcbnew.SaveBoard(str(board_file), build())
+        pcbnew.SaveBoard(str(board_file), recipe.build())
         board = pcbnew.LoadBoard(str(board_file))
         if not pcbnew.ExportSpecctraDSN(board, str(output / f"{name}.dsn")):
             raise SystemExit(f"KiCad could not export {name} as DSN")

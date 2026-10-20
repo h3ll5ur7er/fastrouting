@@ -2,7 +2,7 @@
 id: TRX-15
 title: Assemble the benchmark corpus and Freerouting baselines
 type: research
-status: todo
+status: in-progress
 priority: high
 labels: [benchmark]
 estimate: 3
@@ -11,7 +11,7 @@ estimate: 3
 The acceptance tests ([[Research/Prior-art#benchmark-corpora]]).
 
 - [ ] Import PCBench (Freerouting repository) and PCBWorld-Bench boards, respecting their licences (Git LFS or a download script)
-- [ ] Add our own boards: a 4-layer RP2350 TKL keyboard (ISO 80 %, NKRO matrix with a diode per switch, USB), a 2-layer macropad, a dense MCU board
+- [x] Add our own boards: `keyboard-tkl`, a 4-layer RP2350 ISO TKL (88 keys, NKRO, USB-C, flash, crystal), and the key matrices; a macropad when needed
 - [ ] Run Freerouting 2.5 on each, record time, memory, completion, vias, length and DRC; this is the baseline
 - [ ] Record the KiCad DRC result of each baseline with `kicad-cli pcb drc`
 
