@@ -149,4 +149,15 @@ mod tests {
             400
         );
     }
+
+    #[test]
+    fn the_board_edge_does_not_widen_the_clearance_between_copper() {
+        let mut wide_edge = design(1);
+        wide_edge.rules.edge_clearance = 900;
+        let rules = compile(&wide_edge, Purpose::Verification);
+        assert_eq!(
+            (rules.largest_clearance(), rules.edge_clearance()),
+            (300, 900)
+        );
+    }
 }

@@ -39,6 +39,17 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
+
+Two changes with byte for byte the same routes: an edge of the grid is checked once for both directions instead of once from each end, and a query for copper near a track or via looks as far as the largest clearance between copper, no longer as far as the board's edge clearance, which KiCad sets to 0.5 mm and the outline check covers on its own.
+
+| Board | Before | **After** |
+| --- | ---: | ---: |
+| keyboard-tkl, complete | 1.84 s | **1.45 s** |
+| Issue034-Green14SegLED, complete | 40 s | **25 s** |
+| Issue015-StackOverflow, complete | 40 s | **35 s** |
+| Issue110-RelayModule, 81 of 88 | 40 s | **37 s** |
+
 ## Far edges skipped at a glance (M2, TRX-48)
 
 Stack samples of Issue110-RelayModule showed nearly all of its time in checking a track's clearance to pads drawn as polygons of dozens of edges, each edge with the exact test, at 33 µs per node expanded. Two segments whose bounding boxes lie the distance apart along an axis are now passed over at once, a polygon keeps its bounding box, and a shape far from a polygon skips its edges altogether. The routes are byte for byte the same:

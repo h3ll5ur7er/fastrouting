@@ -53,13 +53,15 @@ impl ConstraintSet {
         self.clearance_between_classes[self.class(a).index() * classes + self.class(b).index()]
     }
 
+    /// The largest clearance between copper of any two nets: how far around
+    /// copper others can conflict with it. The board's edge, checked against
+    /// the outline, keeps its own.
     pub fn largest_clearance(&self) -> i32 {
         self.clearance_between_classes
             .iter()
             .copied()
             .max()
             .unwrap_or(0)
-            .max(self.edge_clearance)
     }
 
     pub fn edge_clearance(&self) -> i32 {

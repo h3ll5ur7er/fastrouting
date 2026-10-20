@@ -213,7 +213,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         let nodes = self.grid.node_count();
         scratch.best.reset(nodes * layers);
         scratch.came.reset(nodes * layers);
-        scratch.edge_extra.reset(nodes * layers * DIRECTIONS.len());
+        scratch
+            .edge_extra
+            .reset(nodes * layers * DIRECTIONS.len() / 2);
         scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
         scratch.open_around.reset(nodes * layers);
@@ -318,7 +320,18 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     self.negotiation
                         .map_or(0, |n| n.history.of_track(LayerId(state.layer), segment))
                 } else {
-                    let edge = (self.layer_node(state) * DIRECTIONS.len()) + direction;
+                    // An edge is the same both ways: kept once, at the node it
+                    // leaves in one of the first half of the directions.
+                    let half = DIRECTIONS.len() / 2;
+                    let edge = if direction < half {
+                        self.layer_node(state) * half + direction
+                    } else {
+                        let from = State {
+                            node: next,
+                            ..state
+                        };
+                        self.layer_node(from) * half + direction - half
+                    };
                     scratch.edge_extra.get_or_insert_with(edge, || {
                         self.track_extra(LayerId(state.layer), segment)
                             .unwrap_or(BLOCKED)
