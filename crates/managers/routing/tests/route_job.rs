@@ -144,3 +144,23 @@ fn says_why_a_connection_stayed_unrouted() {
     let reasons: Vec<&Unroutable> = report.unrouted.iter().map(|u| &u.why).collect();
     assert_eq!(reasons, [&Unroutable::OffTheBoard("R2-1".into())]);
 }
+
+#[test]
+fn the_session_keeps_the_copper_the_board_came_with() {
+    // KiCad's session import replaces every track of the board with the
+    // session's, so a session without the board's own wiring would delete it.
+    let folder = tempfile::tempdir().expect("temp dir");
+    let output = folder.path().join("board.ses");
+    route(
+        &job("existing-violation.dsn", &output),
+        &Silent,
+        &CancelToken::new(),
+    )
+    .expect("routable");
+    let design =
+        traxide_board_access::load_design(&fixture("existing-violation.dsn")).expect("valid");
+    let stored = traxide_board_access::load_routes(&output, &design).expect("valid session");
+    for existing in &design.existing.tracks {
+        assert!(stored.tracks.contains(existing), "{existing:?} kept");
+    }
+}

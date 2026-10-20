@@ -56,13 +56,14 @@ pub enum CheckError {
     Board(#[from] BoardError),
 }
 
-/// Checks the board's own copper together with the session's routes.
+/// Checks the board's copper: the session's, which replaces the board's own
+/// as KiCad's session import does, or else the copper the board came with.
 pub fn check(job: &CheckJob) -> Result<CheckReport, CheckError> {
     let design = traxide_board_access::load_design(&job.board)?;
-    let mut routes = design.existing.clone();
-    if let Some(session) = &job.session {
-        routes.extend(traxide_board_access::load_routes(session, &design)?);
-    }
+    let routes = match &job.session {
+        Some(session) => traxide_board_access::load_routes(session, &design)?,
+        None => design.existing.clone(),
+    };
     let rules = traxide_rules::compile(&design, Purpose::Verification);
     let verdict = traxide_verification::verify(&design, &rules, &routes);
     let (unconnected, violations): (Vec<Violation>, Vec<Violation>) = verdict

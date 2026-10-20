@@ -183,7 +183,10 @@ pub fn route(
         .partition(|v| involves_new_copper(v, &design.existing));
     let verdict = Verdict { violations };
     events.publish(Event::StageStarted(Stage::Storing));
-    traxide_board_access::store_routes(&job.output, &design, &routes)?;
+    // KiCad's session import replaces every track of the board with the
+    // session's: the session carries the board's own copper too, as
+    // Freerouting's do.
+    traxide_board_access::store_routes(&job.output, &design, &everything)?;
     let named = |c: &Connection| Unrouted {
         net: design.net(c.net).name.clone(),
         from: design.pad(c.from).name.clone(),
