@@ -1,28 +1,73 @@
 //! Planning Engine: how the work is planned (volatility V5 of
 //! docs/Architecture/Volatilities.md). For now: a minimum spanning tree per net,
-//! shortest connections first.
+//! connections from hemmed-in pads first, then shortest first.
 
 use traxide_contracts::geometry::Point;
-use traxide_contracts::{Connection, Design, NetId, PadId, Plan};
+use traxide_contracts::{Connection, Design, NetId, Pad, PadId, Plan};
 
+/// Ties are broken by names, never by the order the board lists things in:
+/// KiCad exports one board's parts in a different order each time, and the
+/// same board should always get the same routes.
 pub fn plan(design: &Design) -> Plan {
+    let pad_name = |pad: PadId| design.pad(pad).name.as_str();
     let mut connections: Vec<Connection> = design
         .nets
         .iter()
         .enumerate()
-        .flat_map(|(index, net)| spanning_tree(design, NetId::from_index(index), &net.pads))
+        .flat_map(|(index, net)| {
+            let mut pads = net.pads.clone();
+            pads.sort_by_key(|&pad| pad_name(pad));
+            spanning_tree(design, NetId::from_index(index), &pads)
+        })
         .collect();
-    // Short connections are the most constrained in where they can go, and the
-    // cheapest to route, so they claim their space first.
-    connections.sort_by_key(|c| {
+    // The most constrained connections claim their space first. A pad hemmed in
+    // by its neighbours, such as a pin of a fine-pitch chip, has few ways out,
+    // which later copper easily takes: routed last, its connections spent most
+    // of the keyboard's time ripping each other up. Among the rest, short
+    // connections have the least room to go elsewhere, and are the cheapest.
+    let hemmed_in = hemmed_in_pads(design);
+    let is_free = |c: &Connection| !(hemmed_in[c.from.index()] || hemmed_in[c.to.index()]);
+    connections.sort_by_cached_key(|c| {
         (
+            is_free(c),
             manhattan(design.pad(c.from).position, design.pad(c.to).position),
-            c.net,
-            c.from,
-            c.to,
+            design.net(c.net).name.as_str(),
+            pad_name(c.from),
+            pad_name(c.to),
         )
     });
     Plan { connections }
+}
+
+/// For each pad, whether copper of another net comes so close that no track of
+/// its net fits between them.
+fn hemmed_in_pads(design: &Design) -> Vec<bool> {
+    let room_for_a_track = |pad: &Pad| {
+        let class = pad
+            .net
+            .map_or(design.rules.default_class, |net| design.net(net).class);
+        let class = &design.rules.classes[class.index()];
+        class.track_width + 2 * class.clearance
+    };
+    let mut hemmed_in = vec![false; design.pads.len()];
+    for (a, pad) in design.pads.iter().enumerate() {
+        let room = room_for_a_track(pad);
+        hemmed_in[a] = design.pads.iter().any(|other| {
+            other.net != pad.net
+                && pad.copper.iter().any(|mine| {
+                    other.copper.iter().any(|theirs| {
+                        mine.layer == theirs.layer
+                            && mine
+                                .shape
+                                .bounds()
+                                .inflated(room)
+                                .intersects(theirs.shape.bounds())
+                            && mine.shape.is_closer_than(&theirs.shape, room)
+                    })
+                })
+        });
+    }
+    hemmed_in
 }
 
 /// Prim's algorithm on Manhattan distances, which approximate rectilinear wiring
@@ -109,6 +154,65 @@ mod tests {
             .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
             .build();
         assert!(plan(&design).connections.is_empty());
+    }
+
+    #[test]
+    fn connections_from_hemmed_in_pads_come_before_shorter_ones() {
+        // P1 sits between two pads of other nets, 0.4 mm apart like the pins of
+        // a fine-pitch chip: no track fits between them.
+        let design = DesignBuilder::new(40.0, 20.0)
+            .track_width(0.2)
+            .clearance(0.15)
+            .smd("X1", Some("X"), at(5.0, 4.6), 0.2, 0)
+            .smd("P1", Some("P"), at(5.0, 5.0), 0.2, 0)
+            .smd("Y1", Some("Y"), at(5.0, 5.4), 0.2, 0)
+            .smd("P2", Some("P"), at(35.0, 5.0), 0.5, 0)
+            .smd("S1", Some("S"), at(10.0, 15.0), 0.5, 0)
+            .smd("S2", Some("S"), at(12.0, 15.0), 0.5, 0)
+            .build();
+        assert_eq!(
+            pads_of(&design, &plan(&design)),
+            pairs(&[("P1", "P2"), ("S1", "S2")])
+        );
+    }
+
+    #[test]
+    fn pads_with_room_for_a_track_between_them_are_not_hemmed_in() {
+        let design = DesignBuilder::new(40.0, 20.0)
+            .track_width(0.2)
+            .clearance(0.15)
+            .smd("X1", Some("X"), at(5.0, 4.0), 0.2, 0)
+            .smd("P1", Some("P"), at(5.0, 5.0), 0.2, 0)
+            .smd("P2", Some("P"), at(35.0, 5.0), 0.5, 0)
+            .smd("S1", Some("S"), at(10.0, 15.0), 0.5, 0)
+            .smd("S2", Some("S"), at(12.0, 15.0), 0.5, 0)
+            .build();
+        assert_eq!(
+            pads_of(&design, &plan(&design)),
+            pairs(&[("S1", "S2"), ("P1", "P2")])
+        );
+    }
+
+    #[test]
+    fn the_plan_does_not_depend_on_the_order_the_board_lists_things_in() {
+        // KiCad exports the same board's parts in a different order each time.
+        // A3 is as far from A1 as from A2, and A1–A2 as long as B1–B2: ties
+        // that the order of listing must not break.
+        let one = DesignBuilder::new(30.0, 10.0)
+            .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
+            .smd("A2", Some("A"), at(5.0, 1.0), 0.5, 0)
+            .smd("A3", Some("A"), at(3.0, 4.0), 0.5, 0)
+            .smd("B1", Some("B"), at(11.0, 1.0), 0.5, 0)
+            .smd("B2", Some("B"), at(15.0, 1.0), 0.5, 0)
+            .build();
+        let other = DesignBuilder::new(30.0, 10.0)
+            .smd("B2", Some("B"), at(15.0, 1.0), 0.5, 0)
+            .smd("A3", Some("A"), at(3.0, 4.0), 0.5, 0)
+            .smd("B1", Some("B"), at(11.0, 1.0), 0.5, 0)
+            .smd("A2", Some("A"), at(5.0, 1.0), 0.5, 0)
+            .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
+            .build();
+        assert_eq!(pads_of(&one, &plan(&one)), pads_of(&other, &plan(&other)));
     }
 
     #[test]

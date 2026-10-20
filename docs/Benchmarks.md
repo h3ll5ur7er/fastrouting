@@ -28,6 +28,19 @@ traxide is 39–90 times faster on the matrix and 27–67 times on the keyboard,
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Hemmed-in pads first (M2, TRX-24)
+
+October 2026: after [[TRX-49]], 83 rip-ups remained on the keyboard, all among the connections from the MCU's matrix pins, routed last because they are long: each pin's way out of the 0.4 mm pitch QFN was blocked by the copper of its neighbours. Planning now routes connections from **hemmed-in pads** first, pads with another net's copper too close for a track to pass between them, then the rest shortest first. Measured on the same DSN, three runs each, all cores of the 4-core container:
+
+| keyboard-tkl | Time (median) | Tracks | Vias | KiCad 10 DRC |
+| --- | ---: | ---: | ---: | --- |
+| Shortest first | 12.6 s | 423 | 109 | clean |
+| Hemmed-in pads first | **6.6 s** | 432 | 117 | **clean, nothing unconnected** |
+
+The key matrices have no hemmed-in pads and route as before.
+
+**Same board, same routes.** KiCad exports the parts of a board in a different order each time, and planning broke ties by that order: two exports of the keyboard routed differently, and one of them left a connection unrouted after its 10 rip-ups. Planning now breaks ties by names, so both exports give the same routes, and `max_rip_ups` is 20 ([[Profiles]]). The rip-up price made no difference: 5 and 10 mm gave identical routes.
+
 ## Each state expanded once (M2, TRX-49)
 
 October 2026: a weighted search reaches many states first by a worse way round, and expanded them again for every better way: the keyboard's longest search expanded 3.7 million times, but only 590 000 distinct states. Now each state is expanded once, which keeps the path within the weight of the cheapest. Measured in the 4-core container, every board clean in KiCad 10's DRC with nothing unconnected:
