@@ -4,13 +4,15 @@
       builds the recipe's board, saves FOLDER/RECIPE.kicad_pcb and exports
       FOLDER/RECIPE.dsn, as a user would with File → Export → Specctra DSN.
 
-  python3 roundtrip.py import FOLDER/RECIPE.kicad_pcb FOLDER/RECIPE.ses
+  python3 roundtrip.py import BOARD.kicad_pcb SESSION.ses ROUTED.kicad_pcb
       imports the session into the board, as File → Import → Specctra Session
-      does, and saves the result as FOLDER/RECIPE.routed.kicad_pcb.
+      does, saves the result as ROUTED.kicad_pcb and prints, as JSON, how many
+      tracks and vias it holds and how long the tracks are.
 
 KiCad's DRC (kicad-cli pcb drc) then judges the routed board.
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -39,15 +41,17 @@ def export(recipe: str, folder: Path) -> None:
         raise SystemExit(f"KiCad could not export {recipe} as DSN")
 
 
-def import_session(board_file: Path, session: Path) -> None:
+def import_session(board_file: Path, session: Path, routed: Path) -> None:
     board = pcbnew.LoadBoard(str(board_file))
     if not pcbnew.ImportSpecctraSES(board, str(session)):
         raise SystemExit(f"KiCad could not import {session}")
-    routed = board_file.with_name(board_file.name.replace(".kicad_pcb", ".routed.kicad_pcb"))
     pcbnew.SaveBoard(str(routed), board)
     # Saving wrote a project with KiCad's default rules; the board's own are in its project.
     shutil.copy(board_file.with_suffix(".kicad_pro"), routed.with_suffix(".kicad_pro"))
-    print(f"{len(board.GetTracks())} tracks and vias imported into {routed.name}")
+    items = list(board.GetTracks())
+    vias = [item for item in items if item.GetClass() == "PCB_VIA"]
+    length = sum(item.GetLength() for item in items if item.GetClass() != "PCB_VIA")
+    print(json.dumps({"tracks": len(items) - len(vias), "vias": len(vias), "length_mm": pcbnew.ToMM(length)}))
 
 
 if __name__ == "__main__":
@@ -56,7 +60,7 @@ if __name__ == "__main__":
             build(recipe, Path(folder))
         case ["export", recipe, folder]:
             export(recipe, Path(folder))
-        case ["import", board_file, session]:
-            import_session(Path(board_file), Path(session))
+        case ["import", board_file, session, routed]:
+            import_session(Path(board_file), Path(session), Path(routed))
         case _:
             raise SystemExit(__doc__)

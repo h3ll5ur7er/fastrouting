@@ -1,4 +1,6 @@
+mod bench;
 mod e2e;
+mod kicad;
 mod layers;
 
 use anyhow::{Result, bail};
@@ -8,6 +10,9 @@ fn main() -> Result<()> {
     match args.first().map(String::as_str) {
         Some("layers") => layers::check(),
         Some("e2e") => e2e::run(&args[1..]),
-        _ => bail!("usage: cargo xtask layers | cargo xtask e2e [--local] [RECIPE…]"),
+        Some("bench") => bench::run(&args[1..]),
+        _ => bail!(
+            "usage: cargo xtask layers | e2e [--local] [RECIPE…] | bench [--local] [--freerouting CMD] [--timeout S] [RECIPE…]"
+        ),
     }
 }

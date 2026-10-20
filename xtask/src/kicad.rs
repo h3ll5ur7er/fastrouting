@@ -1,0 +1,199 @@
+//! KiCad as the test harness sees it: it builds boards, exports them as DSN,
+//! imports sessions and judges the result with its own DRC.
+//!
+//! KiCad runs in the official Docker image (`TRAXIDE_KICAD_IMAGE`, by default
+//! kicad/kicad:10.0), or, with `--local`, as installed: `TRAXIDE_KICAD_PYTHON`
+//! (a Python that can `import pcbnew`) and `TRAXIDE_KICAD_CLI`.
+
+use anyhow::{Context, Result, ensure};
+use serde::Deserialize;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+pub enum Kicad {
+    Docker { image: String },
+    Local { python: String, cli: String },
+}
+
+/// What KiCad found on a routed board.
+#[derive(Debug)]
+pub struct Judgement {
+    pub violations: Vec<String>,
+    pub unconnected: Vec<String>,
+    pub tracks: usize,
+    pub vias: usize,
+    pub length_mm: f64,
+}
+
+impl Judgement {
+    pub fn is_clean(&self) -> bool {
+        self.violations.is_empty() && self.unconnected.is_empty()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct DrcReport {
+    violations: Vec<Finding>,
+    unconnected_items: Vec<Finding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Finding {
+    description: String,
+    #[serde(default)]
+    items: Vec<FindingItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FindingItem {
+    description: String,
+}
+
+impl Finding {
+    fn line(&self) -> String {
+        let items: Vec<&str> = self.items.iter().map(|i| i.description.as_str()).collect();
+        format!("{}: {}", self.description, items.join(" / "))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct Imported {
+    tracks: usize,
+    vias: usize,
+    length_mm: f64,
+}
+
+impl Kicad {
+    pub fn from_args(args: &[String]) -> Self {
+        if args.iter().any(|a| a == "--local") {
+            Self::Local {
+                python: std::env::var("TRAXIDE_KICAD_PYTHON").unwrap_or_else(|_| "python3".into()),
+                cli: std::env::var("TRAXIDE_KICAD_CLI").unwrap_or_else(|_| "kicad-cli".into()),
+            }
+        } else {
+            Self::Docker {
+                image: std::env::var("TRAXIDE_KICAD_IMAGE")
+                    .unwrap_or_else(|_| "kicad/kicad:10.0".into()),
+            }
+        }
+    }
+
+    /// Builds `recipe` and exports it to `out/RECIPE.dsn`, next to the board.
+    pub fn export(&self, root: &Path, out: &Path, recipe: &str) -> Result<()> {
+        self.run(
+            root,
+            out,
+            &format!("python3 roundtrip.py export {recipe} {{out}}"),
+        )
+        .map(drop)
+    }
+
+    /// Imports `out/SESSION` into the recipe's board as `out/ROUTED.kicad_pcb` and runs KiCad's DRC on it.
+    pub fn judge(
+        &self,
+        root: &Path,
+        out: &Path,
+        recipe: &str,
+        session: &str,
+        routed: &str,
+    ) -> Result<Judgement> {
+        let report = format!("{routed}.drc.json");
+        let printed = self.run(
+            root,
+            out,
+            &format!(
+                "python3 roundtrip.py import {{out}}/{recipe}.kicad_pcb {{out}}/{session} {{out}}/{routed}.kicad_pcb && \
+                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
+            ),
+        )?;
+        let imported: Imported = printed
+            .lines()
+            .find_map(|line| serde_json::from_str(line).ok())
+            .context("the import printed no statistics")?;
+        let drc: DrcReport = serde_json::from_str(&std::fs::read_to_string(out.join(report))?)?;
+        Ok(Judgement {
+            violations: drc.violations.iter().map(Finding::line).collect(),
+            unconnected: drc.unconnected_items.iter().map(Finding::line).collect(),
+            tracks: imported.tracks,
+            vias: imported.vias,
+            length_mm: imported.length_mm,
+        })
+    }
+
+    /// Runs `script` (a shell command line) in the e2e scripts' folder; `{out}` stands for `out`.
+    fn run(&self, root: &Path, out: &Path, script: &str) -> Result<String> {
+        let mut command = match self {
+            Self::Docker { image } => {
+                let mut command = Command::new("docker");
+                command.args(["run", "--rm", "-e", "HOME=/tmp", "-w", "/work/e2e/kicad"]);
+                if let Some(user) = current_user() {
+                    command.args(["--user", &user]);
+                }
+                command
+                    .arg("-v")
+                    .arg(format!("{}:/work:ro", root.display()))
+                    .arg("-v")
+                    .arg(format!("{}:/out", out.display()))
+                    .args([image.as_str(), "sh", "-c", &script.replace("{out}", "/out")]);
+                command
+            }
+            Self::Local { python, cli } => {
+                let script = script
+                    .replace("{out}", &out.display().to_string())
+                    .replace("python3 ", &format!("{python} "))
+                    .replace("kicad-cli ", &format!("{cli} "));
+                let mut command = Command::new("sh");
+                command
+                    .args(["-c", &script])
+                    .current_dir(root.join("e2e/kicad"));
+                command
+            }
+        };
+        let output = command.output().context("running KiCad")?;
+        let text = String::from_utf8_lossy(&output.stdout).into_owned()
+            + &String::from_utf8_lossy(&output.stderr);
+        ensure!(output.status.success(), "KiCad failed: {script}\n{text}");
+        Ok(text)
+    }
+}
+
+/// So that files KiCad writes into the mounted folder belong to the caller.
+fn current_user() -> Option<String> {
+    let id = |flag| {
+        Command::new("id")
+            .arg(flag)
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    };
+    Some(format!("{}:{}", id("-u")?, id("-g")?))
+}
+
+/// The repository's root and a release build of `traxide` in it.
+pub fn build_traxide() -> Result<(PathBuf, PathBuf)> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .canonicalize()?;
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let built = Command::new(&cargo)
+        .args(["build", "--release", "--quiet", "-p", "traxide-cli"])
+        .current_dir(&root)
+        .status()?;
+    ensure!(built.success(), "building traxide failed");
+    let traxide = root.join("target/release/traxide");
+    Ok((root, traxide))
+}
+
+/// The recipes named in `args`, or `default` when none is.
+pub fn recipes<'a>(args: &'a [String], default: &[&'a str]) -> Vec<&'a str> {
+    let named: Vec<&str> = args
+        .iter()
+        .filter(|a| !a.starts_with("--"))
+        .map(String::as_str)
+        .collect();
+    if named.is_empty() {
+        default.to_vec()
+    } else {
+        named
+    }
+}

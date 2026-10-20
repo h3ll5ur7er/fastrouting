@@ -1,0 +1,41 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "crates/**"
+      - "e2e/**"
+      - "xtask/**"
+      - ".github/workflows/bench.yml"
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: traxide and Freerouting, judged by KiCad 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      # Installs the toolchain pinned in rust-toolchain.toml.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      # Freerouting runs as a black box; its source is never read (docs/Development.md, clean-room rules).
+      - name: Download Freerouting 2.5.0
+        run: |
+          gh release download v2.5.0 --repo freerouting/freerouting --pattern '*.jar' --dir freerouting
+          ls -l freerouting
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: docker pull kicad/kicad:10.0
+      - name: Route and judge
+        run: |
+          jar=$(ls freerouting/*.jar | head -n 1)
+          cargo xtask bench --freerouting "java -jar $jar" --timeout 3600 matrix-6x17 keyboard-tkl

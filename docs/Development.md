@@ -103,7 +103,9 @@ Three levels, all run by `cargo test` except where noted:
 
 ## Benchmarking
 
-Until the benchmark exists ([[TRX-22]]), [[Benchmarks]] records measurements by hand. Then `cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
+`cargo xtask bench [RECIPE…]` routes boards with traxide and, given `--freerouting "java -jar freerouting.jar"`, with Freerouting too, and has KiCad judge both the same way: time, unconnected items and violations from KiCad's DRC, tracks, vias and track length. `--timeout SECONDS` stops a router that runs too long. The default boards are `matrix-6x17` and `keyboard-tkl`; results land in `target/bench/`. The Benchmark workflow runs it in CI against Freerouting 2.5.0 and shows the table in the job summary; [[Benchmarks]] keeps the history.
+
+Later, with [[TRX-22]], `cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
 
 ## Clean-room rules
 
