@@ -6,6 +6,8 @@
 
 ## Try it
 
+Every push builds traxide for Linux, Windows (x86-64 and ARM64) and macOS: open the latest run of the **Binaries** workflow under the repository's *Actions* tab and download the archive for your platform. Or build it:
+
 ```bash
 cargo build --release
 # In KiCad: File → Export → Specctra DSN, then

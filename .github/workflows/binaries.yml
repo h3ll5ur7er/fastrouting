@@ -1,0 +1,85 @@
+name: Binaries
+
+# Builds traxide for every platform and keeps the archives as artifacts of the
+# run, to download and try. Publishing releases comes later (TRX-35).
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "crates/**"
+      - "Cargo.*"
+      - "rust-toolchain.toml"
+      - ".github/workflows/binaries.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Fully static: no glibc version to match, no libraries to install.
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          # The C runtime linked in, so no Visual C++ redistributable is needed.
+          - { target: x86_64-pc-windows-msvc, os: windows-latest, rustflags: "-C target-feature=+crt-static" }
+          - { target: aarch64-pc-windows-msvc, os: windows-11-arm, rustflags: "-C target-feature=+crt-static" }
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rustup where the image has none
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            Invoke-WebRequest https://static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe -OutFile rustup-init.exe
+            ./rustup-init.exe -y --default-toolchain none --profile minimal
+            Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.cargo\bin"
+          }
+      # Installs the toolchain pinned in rust-toolchain.toml, with the target.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --locked --package traxide-cli --target ${{ matrix.target }}
+      - name: Smoke test
+        shell: bash
+        run: target/${{ matrix.target }}/release/traxide route fixtures/boards/matrix-3x4.dsn -o smoke.ses
+      - name: Archive
+        shell: bash
+        run: |
+          mkdir -p "dist/traxide-${{ matrix.target }}"
+          cp target/${{ matrix.target }}/release/traxide* "dist/traxide-${{ matrix.target }}/"
+          rm -f dist/traxide-${{ matrix.target }}/*.d dist/traxide-${{ matrix.target }}/*.pdb
+          cp README.md LICENSE-MIT LICENSE-APACHE "dist/traxide-${{ matrix.target }}/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: traxide-${{ matrix.target }}
+          path: dist/
+
+  macos:
+    name: macOS universal
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: |
+          cargo build --release --locked --package traxide-cli --target aarch64-apple-darwin
+          cargo build --release --locked --package traxide-cli --target x86_64-apple-darwin
+      - name: Universal binary
+        run: |
+          mkdir -p dist/traxide-macos-universal
+          lipo -create -output dist/traxide-macos-universal/traxide \
+            target/aarch64-apple-darwin/release/traxide target/x86_64-apple-darwin/release/traxide
+          lipo -info dist/traxide-macos-universal/traxide
+          cp README.md LICENSE-MIT LICENSE-APACHE dist/traxide-macos-universal/
+      - name: Smoke test
+        run: dist/traxide-macos-universal/traxide route fixtures/boards/matrix-3x4.dsn -o smoke.ses
+      - uses: actions/upload-artifact@v4
+        with:
+          name: traxide-macos-universal
+          path: dist/
