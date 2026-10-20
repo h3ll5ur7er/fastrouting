@@ -39,6 +39,17 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## One state per node (M2, TRX-48)
+
+October 2026: on the real boards of the corpus, the long searches expanded about 8 states per node and layer: the heading a node was entered with was part of the search state, and as a bend costs only 0.1 mm, all nine ways into a node cost nearly the same and were each expanded. A state is now a node on a layer; its heading is the direction of the cheapest way in found, which bend costs and the rule against acute turns follow. Every board stays clean in KiCad 10's DRC; track lengths are within 0.2 % of before.
+
+| Board | Before | After |
+| --- | ---: | ---: |
+| matrix-6x17 | 0.9 s | **0.35 s** |
+| keyboard-tkl | 3.3 s | **2.6 s** |
+| Issue015-StackOverflow (corpus) | 99 s | **72 s** |
+| Issue029-hw48na (corpus) | > 120 s | **103 s**, 83 of 91 |
+
 ## History costs (M2, TRX-50)
 
 October 2026: after the new ordering, the keyboard's MCU connections still ripped each other up 96 times, nearly all within a few millimetres of the QFN's pins. Rip-up prices only protect the connection ripped up; negotiated congestion also remembers *where* routes collide. Every segment or via of a committed route that displaced others now makes its 0.5 mm cell dearer by `history_cost` for every later search ([[Profiles]]).

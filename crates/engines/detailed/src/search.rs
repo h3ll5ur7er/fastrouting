@@ -12,7 +12,6 @@ use traxide_scratch::Stamped;
 
 /// No heading yet: just left a pad or a via.
 const UNSET: u8 = 8;
-const HEADINGS: usize = 9;
 /// The slot of the target pad's centre, reached from any node near it.
 const TARGET: u32 = u32::MAX;
 /// The cost of an edge or via that may not be taken at all.
@@ -182,8 +181,8 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     ) -> Option<Vec<Step>> {
         let layers = self.design.layers.len();
         let nodes = self.grid.node_count();
-        scratch.best.reset(nodes * layers * HEADINGS);
-        scratch.came.reset(nodes * layers * HEADINGS);
+        scratch.best.reset(nodes * layers);
+        scratch.came.reset(nodes * layers);
         scratch.edge_extra.reset(nodes * layers * DIRECTIONS.len());
         scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
@@ -219,7 +218,10 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             scratch.best.set(slot as usize, CLOSED);
             #[cfg(test)]
             scratch.expanded.push(slot);
-            let state = self.state(slot);
+            let state = State {
+                heading: self.arrival_heading(slot, scratch),
+                ..self.state(slot)
+            };
             let mut relax = |next: Option<State>,
                              step_cost: i64,
                              via: Option<ViaKindId>,
@@ -385,20 +387,36 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         state.layer as usize * self.grid.node_count() + self.grid.index(state.node)
     }
 
+    /// A position of the search: a node on a layer. Its heading is not part of
+    /// it: the nine ways into a node cost nearly the same, as a bend costs
+    /// little, and searching them apart expanded nearly every node nine times.
     fn slot(&self, state: State) -> u32 {
-        u32::try_from(self.layer_node(state) * HEADINGS + usize::from(state.heading))
-            .expect("search windows below 2³² states")
+        u32::try_from(self.layer_node(state)).expect("search windows below 2³² states")
     }
 
+    /// The node and layer of `slot`, without a heading.
     fn state(&self, slot: u32) -> State {
-        let slot = slot as usize;
-        let (layer_node, heading) = (slot / HEADINGS, slot % HEADINGS);
+        let layer_node = slot as usize;
         let nodes = self.grid.node_count();
         State {
             node: self.grid.node(layer_node % nodes),
             layer: (layer_node / nodes) as u32,
-            heading: heading as u8,
+            heading: UNSET,
         }
+    }
+
+    /// The heading of the cheapest way into `slot` found so far: the direction
+    /// of its last step, or none after a via or at a pad.
+    fn arrival_heading(&self, slot: u32, scratch: &Scratch) -> u8 {
+        let came = Came::unpack(scratch.came.get(slot as usize).unwrap_or_default());
+        let (Some(from), None) = (came.from, came.via) else {
+            return UNSET;
+        };
+        let (here, there) = (self.state(slot).node, self.state(from).node);
+        DIRECTIONS
+            .iter()
+            .position(|&d| d == (here.0 - there.0, here.1 - there.1))
+            .map_or(UNSET, |d| d as u8)
     }
 
     /// The pad centres joined without a search, when they see each other on a
