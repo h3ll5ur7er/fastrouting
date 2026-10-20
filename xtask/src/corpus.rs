@@ -181,7 +181,9 @@ fn attempt(
     } else {
         match judge(traxide, board, Some(session)) {
             Ok(judgement) => Attempt::Judged { seconds, judgement },
-            Err(why) => Attempt::Failed { why },
+            Err(why) => Attempt::Failed {
+                why: quoting_line(&why, &std::fs::read_to_string(session).unwrap_or_default()),
+            },
         }
     })
 }
@@ -208,6 +210,22 @@ fn judgement(json: &str) -> Option<Judgement> {
             .map(|n| usize::try_from(n).unwrap_or(usize::MAX))
             .sum(),
     })
+}
+
+/// `why`, a reason that names a line of the session, with that line, so that
+/// the table shows what the router wrote there.
+fn quoting_line(why: &str, session: &str) -> String {
+    let number = why
+        .strip_prefix("line ")
+        .and_then(|rest| rest.split_once(':'))
+        .and_then(|(number, _)| number.parse::<usize>().ok());
+    match number.and_then(|n| session.lines().nth(n.checked_sub(1)?)) {
+        Some(line) => {
+            let line: String = line.trim().chars().take(80).collect();
+            format!("{why}, at `{}`", line.replace('|', "/"))
+        }
+        None => why.to_owned(),
+    }
 }
 
 fn first_line(text: &str) -> String {
@@ -318,6 +336,16 @@ mod tests {
                 violations: 5
             })
         );
+    }
+
+    #[test]
+    fn an_error_at_a_line_quotes_that_line() {
+        let session = "(session s\n  (routes\n    (via Round1 1 2)\n";
+        assert_eq!(
+            quoting_line("line 3: unknown via padstack Round1", session),
+            "line 3: unknown via padstack Round1, at `(via Round1 1 2)`"
+        );
+        assert_eq!(quoting_line("no line", session), "no line");
     }
 
     #[test]
