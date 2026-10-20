@@ -60,6 +60,20 @@ pub(crate) fn parse(text: &str) -> Result<Sexp, BoardError> {
                             {
                                 break;
                             }
+                            // A pin's reference: its component quoted, then the
+                            // pin, quoted or not.
+                            Some(q) if q == quote && chars.peek() == Some(&'-') => {
+                                while let Some(&next) = chars.peek() {
+                                    if next.is_whitespace() || next == '(' || next == ')' {
+                                        break;
+                                    }
+                                    if next != quote {
+                                        quoted.push(next);
+                                    }
+                                    chars.next();
+                                }
+                                break;
+                            }
                             Some(other) => {
                                 line += usize::from(other == '\n');
                                 quoted.push(other);
@@ -161,10 +175,13 @@ mod tests {
         let root = parse("(place DP3 (PN \"0.5\"\") (pins \"J3\"-\"D+\" R1-2))").expect("valid");
         let part_number = root.child("pn").expect("kept apart from the pins");
         assert_eq!(atoms(part_number), ["0.5\""]);
-        assert_eq!(
-            atoms(root.child("pins").expect("pins")),
-            ["J3\"-\"D+", "R1-2"]
-        );
+        assert_eq!(atoms(root.child("pins").expect("pins")), ["J3-D+", "R1-2"]);
+    }
+
+    #[test]
+    fn a_pin_may_follow_its_quoted_component_unquoted() {
+        let root = parse("(pins J2-VBUS \"J1\"-VBUS)").expect("valid");
+        assert_eq!(atoms(&root), ["J2-VBUS", "J1-VBUS"]);
     }
 
     #[test]
