@@ -25,6 +25,51 @@ pub fn parse_dsn(text: &str) -> Result<Design, BoardError> {
     DsnReader::new(&root)?.read()
 }
 
+/// The corners of a polyline path, as Freerouting writes wires: its numbers are
+/// lines, two points each, and each corner is where one line crosses the next.
+fn corners(points: &[Point]) -> Vec<Point> {
+    let lines: Vec<(Point, Point)> = points
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&[a, b]| (a, b))
+        .collect();
+    lines
+        .windows(2)
+        .filter_map(|pair| crossing(pair[0], pair[1]))
+        .collect()
+}
+
+/// Where two lines, each through two points, cross; `None` if they are parallel.
+fn crossing((a, b): (Point, Point), (c, d): (Point, Point)) -> Option<Point> {
+    let (ab, cd, ac) = (
+        (i128::from(b.x - a.x), i128::from(b.y - a.y)),
+        (i128::from(d.x - c.x), i128::from(d.y - c.y)),
+        (i128::from(c.x - a.x), i128::from(c.y - a.y)),
+    );
+    let denominator = ab.0 * cd.1 - ab.1 * cd.0;
+    if denominator == 0 {
+        return None;
+    }
+    let numerator = ac.0 * cd.1 - ac.1 * cd.0;
+    // a + ab · numerator / denominator, to the nearest nanometre.
+    let along = |start: i32, step: i128| {
+        i32::try_from(i128::from(start) + rounded_quotient(step * numerator, denominator)).ok()
+    };
+    Some(Point::new(along(a.x, ab.0)?, along(a.y, ab.1)?))
+}
+
+/// `numerator / denominator`, rounded half away from zero.
+fn rounded_quotient(numerator: i128, denominator: i128) -> i128 {
+    let (numerator, denominator) = if denominator < 0 {
+        (-numerator, -denominator)
+    } else {
+        (numerator, denominator)
+    };
+    let magnitude = (2 * numerator.abs() + denominator) / (2 * denominator);
+    magnitude * numerator.signum()
+}
+
 /// Specctra's y axis points up; the design's, like KiCad's, points down.
 fn to_board(p: Point) -> Point {
     Point::new(p.x, -p.y)
@@ -551,26 +596,38 @@ impl<'a> DsnReader<'a> {
                 .ok_or_else(|| item.invalid(format!("unknown net {name}")))
         };
         for wire in wiring.children("wire") {
-            let path = wire.required_child("path")?;
+            let (shape, points) = match (wire.child("path"), wire.child("polyline_path")) {
+                (Some(path), _) => (
+                    path,
+                    self.units
+                        .points(path.args().get(2..).unwrap_or_default())?,
+                ),
+                (None, Some(polyline)) => (
+                    polyline,
+                    corners(
+                        &self
+                            .units
+                            .points(polyline.args().get(2..).unwrap_or_default())?,
+                    ),
+                ),
+                (None, None) => return Err(wire.invalid("missing (path …)")),
+            };
             let layer = self.layers_named(
-                path.args()
+                shape
+                    .args()
                     .first()
-                    .ok_or_else(|| path.invalid("missing layer"))?,
+                    .ok_or_else(|| shape.invalid("missing layer"))?,
             )?;
             routes.tracks.push(Track {
                 net: net_of(wire)?,
                 layer: layer[0],
                 width: self.units.length(
-                    path.args()
+                    shape
+                        .args()
                         .get(1)
-                        .ok_or_else(|| path.invalid("missing width"))?,
+                        .ok_or_else(|| shape.invalid("missing width"))?,
                 )?,
-                path: self
-                    .units
-                    .points(path.args().get(2..).unwrap_or_default())?
-                    .into_iter()
-                    .map(to_board)
-                    .collect(),
+                path: points.into_iter().map(to_board).collect(),
             });
         }
         for via in wiring.children("via") {

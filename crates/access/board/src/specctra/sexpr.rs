@@ -74,12 +74,7 @@ impl Sexp {
 }
 
 /// Keywords that tools spell differently, with the spelling the reader uses.
-const SYNONYMS: &[(&str, &str)] = &[
-    ("circ", "circle"),
-    ("clear", "clearance"),
-    // Freerouting writes wires this way.
-    ("polyline_path", "path"),
-];
+const SYNONYMS: &[(&str, &str)] = &[("circ", "circle"), ("clear", "clearance")];
 
 /// Keywords are case-insensitive, as some tools write (PCB …), and some have
 /// synonyms.

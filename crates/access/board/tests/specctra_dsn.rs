@@ -327,21 +327,21 @@ fn the_signal_boundary_is_where_routing_may_go() {
 }
 
 #[test]
-fn reads_wires_written_as_polyline_paths() {
+fn a_polyline_path_lists_lines_whose_crossings_are_its_corners() {
+    // As Freerouting writes wires: a horizontal line through the start, a
+    // vertical one along the wire, and a horizontal one through its end.
     let board = edited_board("two-nets.dsn", |bytes| {
         replaced(
             bytes,
             b"(wiring)",
-            b"(wiring (wire (polyline_path F.Cu 200 6000 -10000 24000 -10000) (net Across)))",
+            b"(wiring (wire (polyline_path F.Cu 200  6000 -10000 6000.1 -10000  \
+              6000 -10000 6000 -10000.1  0 -14000 0.1 -14000) (net Across)))",
         )
     });
     let design = load_design(&board).expect("readable");
     assert_eq!(
         design.existing.tracks[0].path,
-        [
-            Point::new(mm(6.0), mm(10.0)),
-            Point::new(mm(24.0), mm(10.0))
-        ]
+        [Point::new(mm(6.0), mm(10.0)), Point::new(mm(6.0), mm(14.0))]
     );
 }
 
