@@ -79,6 +79,7 @@ struct Fields {
     detour_margin: Option<f64>,
     rip_up_cost: Option<f64>,
     max_rip_ups: Option<u32>,
+    history_cost: Option<f64>,
     heuristic_weight: Option<f64>,
     global_routing: Option<bool>,
     batch_size: Option<u32>,
@@ -93,6 +94,7 @@ impl Fields {
             detour_margin: other.detour_margin.or(self.detour_margin),
             rip_up_cost: other.rip_up_cost.or(self.rip_up_cost),
             max_rip_ups: other.max_rip_ups.or(self.max_rip_ups),
+            history_cost: other.history_cost.or(self.history_cost),
             heuristic_weight: other.heuristic_weight.or(self.heuristic_weight),
             global_routing: other.global_routing.or(self.global_routing),
             batch_size: other.batch_size.or(self.batch_size),
@@ -123,6 +125,11 @@ impl Fields {
             rip_up_cost: positive_nm(self.rip_up_cost, "rip_up_cost")?,
             // Zero is allowed: it turns rip-up off.
             max_rip_ups: self.max_rip_ups.unwrap_or(0),
+            // Zero is allowed: it turns history off.
+            history_cost: match self.history_cost.unwrap_or(0.0) {
+                0.0 => 0,
+                _ => positive_nm(self.history_cost, "history_cost")?,
+            },
             heuristic_weight: match self.heuristic_weight.unwrap_or(1.0) {
                 weight if weight >= 1.0 && weight.is_finite() => weight,
                 _ => {
@@ -190,6 +197,25 @@ mod tests {
             load_profile("default", Some(&file)),
             Err(ProfileError::BelowOne {
                 field: "batch_size",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn history_can_be_turned_off_but_not_made_negative() {
+        let off = file_with("[profiles.default]\nhistory_cost = 0\n");
+        assert_eq!(
+            load_profile("default", Some(&off))
+                .expect("valid")
+                .history_cost,
+            0
+        );
+        let negative = file_with("[profiles.default]\nhistory_cost = -1\n");
+        assert!(matches!(
+            load_profile("default", Some(&negative)),
+            Err(ProfileError::NotPositive {
+                field: "history_cost",
                 ..
             })
         ));

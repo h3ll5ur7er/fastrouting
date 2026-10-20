@@ -59,7 +59,7 @@ The output is a corridor per connection: its cells, layers and border crossings.
 
 Inside its corridor, each connection is routed by A* over an implicit octilinear graph: the corners of inflated obstacles, the corridor's crossing points and a fine fallback grid. Clearance is checked exactly against Layout Access. Corridors of one batch don't overlap, so workers route them in parallel, each in a transaction (see [Parallelism and GPU](Parallelism-and-GPU.md)).
 
-Connections that fail, or conflict at commit, go to a local negotiation: the same PathFinder costs on a fine grid around the conflict, then **walkaround and shove** (moving neighbouring octilinear segments within the rules, as KiCad's interactive router does). Later, an exact ILP/SAT switchbox solver on small windows can route what is left, or prove that it can't be done and say so.
+Built so far: a connection may take routed copper's place at a price that grows with each rip-up of that copper, and each collision makes its place dearer for every later search (PathFinder's history cost, [[TRX-50]]). Planned: connections that fail, or conflict at commit, go to a local negotiation: the same PathFinder costs on a fine grid around the conflict, then **walkaround and shove** (moving neighbouring octilinear segments within the rules, as KiCad's interactive router does). Later, an exact ILP/SAT switchbox solver on small windows can route what is left, or prove that it can't be done and say so.
 
 Differential pairs are routed as one coupled entity with pose-based A* (position and heading), then split into two tracks.
 

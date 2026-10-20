@@ -8,6 +8,7 @@
 //! routed again later.
 
 mod grid;
+mod history;
 mod path;
 mod search;
 
@@ -78,6 +79,8 @@ impl<'a> Router<'a> {
         let mut queue: VecDeque<ConnectionId> = (0..total).map(ConnectionId::from_index).collect();
         let mut unrouted = Vec::new();
         let may_rip_up = self.finder.profile.max_rip_ups > 0;
+        let mut history =
+            history::History::new(self.finder.design, self.finder.profile.history_cost);
         while !queue.is_empty() {
             if cancel.is_cancelled() {
                 unrouted.extend(queue.drain(..));
@@ -89,7 +92,10 @@ impl<'a> Router<'a> {
                 plan,
                 corridors,
                 layout,
-                may_rip_up.then_some(&rip_ups[..]),
+                may_rip_up.then_some(search::Negotiation {
+                    rip_ups: &rip_ups,
+                    history: &history,
+                }),
             );
             for (id, found) in batch.iter().copied().zip(found) {
                 let Some(found) = found else {
@@ -97,6 +103,9 @@ impl<'a> Router<'a> {
                     continue;
                 };
                 let displaced = routed_obstructions(layout, &found);
+                if !displaced.is_empty() {
+                    record_collisions(&mut history, self.finder.design, layout, &found);
+                }
                 debug_assert!(
                     displaced.iter().all(|d| !batch.contains(d)),
                     "connections of one batch keep out of each other's territory"
@@ -169,12 +178,12 @@ impl<'a> Router<'a> {
         plan: &Plan,
         corridors: Option<&Corridors>,
         layout: &(impl LayoutAccess + Sync),
-        rip_ups: Option<&[u32]>,
+        negotiation: Option<search::Negotiation>,
     ) -> Vec<Option<Routes>> {
         let finder = self.finder;
         let find = |scratch: &mut search::Scratch, id: ConnectionId| {
             let connection = plan.connections[id.index()];
-            finder.find(scratch, id, connection, corridors, layout, rip_ups)
+            finder.find(scratch, id, connection, corridors, layout, negotiation)
         };
         let workers = self.scratches.len().min(batch.len());
         if workers <= 1 {
@@ -281,12 +290,12 @@ impl Finder<'_> {
         connection: Connection,
         corridors: Option<&Corridors>,
         layout: &impl LayoutAccess,
-        rip_ups: Option<&[u32]>,
+        negotiation: Option<search::Negotiation>,
     ) -> Option<Routes> {
         let in_corridor = corridors
             .filter(|c| c.bounds(id).is_some())
-            .and_then(|c| self.search(scratch, connection, layout, rip_ups, Some((c, id))));
-        in_corridor.or_else(|| self.search(scratch, connection, layout, rip_ups, None))
+            .and_then(|c| self.search(scratch, connection, layout, negotiation, Some((c, id))));
+        in_corridor.or_else(|| self.search(scratch, connection, layout, negotiation, None))
     }
 
     fn search(
@@ -294,7 +303,7 @@ impl Finder<'_> {
         scratch: &mut search::Scratch,
         connection: Connection,
         layout: &impl LayoutAccess,
-        rip_ups: Option<&[u32]>,
+        negotiation: Option<search::Negotiation>,
         corridor: Option<(&Corridors, ConnectionId)>,
     ) -> Option<Routes> {
         let search = search::Search::new(
@@ -303,7 +312,7 @@ impl Finder<'_> {
             self.profile,
             connection,
             layout,
-            rip_ups,
+            negotiation,
             corridor,
         );
         let steps = search.run(scratch)?;
@@ -312,6 +321,39 @@ impl Finder<'_> {
             connection.net,
             self.rules.track_width(connection.net),
         ))
+    }
+}
+
+/// Makes the places where `routes` overlap routed copper dearer for later searches.
+fn record_collisions(
+    history: &mut history::History,
+    design: &Design,
+    layout: &impl LayoutAccess,
+    routes: &Routes,
+) {
+    for track in &routes.tracks {
+        for pair in track.path.windows(2) {
+            let segment = traxide_contracts::geometry::Segment::new(pair[0], pair[1]);
+            if let Obstruction::Routed(_) =
+                layout.track_obstruction(track.net, track.layer, segment, track.width)
+            {
+                history.record_track(track.layer, segment, track.width);
+            }
+        }
+    }
+    for via in &routes.vias {
+        if let Obstruction::Routed(_) = layout.via_obstruction(via) {
+            let copper = &design.via_kind(via.kind).copper;
+            let radius = copper
+                .iter()
+                .map(|c| {
+                    let bounds = c.shape.bounds();
+                    (bounds.max.x - bounds.min.x) / 2
+                })
+                .max()
+                .unwrap_or(0);
+            history.record_via(via.position, radius, copper.iter().map(|c| c.layer));
+        }
     }
 }
 

@@ -28,6 +28,23 @@ traxide is 39–90 times faster on the matrix and 27–67 times on the keyboard,
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## History costs (M2, TRX-50)
+
+October 2026: after the new ordering, the keyboard's MCU connections still ripped each other up 96 times, nearly all within a few millimetres of the QFN's pins. Rip-up prices only protect the connection ripped up; negotiated congestion also remembers *where* routes collide. Every segment or via of a committed route that displaced others now makes its 0.5 mm cell dearer by `history_cost` for every later search ([[Profiles]]).
+
+| `history_cost` | keyboard-tkl | Vias |
+| ---: | ---: | ---: |
+| 0 (before) | 7.4 s | 117 |
+| 0.5 mm | 6.2 s | 135 |
+| 1 mm | 4.2 s | 134 |
+| 1.5 mm | 3.7 s | 119 |
+| **2 mm (the default, a via)** | **3.4 s** | **107** |
+| 2.5 mm | 3.4 s | 107 |
+| 3 mm | 4.2 s | 117 |
+| 5 mm | 8.0 s | 139 |
+
+One run each, all cores of the 4-core container. The key matrices route as before. With the default, `cargo xtask bench` in the container: keyboard-tkl in 3.4 s, 315 of 315 connections, 107 vias, 8279 mm of track, clean in KiCad 10's DRC with nothing unconnected; the routes are the same on 1 and 4 threads.
+
 ## Hemmed-in pads first (M2, TRX-24)
 
 October 2026: after [[TRX-49]], 83 rip-ups remained on the keyboard, all among the connections from the MCU's matrix pins, routed last because they are long: each pin's way out of the 0.4 mm pitch QFN was blocked by the copper of its neighbours. Planning now routes connections from **hemmed-in pads** first, pads with another net's copper too close for a track to pass between them, then the rest shortest first. Measured on the same DSN, three runs each, all cores of the 4-core container:

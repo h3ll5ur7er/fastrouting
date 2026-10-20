@@ -18,6 +18,7 @@ fn profile() -> Profile {
         detour_margin: 5_000_000,
         rip_up_cost: 5_000_000,
         max_rip_ups: 10,
+        history_cost: 0,
         heuristic_weight: 1.0,
         global_routing: false,
         batch_size: 1,
@@ -338,6 +339,7 @@ fn without_rip_up_a_connection_that_takes_anothers_only_way_leaves_it_unrouted()
         &design,
         &Profile {
             max_rip_ups: 0,
+            history_cost: 0,
             ..short_detours()
         },
         &[("Y1", "Y2"), ("X1", "X2")],

@@ -17,6 +17,11 @@ pub struct Profile {
     /// How often one connection may be ripped up before it stays unrouted, so
     /// that two connections cannot take each other's place forever.
     pub max_rip_ups: u32,
+    /// What each collision adds to its place for every later search, in
+    /// nanometres of track per place crossed (negotiated congestion's history
+    /// cost): connections learn to leave a contested place to one of them
+    /// instead of taking turns ripping each other up there. Zero turns it off.
+    pub history_cost: i64,
     /// How strongly a search heads for its target: 1 finds the cheapest path;
     /// more finds a path within that factor of the cheapest, much faster.
     pub heuristic_weight: f64,

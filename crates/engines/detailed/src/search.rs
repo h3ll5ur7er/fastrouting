@@ -1,4 +1,5 @@
 use crate::grid::{DIRECTIONS, Grid, Node};
+use crate::history::History;
 use crate::path::{self, Step};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -91,6 +92,15 @@ pub(crate) fn window(
     }
 }
 
+/// What a search pays to cross routed copper, which negotiated congestion
+/// raises where connections keep colliding.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Negotiation<'a> {
+    /// How often each connection has been ripped up.
+    pub(crate) rip_ups: &'a [u32],
+    pub(crate) history: &'a History,
+}
+
 pub(crate) struct Search<'a, L> {
     design: &'a Design,
     profile: &'a Profile,
@@ -102,9 +112,8 @@ pub(crate) struct Search<'a, L> {
     to: &'a Pad,
     grid: Grid,
     diagonal: i64,
-    /// How often each connection has been ripped up; `None` when routed copper
-    /// may not be crossed at all.
-    rip_ups: Option<&'a [u32]>,
+    /// What crossing routed copper costs; `None` when it may not be crossed at all.
+    negotiation: Option<Negotiation<'a>>,
     /// The profile's heuristic weight in thousandths, so ranking stays in integers.
     weight_per_mille: i64,
     /// The corridor global routing planned for this connection, if any.
@@ -118,7 +127,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         profile: &'a Profile,
         connection: Connection,
         layout: &'a L,
-        rip_ups: Option<&'a [u32]>,
+        negotiation: Option<Negotiation<'a>>,
         corridor: Option<(&'a Corridors, ConnectionId)>,
     ) -> Self {
         let (from, to) = (design.pad(connection.from), design.pad(connection.to));
@@ -137,7 +146,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             diagonal: Point::new(0, 0)
                 .distance(Point::new(profile.grid_pitch, profile.grid_pitch))
                 .max(pitch),
-            rip_ups,
+            negotiation,
             corridor,
             weight_per_mille: (profile.heuristic_weight * 1000.0).round() as i64,
         }
@@ -311,34 +320,50 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     /// What a track segment costs beyond its length: nothing when it is clear,
     /// the price of ripping up what it crosses when that is allowed, else `None`.
     fn track_extra(&self, layer: LayerId, segment: Segment) -> Option<i64> {
-        match self.rip_ups {
+        match self.negotiation {
             None => self
                 .layout
                 .is_track_clear(self.net, layer, segment, self.width)
                 .then_some(0),
-            Some(_) => self.rip_up_price(
-                self.layout
-                    .track_obstruction(self.net, layer, segment, self.width),
-            ),
+            Some(negotiation) => {
+                let obstruction = self
+                    .layout
+                    .track_obstruction(self.net, layer, segment, self.width);
+                Some(
+                    self.rip_up_price(negotiation, obstruction)?
+                        + negotiation.history.of_track(layer, segment),
+                )
+            }
         }
     }
 
     fn via_extra(&self, via: &Via) -> Option<i64> {
-        match self.rip_ups {
+        match self.negotiation {
             None => self.layout.is_via_clear(via).then_some(0),
-            Some(_) => self.rip_up_price(self.layout.via_obstruction(via)),
+            Some(negotiation) => {
+                let layers = self
+                    .design
+                    .via_kind(via.kind)
+                    .copper
+                    .iter()
+                    .map(|c| c.layer);
+                Some(
+                    self.rip_up_price(negotiation, self.layout.via_obstruction(via))?
+                        + negotiation.history.of_via(via, layers),
+                )
+            }
         }
     }
 
     /// Each crossed connection costs more the more often it was ripped up before,
     /// so that connections settle instead of taking turns (negotiated congestion's
     /// history cost); one ripped up too often may not be crossed again.
-    fn rip_up_price(&self, obstruction: Obstruction) -> Option<i64> {
+    fn rip_up_price(&self, negotiation: Negotiation, obstruction: Obstruction) -> Option<i64> {
         match obstruction {
             Obstruction::None => Some(0),
             Obstruction::Fixed => None,
             Obstruction::Routed(connections) => {
-                let rip_ups = self.rip_ups?;
+                let rip_ups = negotiation.rip_ups;
                 connections
                     .iter()
                     .map(|c| {
@@ -568,6 +593,7 @@ mod tests {
             detour_margin: 10_000_000,
             rip_up_cost: 5_000_000,
             max_rip_ups: 0,
+            history_cost: 0,
             heuristic_weight: 2.0,
             global_routing: false,
             batch_size: 1,
