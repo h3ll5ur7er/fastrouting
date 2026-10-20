@@ -144,11 +144,6 @@ impl<'a> Router<'a> {
                 events.publish(Event::ConnectionRouted { done, total });
             }
         }
-        eprintln!(
-            "\nPROBE rip-ups {} of {} connections",
-            rip_ups.iter().sum::<u32>(),
-            total
-        );
         unrouted.sort_unstable();
         hemmed_in.sort_unstable();
         hemmed_in.dedup();

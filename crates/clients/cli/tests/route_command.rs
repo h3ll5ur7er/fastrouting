@@ -47,6 +47,15 @@ fn routes_a_board_and_writes_a_session_next_to_it() {
 }
 
 #[test]
+fn a_quiet_route_of_a_complete_board_prints_nothing_but_its_summary() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let input = copy_to(folder.path(), "two-nets.dsn");
+    let run = traxide(&["route", input.to_str().expect("utf-8"), "--quiet"]);
+    assert_eq!(String::from_utf8_lossy(&run.stderr), "");
+    assert_eq!(String::from_utf8_lossy(&run.stdout).lines().count(), 1);
+}
+
+#[test]
 fn writes_the_same_session_on_any_number_of_threads() {
     let folder = tempfile::tempdir().expect("temp dir");
     // Exported by KiCad 10 from the matrix-3x4 recipe of e2e/kicad/boards.py.
