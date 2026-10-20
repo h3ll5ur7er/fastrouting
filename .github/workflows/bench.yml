@@ -50,3 +50,30 @@ jobs:
             target/bench/**/*.kicad_pcb
             target/bench/**/*.kicad_pro
           if-no-files-found: ignore
+
+  corpus:
+    name: Real boards, traxide and Freerouting (shard ${{ matrix.shard }} of 6)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      # Freerouting runs as a black box; its source is never read (docs/Development.md, clean-room rules).
+      - name: Download Freerouting 2.5.0
+        run: gh release download v2.5.0 --repo freerouting/freerouting --pattern '*.jar' --dir freerouting
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # Boards from Freerouting's bug reports, downloaded at run time (corpus/freerouting-fixtures.txt).
+      - name: Route and judge
+        run: |
+          jar=$(ls freerouting/*.jar | head -n 1)
+          cargo xtask corpus --timeout 120 --freerouting "java -jar $jar" --shard ${{ matrix.shard }}/6

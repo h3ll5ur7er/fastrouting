@@ -14,7 +14,7 @@ fn main() -> Result<()> {
         Some("bench") => bench::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         _ => bail!(
-            "usage: cargo xtask layers | e2e [--local] [RECIPE…] | bench [--local] [--freerouting CMD] [--timeout S] [RECIPE…] | corpus [--timeout S] [--list FILE]"
+            "usage: cargo xtask layers | e2e [--local] [RECIPE…] | bench [--local] [--freerouting CMD] [--timeout S] [RECIPE…] | corpus [--timeout S] [--freerouting CMD] [--shard K/N] [--list FILE]"
         ),
     }
 }
