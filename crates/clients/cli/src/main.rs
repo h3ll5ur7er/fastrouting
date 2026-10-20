@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use traxide_contracts::{Event, Stage, Violation};
 use traxide_events::CancelToken;
 use traxide_inspection::CheckJob;
-use traxide_routing::{RouteJob, RouteReport};
+use traxide_routing::{RouteJob, RouteReport, Unroutable};
 
 /// A fast PCB autorouter.
 #[derive(Debug, Parser)]
@@ -215,8 +215,21 @@ fn summarise(report: &RouteReport, output: &std::path::Path) -> ExitCode {
         report.elapsed.as_secs_f64(),
         output.display()
     );
-    for (net, from, to) in &report.unrouted {
-        println!("  unrouted: {net} from {from} to {to}");
+    for unrouted in &report.unrouted {
+        let why = match &unrouted.why {
+            Unroutable::OffTheBoard(pad) => format!("{pad} lies outside the board"),
+            Unroutable::OnlyOnLayersNotRouted(pad) => {
+                format!("{pad} is only on layers not routed on, such as planes")
+            }
+            Unroutable::HemmedIn(pad) => format!(
+                "no track can leave {pad}: another net's copper, a keepout or the edge is too close"
+            ),
+            Unroutable::NoWayFound => "no way found".to_owned(),
+        };
+        println!(
+            "  unrouted: {} from {} to {}: {why}",
+            unrouted.net, unrouted.from, unrouted.to
+        );
     }
     if report.violations_before_routing > 0 {
         println!(

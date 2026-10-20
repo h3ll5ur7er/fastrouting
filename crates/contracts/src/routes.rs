@@ -1,4 +1,4 @@
-use crate::{Connection, LayerId, NetId, ViaKindId};
+use crate::{Connection, LayerId, NetId, PadId, ViaKindId};
 use traxide_geometry::Point;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -34,4 +34,7 @@ pub struct Via {
 pub struct RoutingResult {
     pub routes: Routes,
     pub unrouted: Vec<Connection>,
+    /// Pads no track could leave at all, in id order: the reason some of the
+    /// unrouted connections are.
+    pub hemmed_in: Vec<PadId>,
 }

@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use traxide_contracts::{Event, Stage};
 use traxide_events::{CancelToken, Silent};
-use traxide_routing::{RouteJob, route};
+use traxide_routing::{RouteJob, Unroutable, route};
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(format!(
@@ -129,4 +129,18 @@ fn rules_the_board_broke_before_routing_are_not_counted_as_the_routers() {
         "{:?}",
         report.verdict
     );
+}
+
+#[test]
+fn says_why_a_connection_stayed_unrouted() {
+    // R2 lies beyond the board's right edge.
+    let folder = tempfile::tempdir().expect("temp dir");
+    let report = route(
+        &job("pad-off-board.dsn", &folder.path().join("board.ses")),
+        &Silent,
+        &CancelToken::new(),
+    )
+    .expect("routable");
+    let reasons: Vec<&Unroutable> = report.unrouted.iter().map(|u| &u.why).collect();
+    assert_eq!(reasons, [&Unroutable::OffTheBoard("R2-1".into())]);
 }

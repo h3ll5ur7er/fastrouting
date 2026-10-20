@@ -455,3 +455,20 @@ fn searches_the_whole_window_when_its_corridor_is_blocked() {
     assert_eq!(result.unrouted, []);
     assert_legal(&design, &result.routes);
 }
+
+#[test]
+fn a_pad_with_no_way_out_is_named() {
+    // A1 lies under a keepout: no track may leave it.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .keepout(
+            wall(at(1.0, 4.0), at(3.0, 6.0)),
+            None,
+            KeepoutScope::Everything,
+        )
+        .smd("A1", Some("A"), at(2.0, 5.0), 0.5, 0)
+        .smd("A2", Some("A"), at(18.0, 5.0), 0.5, 0)
+        .build();
+    let result = route(&design, &[("A1", "A2")]);
+    assert_eq!(result.unrouted, [connection(&design, "A1", "A2")]);
+    assert_eq!(result.hemmed_in, [design.pad_named("A1")]);
+}

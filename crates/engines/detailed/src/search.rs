@@ -6,7 +6,7 @@ use std::collections::BinaryHeap;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
     Connection, ConnectionId, ConstraintSet, Corridors, Design, LayerId, LayoutAccess, NetId,
-    Obstruction, Pad, Profile, Via, ViaKindId,
+    Obstruction, Pad, PadId, Profile, Via, ViaKindId,
 };
 use traxide_scratch::Stamped;
 
@@ -94,6 +94,14 @@ pub(crate) fn window(
     }
 }
 
+/// Why a search found no route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NoRoute {
+    /// No track can leave this pad at all.
+    HemmedIn(PadId),
+    NotFound,
+}
+
 /// What a search pays to cross routed copper, which negotiated congestion
 /// raises where connections keep colliding.
 #[derive(Debug, Clone, Copy)]
@@ -110,6 +118,7 @@ pub(crate) struct Search<'a, L> {
     net: NetId,
     width: i32,
     via_kinds: &'a [ViaKindId],
+    connection: Connection,
     from: &'a Pad,
     to: &'a Pad,
     grid: Grid,
@@ -136,6 +145,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         let window = window(design, profile, connection, corridor);
         let pitch = i64::from(profile.grid_pitch);
         Self {
+            connection,
             design,
             profile,
             layout,
@@ -154,11 +164,17 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
     }
 
-    pub(crate) fn run(self, scratch: &mut Scratch) -> Option<Vec<Step>> {
+    pub(crate) fn run(self, scratch: &mut Scratch) -> Result<Vec<Step>, NoRoute> {
         if let Some(direct) = self.direct_line() {
-            return Some(direct);
+            return Ok(direct);
         }
         let (from_access, to_access) = (self.access(self.from), self.access(self.to));
+        if from_access.is_empty() {
+            return Err(NoRoute::HemmedIn(self.connection.from));
+        }
+        if to_access.is_empty() {
+            return Err(NoRoute::HemmedIn(self.connection.to));
+        }
         // A search floods everything cheaper than the way into its target. Into a
         // pad hemmed in by its neighbours, such as a pin of a fine-pitch chip,
         // that is most of the board; out of it, only the pocket around it. So
@@ -171,9 +187,11 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             };
             return backwards
                 .search(to_access, from_access, scratch)
-                .map(path::reversed);
+                .map(path::reversed)
+                .ok_or(NoRoute::NotFound);
         }
         self.search(from_access, to_access, scratch)
+            .ok_or(NoRoute::NotFound)
     }
 
     fn search(
@@ -664,7 +682,7 @@ mod tests {
             None,
             None,
         );
-        assert!(search.run(&mut scratch).is_some());
+        assert!(search.run(&mut scratch).is_ok());
 
         let mut distinct = scratch.expanded.clone();
         distinct.sort_unstable();

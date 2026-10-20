@@ -12,6 +12,7 @@ mod history;
 mod path;
 mod search;
 
+use search::NoRoute;
 use std::cmp::Reverse;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -78,6 +79,7 @@ impl<'a> Router<'a> {
         let mut rip_ups = vec![0_u32; total];
         let mut queue: VecDeque<ConnectionId> = (0..total).map(ConnectionId::from_index).collect();
         let mut unrouted = Vec::new();
+        let mut hemmed_in = Vec::new();
         let may_rip_up = self.finder.profile.max_rip_ups > 0;
         let mut history =
             history::History::new(self.finder.design, self.finder.profile.history_cost);
@@ -98,9 +100,15 @@ impl<'a> Router<'a> {
                 }),
             );
             for (id, found) in batch.iter().copied().zip(found) {
-                let Some(found) = found else {
-                    unrouted.push(id);
-                    continue;
+                let found = match found {
+                    Ok(found) => found,
+                    Err(failure) => {
+                        if let NoRoute::HemmedIn(pad) = failure {
+                            hemmed_in.push(pad);
+                        }
+                        unrouted.push(id);
+                        continue;
+                    }
                 };
                 let displaced = routed_obstructions(layout, &found);
                 if !displaced.is_empty() {
@@ -123,6 +131,8 @@ impl<'a> Router<'a> {
             }
         }
         unrouted.sort_unstable();
+        hemmed_in.sort_unstable();
+        hemmed_in.dedup();
         let mut routes = Routes::default();
         for found in routed.into_iter().flatten() {
             routes.extend(found);
@@ -133,6 +143,7 @@ impl<'a> Router<'a> {
                 .into_iter()
                 .map(|id| plan.connections[id.index()])
                 .collect(),
+            hemmed_in,
         }
     }
 
@@ -179,7 +190,7 @@ impl<'a> Router<'a> {
         corridors: Option<&Corridors>,
         layout: &(impl LayoutAccess + Sync),
         negotiation: Option<search::Negotiation>,
-    ) -> Vec<Option<Routes>> {
+    ) -> Vec<Result<Routes, NoRoute>> {
         let finder = self.finder;
         let find = |scratch: &mut search::Scratch, id: ConnectionId| {
             let connection = plan.connections[id.index()];
@@ -215,7 +226,8 @@ impl<'a> Router<'a> {
         let (first, others) = self.scratches[..workers]
             .split_first_mut()
             .unwrap_or_else(|| unreachable!("at least two workers"));
-        let mut found: Vec<Option<Routes>> = vec![None; batch.len()];
+        let mut found: Vec<Result<Routes, NoRoute>> =
+            batch.iter().map(|_| Err(NoRoute::NotFound)).collect();
         std::thread::scope(|scope| {
             let helpers: Vec<_> = others
                 .iter_mut()
@@ -291,11 +303,15 @@ impl Finder<'_> {
         corridors: Option<&Corridors>,
         layout: &impl LayoutAccess,
         negotiation: Option<search::Negotiation>,
-    ) -> Option<Routes> {
-        let in_corridor = corridors
-            .filter(|c| c.bounds(id).is_some())
-            .and_then(|c| self.search(scratch, connection, layout, negotiation, Some((c, id))));
-        in_corridor.or_else(|| self.search(scratch, connection, layout, negotiation, None))
+    ) -> Result<Routes, NoRoute> {
+        let in_corridor = corridors.filter(|c| c.bounds(id).is_some()).and_then(|c| {
+            self.search(scratch, connection, layout, negotiation, Some((c, id)))
+                .ok()
+        });
+        in_corridor.map_or_else(
+            || self.search(scratch, connection, layout, negotiation, None),
+            Ok,
+        )
     }
 
     fn search(
@@ -305,7 +321,7 @@ impl Finder<'_> {
         layout: &impl LayoutAccess,
         negotiation: Option<search::Negotiation>,
         corridor: Option<(&Corridors, ConnectionId)>,
-    ) -> Option<Routes> {
+    ) -> Result<Routes, NoRoute> {
         let search = search::Search::new(
             self.design,
             self.rules,
@@ -316,7 +332,7 @@ impl Finder<'_> {
             corridor,
         );
         let steps = search.run(scratch)?;
-        Some(path::to_routes(
+        Ok(path::to_routes(
             &steps,
             connection.net,
             self.rules.track_width(connection.net),

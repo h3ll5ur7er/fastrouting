@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
 use traxide_contracts::{
-    Connection, CopperItem, Design, Event, NetClassId, Routes, RoutingResult, Stage, Verdict,
-    Violation,
+    Connection, CopperItem, Design, Event, NetClassId, PadId, Routes, RoutingResult, Stage,
+    Verdict, Violation,
 };
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Publisher};
@@ -34,7 +34,7 @@ pub struct RouteJob {
 pub struct RouteReport {
     pub connections: usize,
     /// Each as the net's name and the names of its two pads.
-    pub unrouted: Vec<(String, String, String)>,
+    pub unrouted: Vec<Unrouted>,
     pub tracks: usize,
     pub vias: usize,
     /// The independent check of the stored routes. Unconnected pads follow from
@@ -47,6 +47,29 @@ pub struct RouteReport {
     pub elapsed: Duration,
 }
 
+/// A connection routing could not make, by the names of its net and pads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unrouted {
+    pub net: String,
+    pub from: String,
+    pub to: String,
+    pub why: Unroutable,
+}
+
+/// Why a connection stayed unrouted, so that the designer can act on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Unroutable {
+    /// This pad lies outside the board's outline.
+    OffTheBoard(String),
+    /// This pad has copper only on layers routing may not use, such as planes.
+    OnlyOnLayersNotRouted(String),
+    /// Copper of another net, a keepout or the board's edge is too close to
+    /// this pad for any track to leave it.
+    HemmedIn(String),
+    /// Both pads can be left, but no way between them was found.
+    NoWayFound,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RouteError {
     #[error(transparent)]
@@ -55,6 +78,22 @@ pub enum RouteError {
     Profile(#[from] ProfileError),
     #[error("no net class named {name}; there are {}", known.join(", "))]
     UnknownNetClass { name: String, known: Vec<String> },
+}
+
+/// What keeps every track from leaving `pad`.
+fn why_hemmed_in(design: &Design, pad: PadId) -> Unroutable {
+    let pad = design.pad(pad);
+    if !design.outline.contains(pad.position) {
+        Unroutable::OffTheBoard(pad.name.clone())
+    } else if pad
+        .copper
+        .iter()
+        .all(|c| !design.layers[c.layer.index()].routable)
+    {
+        Unroutable::OnlyOnLayersNotRouted(pad.name.clone())
+    } else {
+        Unroutable::HemmedIn(pad.name.clone())
+    }
 }
 
 /// Whether `violation` involves copper routing added, which comes after the
@@ -125,8 +164,11 @@ pub fn route(
         .or_else(|| std::thread::available_parallelism().ok())
         .map_or(1, NonZeroUsize::get);
     let mut router = Router::new(&design, &rules, &profile).with_threads(threads);
-    let RoutingResult { routes, unrouted } =
-        router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
+    let RoutingResult {
+        routes,
+        unrouted,
+        hemmed_in,
+    } = router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());
@@ -142,12 +184,14 @@ pub fn route(
     let verdict = Verdict { violations };
     events.publish(Event::StageStarted(Stage::Storing));
     traxide_board_access::store_routes(&job.output, &design, &routes)?;
-    let named = |c: &Connection| {
-        (
-            design.net(c.net).name.clone(),
-            design.pad(c.from).name.clone(),
-            design.pad(c.to).name.clone(),
-        )
+    let named = |c: &Connection| Unrouted {
+        net: design.net(c.net).name.clone(),
+        from: design.pad(c.from).name.clone(),
+        to: design.pad(c.to).name.clone(),
+        why: [c.from, c.to]
+            .into_iter()
+            .find(|pad| hemmed_in.contains(pad))
+            .map_or(Unroutable::NoWayFound, |pad| why_hemmed_in(&design, pad)),
     };
     Ok(RouteReport {
         connections: total,
