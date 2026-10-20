@@ -1,8 +1,9 @@
 use super::sexpr::{self, Sexp};
+use super::shape::{self, LayeredShape, layered_shape};
 use super::units::Units;
 use crate::BoardError;
 use std::collections::HashMap;
-use traxide_contracts::geometry::{Point, Polygon, Rect, Region, Segment, Shape, Transform};
+use traxide_contracts::geometry::{Point, Polygon, Rect, Region, Shape, Transform};
 use traxide_contracts::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerId, LayerShape, Net, NetClass,
     NetClassId, NetId, Pad, PadId, Routes, Track, Via, ViaKind, ViaKindId,
@@ -39,16 +40,6 @@ fn without_kicad_7_0_2_excess(shape: Shape) -> Shape {
         }
         other => other,
     }
-}
-
-/// The points of a closed shape without repeats: a point written twice in a
-/// row, or the first point written again to close the shape.
-fn distinct(mut points: Vec<Point>) -> Vec<Point> {
-    points.dedup();
-    if points.len() > 1 && points.first() == points.last() {
-        points.pop();
-    }
-    points
 }
 
 /// The corners of a polyline path, as Freerouting writes wires: its numbers are
@@ -99,12 +90,6 @@ fn rounded_quotient(numerator: i128, denominator: i128) -> i128 {
 /// Specctra's y axis points up; the design's, like KiCad's, points down.
 fn to_board(p: Point) -> Point {
     Point::new(p.x, -p.y)
-}
-
-/// A shape on the layers it covers, in Specctra's coordinates.
-struct LayeredShape {
-    layers: Vec<LayerId>,
-    shape: Shape,
 }
 
 struct Image<'a> {
@@ -206,59 +191,11 @@ impl<'a> DsnReader<'a> {
     }
 
     fn shape(&self, sexp: &Sexp) -> Result<LayeredShape, BoardError> {
-        let args = sexp.args();
-        let layer = args.first().ok_or_else(|| sexp.invalid("missing layer"))?;
-        let number = |i: usize| args.get(i).ok_or_else(|| sexp.invalid("missing number"));
-        let shape = match sexp.keyword() {
-            Some("circle") => {
-                let center = match (args.get(2), args.get(3)) {
-                    (Some(x), Some(y)) => self.units.point(x, y)?,
-                    _ => Point::default(),
-                };
-                Shape::circle(center, self.units.length(number(1)?)?)
-            }
-            Some("rect") => {
-                let corners = self.units.points(&args[1..])?;
-                Shape::Polygon(Polygon::rectangle(
-                    Rect::around(corners).ok_or_else(|| sexp.invalid("empty rect"))?,
-                ))
-            }
-            Some("polygon") => {
-                let points = distinct(self.units.points(&args[2..])?);
-                // Some tools draw a slot or a thin pad as a polygon of one or two
-                // points, which the aperture's width makes a line or a dot.
-                match points.as_slice() {
-                    [a] => Shape::circle(*a, self.units.length(number(1)?)?.max(1)),
-                    [a, b] => {
-                        Shape::track(Segment::new(*a, *b), self.units.length(number(1)?)?.max(1))
-                    }
-                    _ => Shape::Polygon(self.polygon(sexp, &args[2..])?),
-                }
-            }
-            Some("path") => {
-                let width = self.units.length(number(1)?)?;
-                match self.units.points(&args[2..])?.as_slice() {
-                    [a] => Shape::circle(*a, width),
-                    [a, b] => Shape::track(Segment::new(*a, *b), width),
-                    _ => {
-                        return Err(sexp
-                            .invalid("paths of more than two points are not supported as shapes"));
-                    }
-                }
-            }
-            other => {
-                return Err(sexp.invalid(format!("unsupported shape {}", other.unwrap_or("?"))));
-            }
-        };
-        Ok(LayeredShape {
-            layers: self.layers_named(layer)?,
-            shape,
-        })
+        layered_shape(sexp, &self.units, |name| self.layers_named(name))
     }
 
     fn polygon(&self, sexp: &Sexp, coordinates: &[Sexp]) -> Result<Polygon, BoardError> {
-        Polygon::new(distinct(self.units.points(coordinates)?))
-            .ok_or_else(|| sexp.invalid("a polygon needs at least three points"))
+        shape::polygon(sexp, &self.units, coordinates)
     }
 
     /// The signal boundaries, which routing must stay inside, where the design

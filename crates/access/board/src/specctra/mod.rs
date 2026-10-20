@@ -7,6 +7,7 @@
 mod dsn;
 mod ses;
 mod sexpr;
+mod shape;
 mod units;
 
 pub use dsn::parse_dsn;

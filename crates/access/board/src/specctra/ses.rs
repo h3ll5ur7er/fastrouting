@@ -1,9 +1,13 @@
 use super::sexpr::{self, Sexp};
+use super::shape::{LayeredShape, layered_shape};
 use super::units::Units;
 use crate::BoardError;
+use std::collections::HashMap;
 use std::fmt::Write;
 use traxide_contracts::geometry::{Point, Shape};
-use traxide_contracts::{Design, LayerId, LayerShape, NetId, Routes, Track, Via, ViaKindId};
+use traxide_contracts::{
+    Design, LayerId, LayerShape, NetId, Routes, Track, Via, ViaKind, ViaKindId,
+};
 
 /// Specctra's y axis points up; the design's points down.
 fn to_specctra(p: Point) -> Point {
@@ -119,6 +123,12 @@ pub fn parse_ses(text: &str, design: &Design) -> Result<Routes, BoardError> {
             .map(LayerId::from_index)
             .ok_or_else(|| sexp.invalid(format!("unknown layer {name}")))
     };
+    let defined_padstacks = match session_routes.child("library_out") {
+        Some(library) => padstacks(library, &units, &layer_named)?,
+        None => HashMap::new(),
+    };
+    // A session rounds every length to its resolution.
+    let same_within = units.resolution_nm();
     let mut routes = Routes::default();
     let Some(network) = session_routes.child("network_out") else {
         return Ok(routes);
@@ -156,12 +166,15 @@ pub fn parse_ses(text: &str, design: &Design) -> Result<Routes, BoardError> {
             else {
                 return Err(via.invalid("expected (via padstack x y)"));
             };
-            let kind = design
-                .via_kinds
-                .iter()
-                .position(|k| k.name == kind)
-                .map(ViaKindId::from_index)
-                .ok_or_else(|| via.invalid(format!("unknown via padstack {kind}")))?;
+            let defined_copper = defined_padstacks.get(kind).map(Vec::as_slice);
+            let kind = via_kind(design, kind, defined_copper, same_within).ok_or_else(|| {
+                match defined_copper {
+                    Some(_) => via.invalid(format!(
+                        "via padstack {kind} has copper that no via of the design has"
+                    )),
+                    None => via.invalid(format!("unknown via padstack {kind}")),
+                }
+            })?;
             routes.vias.push(Via {
                 net,
                 kind,
@@ -170,6 +183,93 @@ pub fn parse_ses(text: &str, design: &Design) -> Result<Routes, BoardError> {
         }
     }
     Ok(routes)
+}
+
+/// The copper of the padstacks a session defines, by name, relative to their
+/// centre.
+fn padstacks<'s>(
+    library_out: &'s Sexp,
+    units: &Units,
+    layer_named: &impl Fn(&Sexp) -> Result<LayerId, BoardError>,
+) -> Result<HashMap<&'s str, Vec<LayerShape>>, BoardError> {
+    library_out
+        .children("padstack")
+        .map(|padstack| {
+            let name = padstack.arg_atom(0, "padstack name")?;
+            let mut copper = Vec::new();
+            for shape in padstack.children("shape").filter_map(|s| s.args().first()) {
+                let LayeredShape { layers, shape } =
+                    layered_shape(shape, units, |on| layer_named(on).map(|id| vec![id]))?;
+                let shape = shape.map(to_specctra);
+                copper.extend(layers.into_iter().map(|layer| LayerShape {
+                    layer,
+                    shape: shape.clone(),
+                }));
+            }
+            Ok((name, copper))
+        })
+        .collect()
+}
+
+/// The design's via a session's via padstack stands for. Routers define the
+/// padstacks of the vias they place in the session, under names of their own
+/// (Freerouting 2.5 shortens `Round1$13.779528` to `Round1$13`): such a
+/// padstack is the via with the same copper, preferably of the same name. A
+/// padstack the session does not define is the via of that name.
+fn via_kind(
+    design: &Design,
+    name: &str,
+    defined_copper: Option<&[LayerShape]>,
+    same_within: i32,
+) -> Option<ViaKindId> {
+    let kinds = &design.via_kinds;
+    let index = match defined_copper {
+        None => kinds.iter().position(|k| k.name == name),
+        Some(copper) => {
+            let same = |kind: &ViaKind| same_copper(&kind.copper, copper, same_within);
+            kinds
+                .iter()
+                .position(|k| k.name == name && same(k))
+                .or_else(|| kinds.iter().position(same))
+        }
+    };
+    index.map(ViaKindId::from_index)
+}
+
+/// Whether two padstacks have the same shapes on the same layers, telling
+/// apart only lengths more than `same_within` apart.
+fn same_copper(a: &[LayerShape], b: &[LayerShape], same_within: i32) -> bool {
+    let has_all_of = |these: &[LayerShape], those: &[LayerShape]| {
+        those.iter().all(|that| {
+            these.iter().any(|this| {
+                this.layer == that.layer && same_shape(&this.shape, &that.shape, same_within)
+            })
+        })
+    };
+    a.len() == b.len() && has_all_of(a, b) && has_all_of(b, a)
+}
+
+fn same_shape(a: &Shape, b: &Shape, same_within: i32) -> bool {
+    let close = |p: i32, q: i32| p.abs_diff(q) <= same_within.unsigned_abs();
+    let near = |p: Point, q: Point| close(p.x, q.x) && close(p.y, q.y);
+    match (a, b) {
+        (
+            Shape::Capsule { segment, radius },
+            Shape::Capsule {
+                segment: other,
+                radius: other_radius,
+            },
+        ) => near(segment.a, other.a) && near(segment.b, other.b) && close(*radius, *other_radius),
+        (Shape::Polygon(polygon), Shape::Polygon(other)) => {
+            polygon.points().len() == other.points().len()
+                && polygon
+                    .points()
+                    .iter()
+                    .zip(other.points())
+                    .all(|(&p, &q)| near(p, q))
+        }
+        _ => false,
+    }
 }
 
 /// Names with characters beyond these would end a bare token or confuse readers.
