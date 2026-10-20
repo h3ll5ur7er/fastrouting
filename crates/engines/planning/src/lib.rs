@@ -2,6 +2,8 @@
 //! docs/Architecture/Volatilities.md). For now: a minimum spanning tree per net,
 //! connections from hemmed-in pads first, then shortest first.
 
+mod existing;
+
 use traxide_contracts::geometry::Point;
 use traxide_contracts::{Connection, Design, NetId, Pad, PadId, Plan};
 
@@ -10,6 +12,7 @@ use traxide_contracts::{Connection, Design, NetId, Pad, PadId, Plan};
 /// same board should always get the same routes.
 pub fn plan(design: &Design) -> Plan {
     let pad_name = |pad: PadId| design.pad(pad).name.as_str();
+    let joined = existing::joined_pads(design);
     let mut connections: Vec<Connection> = design
         .nets
         .iter()
@@ -17,7 +20,7 @@ pub fn plan(design: &Design) -> Plan {
         .flat_map(|(index, net)| {
             let mut pads = net.pads.clone();
             pads.sort_by_key(|&pad| pad_name(pad));
-            spanning_tree(design, NetId::from_index(index), &pads)
+            spanning_tree(design, NetId::from_index(index), &pads, &joined)
         })
         .collect();
     // The most constrained connections claim their space first. A pad hemmed in
@@ -71,9 +74,17 @@ fn hemmed_in_pads(design: &Design) -> Vec<bool> {
 }
 
 /// Prim's algorithm on Manhattan distances, which approximate rectilinear wiring
-/// better than Euclidean ones. Ties go to the pad listed first.
-fn spanning_tree(design: &Design, net: NetId, pads: &[PadId]) -> Vec<Connection> {
-    let position = |i: usize| design.pad(pads[i]).position;
+/// better than Euclidean ones. Ties go to the pad listed first. Pads the board's
+/// own copper joins are no distance apart, and need no connection.
+fn spanning_tree(design: &Design, net: NetId, pads: &[PadId], joined: &[usize]) -> Vec<Connection> {
+    let group = |i: usize| joined[pads[i].index()];
+    let distance = |a: usize, b: usize| {
+        if group(a) == group(b) {
+            0
+        } else {
+            manhattan(design.pad(pads[a]).position, design.pad(pads[b]).position)
+        }
+    };
     let mut in_tree = vec![false; pads.len()];
     let mut nearest: Vec<(i64, usize)> = vec![(i64::MAX, 0); pads.len()];
     let mut connections = Vec::new();
@@ -81,7 +92,7 @@ fn spanning_tree(design: &Design, net: NetId, pads: &[PadId]) -> Vec<Connection>
     for _ in 1..pads.len() {
         in_tree[current] = true;
         for other in (0..pads.len()).filter(|&o| !in_tree[o]) {
-            let distance = manhattan(position(current), position(other));
+            let distance = distance(current, other);
             if distance < nearest[other].0 {
                 nearest[other] = (distance, current);
             }
@@ -92,11 +103,13 @@ fn spanning_tree(design: &Design, net: NetId, pads: &[PadId]) -> Vec<Connection>
         else {
             break;
         };
-        connections.push(Connection {
-            net,
-            from: pads[nearest[next].1],
-            to: pads[next],
-        });
+        if group(nearest[next].1) != group(next) {
+            connections.push(Connection {
+                net,
+                from: pads[nearest[next].1],
+                to: pads[next],
+            });
+        }
         current = next;
     }
     connections
@@ -110,6 +123,7 @@ fn manhattan(a: Point, b: Point) -> i64 {
 mod tests {
     use super::*;
     use traxide_contracts::testing::{DesignBuilder, at};
+    use traxide_contracts::{LayerId, Track, Via, ViaKindId};
 
     fn pads_of(design: &Design, plan: &Plan) -> Vec<(String, String)> {
         let name = |p: PadId| design.pad(p).name.clone();
@@ -213,6 +227,66 @@ mod tests {
             .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
             .build();
         assert_eq!(pads_of(&one, &plan(&one)), pads_of(&other, &plan(&other)));
+    }
+
+    #[test]
+    fn pads_the_boards_own_copper_joins_need_no_connection() {
+        let mut design = DesignBuilder::new(30.0, 10.0)
+            .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
+            .smd("A2", Some("A"), at(9.0, 1.0), 0.5, 0)
+            .smd("A3", Some("A"), at(9.0, 6.0), 0.5, 0)
+            .build();
+        design.existing.tracks.push(Track {
+            net: design.net_named("A"),
+            layer: LayerId(0),
+            width: 200_000,
+            path: vec![at(1.0, 1.0), at(9.0, 1.0)],
+        });
+        assert_eq!(pads_of(&design, &plan(&design)), pairs(&[("A2", "A3")]));
+    }
+
+    #[test]
+    fn a_via_joins_the_boards_own_copper_across_layers() {
+        let mut design = DesignBuilder::new(30.0, 10.0)
+            .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
+            .smd("A2", Some("A"), at(9.0, 1.0), 0.5, 1)
+            .build();
+        let net = design.net_named("A");
+        let track = |layer, path| Track {
+            net,
+            layer: LayerId(layer),
+            width: 200_000,
+            path,
+        };
+        design
+            .existing
+            .tracks
+            .push(track(0, vec![at(1.0, 1.0), at(5.0, 1.0)]));
+        design
+            .existing
+            .tracks
+            .push(track(1, vec![at(5.0, 1.0), at(9.0, 1.0)]));
+        design.existing.vias.push(Via {
+            net,
+            kind: ViaKindId(0),
+            position: at(5.0, 1.0),
+        });
+        assert!(plan(&design).connections.is_empty());
+    }
+
+    #[test]
+    fn copper_of_another_layer_joins_nothing_without_a_via() {
+        let mut design = DesignBuilder::new(30.0, 10.0)
+            .smd("A1", Some("A"), at(1.0, 1.0), 0.5, 0)
+            .smd("A2", Some("A"), at(9.0, 1.0), 0.5, 0)
+            .build();
+        design.existing.tracks.push(Track {
+            net: design.net_named("A"),
+            layer: LayerId(1),
+            width: 200_000,
+            path: vec![at(1.0, 1.0), at(9.0, 1.0)],
+        });
+        assert_eq!(pads_of(&design, &plan(&design)), pairs(&[("A1", "A2")]));
     }
 
     #[test]
