@@ -1,6 +1,6 @@
 [package]
 name = "traxide-board-access"
-description = "Loads boards and stores routes, whatever format or tool they come from: Specctra DSN and SES for now."
+description = "Loads boards and stores routes, whatever format or tool they come from: Specctra DSN and SES, and KiCad's board files."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,13 +8,13 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+serde_json.workspace = true
 thiserror.workspace = true
 traxide-contracts.workspace = true
 
 
 [dev-dependencies]
 serde.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 
 [lints]

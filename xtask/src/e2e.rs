@@ -69,6 +69,29 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .concat()
             .join("\n  ")
     );
+    let direct = Command::new(traxide)
+        .arg("route")
+        .arg("--quiet")
+        .arg(out.join(format!("{recipe}.kicad_pcb")))
+        .arg("-o")
+        .arg(out.join(format!("{recipe}.direct.kicad_pcb")))
+        .output()?;
+    ensure!(
+        direct.status.success(),
+        "traxide did not route the KiCad board completely:\n{}{}",
+        String::from_utf8_lossy(&direct.stdout),
+        String::from_utf8_lossy(&direct.stderr)
+    );
+    let from_board = kicad.judge_board(root, &out, &format!("{recipe}.direct"))?;
+    ensure!(
+        from_board.is_clean(),
+        "routed from the board file, KiCad's DRC found {} violations and {} unconnected items:\n  {}",
+        from_board.violations.len(),
+        from_board.unconnected.len(),
+        [from_board.violations, from_board.unconnected]
+            .concat()
+            .join("\n  ")
+    );
     let through_plugin =
         kicad.route_with_plugin(root, &out, recipe, &kicad.traxide_for_kicad(root)?)?;
     ensure!(
@@ -81,7 +104,7 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .join("\n  ")
     );
     Ok(format!(
-        "clean in KiCad's DRC, and through the KiCad plugin; routed in {seconds:.2} s ({})",
+        "clean in KiCad's DRC, from the board file and through the KiCad plugin too; routed in {seconds:.2} s ({})",
         summary.split(" → ").next().unwrap_or_default()
     ))
 }

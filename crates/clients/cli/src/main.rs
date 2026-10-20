@@ -23,11 +23,14 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Route a board exported as Specctra DSN and write the routes as a session (SES).
+    /// Route a board: a KiCad board file, or a design exported as Specctra DSN,
+    /// whose routes go into a session (SES).
     Route {
-        /// The board, such as one exported by KiCad (File → Export → Specctra DSN).
+        /// The board: BOARD.kicad_pcb, with the rules of BOARD.kicad_pro, or a
+        /// Specctra design (KiCad: File → Export → Specctra DSN).
         input: PathBuf,
-        /// Where to write the session; next to the input, as .ses, by default.
+        /// Where to write the routes. By default beside the input: BOARD.ses for a
+        /// design, a copy BOARD.routed.kicad_pcb (and its project) for a KiCad board.
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// The routing profile.
@@ -47,7 +50,7 @@ enum Command {
     /// Check a board: how many of its nets are complete and which rules its
     /// copper breaks, with the routes of a session if one is given.
     Check {
-        /// The board, as Specctra DSN.
+        /// The board: a KiCad board file, or a Specctra design.
         board: PathBuf,
         /// A session (SES) with routes for the board.
         session: Option<PathBuf>,
@@ -106,10 +109,9 @@ fn run(cli: Cli) -> Result<ExitCode> {
             quiet,
         } => (input, output, profile, config, threads, quiet),
     };
-    let output = output.unwrap_or_else(|| input.with_extension("ses"));
     let job = RouteJob {
         input,
-        output: output.clone(),
+        output,
         profile,
         profile_file: config,
         threads,
@@ -124,7 +126,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     if !quiet {
         eprintln!();
     }
-    Ok(summarise(&report, &output))
+    Ok(summarise(&report))
 }
 
 /// Exits successfully only when every net is complete and no rule broken.
@@ -188,7 +190,7 @@ fn run_as_freerouting(args: &[String]) -> Result<ExitCode> {
         eprintln!("warning: {warning}");
     }
     let report = traxide_routing::route(&job, &|_: Event| {}, &CancelToken::new())?;
-    summarise(&report, &job.output);
+    summarise(&report);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -205,7 +207,7 @@ fn show(event: &Event) {
     };
 }
 
-fn summarise(report: &RouteReport, output: &std::path::Path) -> ExitCode {
+fn summarise(report: &RouteReport) -> ExitCode {
     let routed = report.connections - report.unrouted.len();
     println!(
         "Routed {routed} of {} connections ({} tracks, {} vias) in {:.2} s → {}",
@@ -213,7 +215,7 @@ fn summarise(report: &RouteReport, output: &std::path::Path) -> ExitCode {
         report.tracks,
         report.vias,
         report.elapsed.as_secs_f64(),
-        output.display()
+        report.output.display()
     );
     for unrouted in &report.unrouted {
         let why = match &unrouted.why {

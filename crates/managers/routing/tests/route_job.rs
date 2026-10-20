@@ -14,7 +14,7 @@ fn fixture(name: &str) -> PathBuf {
 fn job(input: &str, output: &std::path::Path) -> RouteJob {
     RouteJob {
         input: fixture(input),
-        output: output.into(),
+        output: Some(output.into()),
         profile: "default".into(),
         profile_file: None,
         threads: None,
@@ -163,4 +163,29 @@ fn the_session_keeps_the_copper_the_board_came_with() {
     for existing in &design.existing.tracks {
         assert!(stored.tracks.contains(existing), "{existing:?} kept");
     }
+}
+
+#[test]
+fn routes_a_kicad_board_into_a_copy_beside_it_with_its_project() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    for file in ["crossing.kicad_pcb", "crossing.kicad_pro"] {
+        std::fs::copy(fixture(file), folder.path().join(file)).expect("copied");
+    }
+    let job = RouteJob {
+        input: folder.path().join("crossing.kicad_pcb"),
+        output: None,
+        ..job("crossing.kicad_pcb", folder.path())
+    };
+    let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
+    assert!(
+        report.unrouted.is_empty() && report.verdict.is_clean(),
+        "{report:?}"
+    );
+    assert_eq!(
+        report.output,
+        folder.path().join("crossing.routed.kicad_pcb")
+    );
+    let routed = std::fs::read_to_string(&report.output).expect("stored");
+    assert!(routed.matches("(segment").count() >= report.tracks && report.tracks > 0);
+    assert!(folder.path().join("crossing.routed.kicad_pro").is_file());
 }

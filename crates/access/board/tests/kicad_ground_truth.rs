@@ -1,9 +1,11 @@
 //! KiCad's own placement of every pad, exported by e2e/kicad/fixtures.py from
-//! KiCad 10, is the ground truth for how a DSN file positions pads.
+//! KiCad 10, is the ground truth for how a DSN file and a board file position
+//! pads.
 
 use serde::Deserialize;
 use std::path::Path;
 use traxide_board_access::load_design;
+use traxide_contracts::Design;
 
 #[derive(Debug, Deserialize)]
 struct KicadPad {
@@ -25,12 +27,25 @@ fn fixture(name: &str) -> String {
 #[test]
 fn pads_land_where_kicad_places_them() {
     let design = load_design(Path::new(&fixture("placements.dsn"))).expect("KiCad's DSN is valid");
+    // DSN rounds KiCad's nanometres to its resolution; rotated shapes add rounding of their own.
+    let mismatches = mismatches(&design, design.resolution);
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+#[test]
+fn pads_of_a_board_file_land_where_kicad_places_them() {
+    let design =
+        load_design(Path::new(&fixture("placements.kicad_pcb"))).expect("KiCad's board is valid");
+    // Rotations round to the nanometre, in KiCad as here.
+    let mismatches = mismatches(&design, 1);
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+fn mismatches(design: &Design, tolerance: i32) -> Vec<String> {
     let truth: Vec<KicadPad> = serde_json::from_str(
         &std::fs::read_to_string(fixture("placements.pads.json")).expect("fixture exists"),
     )
     .expect("valid JSON");
-    // DSN rounds KiCad's nanometres to its resolution; rotated shapes add rounding of their own.
-    let tolerance = design.resolution;
     let mut mismatches = Vec::new();
     for expected in &truth {
         let Some(pad) = design.pads.iter().find(|p| p.name == expected.name) else {
@@ -75,5 +90,5 @@ fn pads_land_where_kicad_places_them() {
             ));
         }
     }
-    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    mismatches
 }

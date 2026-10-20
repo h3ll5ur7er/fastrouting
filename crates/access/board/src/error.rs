@@ -16,4 +16,8 @@ pub enum BoardError {
     Syntax { line: usize, message: String },
     #[error("line {line}: {message}")]
     Invalid { line: usize, message: String },
+    #[error("{path} changed since it was read; route it again")]
+    Changed { path: PathBuf },
+    #[error("the board's project: {0}")]
+    Project(String),
 }

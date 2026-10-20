@@ -20,7 +20,9 @@ use traxide_rules::Purpose;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteJob {
     pub input: PathBuf,
-    pub output: PathBuf,
+    /// Beside the input by default: a session for a Specctra design, a copy of
+    /// a KiCad board.
+    pub output: Option<PathBuf>,
     pub profile: String,
     pub profile_file: Option<PathBuf>,
     /// How many threads to route on; as many as the machine has by default.
@@ -45,6 +47,8 @@ pub struct RouteReport {
     pub violations_before_routing: usize,
     pub cancelled: bool,
     pub elapsed: Duration,
+    /// Where the routes were stored.
+    pub output: PathBuf,
 }
 
 /// A connection routing could not make, by the names of its net and pads.
@@ -183,10 +187,11 @@ pub fn route(
         .partition(|v| involves_new_copper(v, &design.existing));
     let verdict = Verdict { violations };
     events.publish(Event::StageStarted(Stage::Storing));
-    // KiCad's session import replaces every track of the board with the
-    // session's: the session carries the board's own copper too, as
-    // Freerouting's do.
-    traxide_board_access::store_routes(&job.output, &design, &everything)?;
+    let output = job
+        .output
+        .clone()
+        .unwrap_or_else(|| traxide_board_access::default_routes_path(&job.input));
+    traxide_board_access::store_routes(&output, &job.input, &design, &routes)?;
     let named = |c: &Connection| Unrouted {
         net: design.net(c.net).name.clone(),
         from: design.pad(c.from).name.clone(),
@@ -205,5 +210,6 @@ pub fn route(
         violations_before_routing: before_routing.len(),
         cancelled: cancel.is_cancelled(),
         elapsed: started.elapsed(),
+        output,
     })
 }

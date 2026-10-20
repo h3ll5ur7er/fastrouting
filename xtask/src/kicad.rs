@@ -113,6 +113,21 @@ impl Kicad {
         judged(&printed, &out.join(report))
     }
 
+    /// Loads `out/ROUTED.kicad_pcb`, routed without KiCad, as KiCad opens it,
+    /// and runs KiCad's DRC on it.
+    pub fn judge_board(&self, root: &Path, out: &Path, routed: &str) -> Result<Judgement> {
+        let report = format!("{routed}.drc.json");
+        let printed = self.run(
+            root,
+            out,
+            &format!(
+                "python3 roundtrip.py stats {{out}}/{routed}.kicad_pcb && \
+                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
+            ),
+        )?;
+        judged(&printed, &out.join(report))
+    }
+
     /// Routes the exported board of `recipe` inside KiCad as the KiCad plugin
     /// does, with the traxide at `traxide` as KiCad sees it, and judges it.
     pub fn route_with_plugin(

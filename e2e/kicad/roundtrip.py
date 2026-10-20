@@ -9,6 +9,10 @@
       does, saves the result as ROUTED.kicad_pcb and prints, as JSON, how many
       tracks and vias it holds and how long the tracks are.
 
+  python3 roundtrip.py stats ROUTED.kicad_pcb
+      loads a board routed without KiCad, as KiCad opens it, and prints the
+      same statistics.
+
 KiCad's DRC (kicad-cli pcb drc) then judges the routed board.
 """
 
@@ -48,6 +52,10 @@ def import_session(board_file: Path, session: Path, routed: Path) -> None:
     pcbnew.SaveBoard(str(routed), board)
     # Saving wrote a project with KiCad's default rules; the board's own are in its project.
     shutil.copy(board_file.with_suffix(".kicad_pro"), routed.with_suffix(".kicad_pro"))
+    print_stats(board)
+
+
+def print_stats(board) -> None:
     items = list(board.GetTracks())
     vias = [item for item in items if item.GetClass() == "PCB_VIA"]
     length = sum(item.GetLength() for item in items if item.GetClass() != "PCB_VIA")
@@ -62,5 +70,7 @@ if __name__ == "__main__":
             export(recipe, Path(folder))
         case ["import", board_file, session, routed]:
             import_session(Path(board_file), Path(session), Path(routed))
+        case ["stats", routed]:
+            print_stats(pcbnew.LoadBoard(routed))
         case _:
             raise SystemExit(__doc__)

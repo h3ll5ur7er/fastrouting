@@ -90,7 +90,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
     Ok(Invocation::Route {
         job: RouteJob {
             input,
-            output,
+            output: Some(output),
             profile: "default".into(),
             profile_file: None,
             threads,
@@ -161,7 +161,7 @@ mod tests {
             "--logging.console.level=WARN",
         ]);
         assert_eq!(job.input, PathBuf::from("b.dsn"));
-        assert_eq!(job.output, PathBuf::from("out/b.ses"));
+        assert_eq!(job.output, Some(PathBuf::from("out/b.ses")));
         assert_eq!(job.threads, NonZeroUsize::new(4));
         assert_eq!(warnings, Vec::<String>::new());
     }
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn the_session_goes_next_to_the_board_by_default() {
         let (job, _) = route(&["-de", "boards/b.dsn"]);
-        assert_eq!(job.output, PathBuf::from("boards/b.ses"));
+        assert_eq!(job.output, Some(PathBuf::from("boards/b.ses")));
     }
 
     #[test]

@@ -34,8 +34,21 @@ KiCad's `plugin.json` (API v1) allows `runtime.type` **`"exec"`**: the plugin is
 
 KiCad's DSN export carries widths, clearances, net classes and vias, but not everything KiCad's DRC checks:
 
-- **Copper to board edge.** KiCad applies its board setup, 0.5 mm by default. traxide keeps at least 0.5 mm on boards whose DSN names KiCad as `host_cad`, until it reads the real value from `.kicad_pro` ([[TRX-30]]).
-- **Custom rules** (`.kicad_dru`): not exported at all; also [[TRX-30]].
+- **Copper to board edge.** KiCad applies its board setup, 0.5 mm by default. From a DSN, traxide keeps at least 0.5 mm on boards whose DSN names KiCad as `host_cad`; from a board file it reads `min_copper_edge_clearance` from `.kicad_pro`.
+- **Custom rules** (`.kicad_dru`): not exported at all, and not read from board files yet ([[TRX-32]]).
+
+## Reading board files
+
+The `kicad` module of Board Access reads `.kicad_pcb` as KiCad 9 (nets by number) and 10 (nets by name) write it, with the rules of the `.kicad_pro` beside it, or KiCad's defaults without one ([[TRX-30]]). Tests check it against KiCad's own placement of every pad and against KiCad's DSN export of the same boards: pads, nets, layers, rules, outline and keepouts agree.
+
+- **Coordinates** are KiCad's: millimetres to the nanometre, y pointing down; a pad's `at` angle includes its footprint's.
+- **Rules**: each net class's width, clearance and via, raised to the board's minimums; a class leaves out what it takes from `Default`; nets join classes by `netclass_assignments`, then by the wildcards of `netclass_patterns`.
+- **Holes without copper** keep everything out by the board's hole clearance (`min_hole_clearance`) all around, as KiCad's DSN export writes them; without it KiCad's DRC finds hole-clearance violations.
+- **Shapes** cover KiCad's and are never smaller: rounded rectangles as octagons that touch the corners, trapezoids and chamfered rectangles as their bounding rectangles, custom pads as their anchor and primitives. Arcs become segments within 2 µm of the arc. Per-layer padstacks use the front shape.
+- **Outline**: the drawings on Edge.Cuts, joined end to end; loops inside the outline are cutouts, kept out like keepouts. Copper zones are left out, as KiCad refills them; rule areas that forbid tracks or vias are keepouts.
+- **Copper of no net** keeps other copper away, as keepouts.
+
+Routes are written back as `segment` and `via` nodes before the board's closing parenthesis; every other byte stays. Board Access reads the board again first and refuses to write if it no longer gives the same design. By default `traxide route BOARD.kicad_pcb` writes `BOARD.routed.kicad_pcb` and copies the project beside it, so that KiCad opens the routed board with its rules.
 
 ## What is read
 
