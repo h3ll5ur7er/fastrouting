@@ -1,0 +1,82 @@
+# Real boards from Freerouting's bug reports, as Specctra DSN files in its
+# repository (github.com/freerouting/freerouting, folder fixtures/).
+# `cargo xtask corpus` downloads them into target/corpus at run time: they
+# are test data under their authors' and that repository's terms, never
+# committed here and never part of traxide (docs/Development.md#clean-room-rules).
+# One path per line, relative to the repository's root on its master branch.
+fixtures/Issue006-LPC18XX_43XX_SCH.dsn
+fixtures/Issue015-StackOverflow.dsn
+fixtures/Issue022-AutoRouter_interrupted.dsn
+fixtures/Issue026-J2_reference.dsn
+fixtures/Issue027-zMRETestFixture.dsn
+fixtures/Issue029-hw48na.dsn
+fixtures/Issue034-Green14SegLED.dsn
+fixtures/Issue035-ReadPlaceScope.dsn
+fixtures/Issue039-bug-design.dsn
+fixtures/Issue054-tairakb.dsn
+fixtures/Issue066-Project_GP8B.dsn
+fixtures/Issue070-Autorouter_FQ101_PCB_2022-05-13.dsn
+fixtures/Issue093-interf_u.dsn
+fixtures/Issue102-Mars-64-revE-rot00.dsn
+fixtures/Issue103-Board-Routed.dsn
+fixtures/Issue103-Board-Unrouted.dsn
+fixtures/Issue107-freq_teiler_200kHz_kicad.dsn
+fixtures/Issue107-freq_teiler_200kHz_kicad_bad.dsn
+fixtures/Issue110-Pajalnaja_stancija.dsn
+fixtures/Issue110-RelayModule.dsn
+fixtures/Issue110-testPCBSpecctraFile.dsn
+fixtures/Issue110-testProjectFromFreeroutingBugTest.dsn
+fixtures/Issue110-testProjectFromFreeroutingBugTest01.dsn
+fixtures/Issue113-Protein.dsn
+fixtures/Issue143-rpi_splitter.dsn
+fixtures/Issue143-rpi_splitter_mod.dsn
+fixtures/Issue145-smoothieboard.dsn
+fixtures/Issue153-wavefolder.dsn
+fixtures/Issue155-CH376_MCP795_Module.dsn
+fixtures/Issue157-TeamAdapt-LinePCB.dsn
+fixtures/Issue159-setonix_2hp-pcb.dsn
+fixtures/Issue163-pic_programmer.dsn
+fixtures/Issue178-KeebMaker_Sofle_Choc.dsn
+fixtures/Issue179-Autorouter_PCB1_2023-3-24.dsn
+fixtures/Issue187-processor.Z80.dsn
+fixtures/Issue190-processor.Z80.dsn
+fixtures/Issue208-freerouting.dsn
+fixtures/Issue209-split05.dsn
+fixtures/Issue209-split10.dsn
+fixtures/Issue214-freerouting.dsn
+fixtures/Issue217-8088sbc.dsn
+fixtures/Issue219-LogicBoard_smt.dsn
+fixtures/Issue229-display-8-digit-hc595.dsn
+fixtures/Issue230-CNH_Functional_Tester_1.dsn
+fixtures/Issue269-caniot-tiny-arm.dsn
+fixtures/Issue269-z10_module.dsn
+fixtures/Issue270-non-ansi_bracket.dsn
+fixtures/Issue289-Autorouter_PCB_FHT-8086_2024-03-08.dsn
+fixtures/Issue289-Autorouter_PCB_FHT-VGA_2024-03-25.dsn
+fixtures/Issue297-myboard.dsn
+fixtures/Issue313-FastTest.dsn
+fixtures/Issue326-Mars-64-revE.dsn
+fixtures/Issue367-Charger.dsn
+fixtures/Issue368-CorneyIslandWireless_input_design.dsn
+fixtures/Issue413-test.dsn
+fixtures/Issue420-contribution-board.dsn
+fixtures/Issue433-my-board.dsn
+fixtures/Issue508-DAC2020_bm01.dsn
+fixtures/Issue508-DAC2020_bm02.dsn
+fixtures/Issue508-DAC2020_bm04.dsn
+fixtures/Issue508-DAC2020_bm05.dsn
+fixtures/Issue508-DAC2020_bm06.dsn
+fixtures/Issue508-DAC2020_bm07.dsn
+fixtures/Issue069-TestSensel/TestSensel-KiCad6.dsn
+fixtures/Issue069-TestSensel/TestSensel.dsn
+fixtures/Issue191-processor.Z80/processor.Z80.dsn
+fixtures/Issue199-StackOverflow/Signale_Vor+Block.dsn
+fixtures/Issue230-CNH_Functional_Tester/CNH_Functional_Tester_1.dsn
+fixtures/Issue269-NoViasOnPowerPlanes/Issue269-NoViasOnPowerPlanes.dsn
+fixtures/Issue269-min_fr_test/min_fr_test.dsn
+fixtures/Issue269-min_fr_test/min_fr_test_no_quotes.dsn
+fixtures/Issue283-UnconnectedTracesUnderPads/Natural_Tone_Preamp.dsn
+fixtures/Issue367-UltraFlactyl/UltraFlactyl.dsn
+fixtures/Issue368-CorneyIslandWireless/corney_island_wireless.dsn
+fixtures/Issue632-MiniAutoPilot/Mini Auto Pilot.dsn
+fixtures/Issue742-tastexx-pcb/tastexx-pcb.dsn

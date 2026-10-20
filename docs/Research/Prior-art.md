@@ -53,7 +53,7 @@ Issue #289 records a board that took 4 h 46 min and 2.5 GB at about 11 % CPU. Th
 
 | Corpus | Size | Notes |
 | --- | --- | --- |
-| **PCBench** (in the Freerouting repository) | 1,157 boards | Freerouting v2.5.0 routes 75.4 % completely and 75.0 % with zero DRC violations; the corpus takes it 2,997 s |
+| **PCBench** (said to be in the Freerouting repository) | 1,157 boards | Freerouting v2.5.0 routes 75.4 % completely and 75.0 % with zero DRC violations; the corpus takes it 2,997 s. *Not found in October 2026*: the repository's documentation doesn't mention it; its `fixtures/` folder holds 76 DSN files from bug reports, which `cargo xtask corpus` routes ([[TRX-15]]) |
 | **PCBWorld-Bench** (LG AI Research, 2026) | 679 real KiCad boards plus generators | DRC-grounded metrics; Freerouting and KiCadRoutingTools as baselines |
 
 Both are acceptance tests from the first milestone ([[TRX-15]]), next to our own keyboard boards.

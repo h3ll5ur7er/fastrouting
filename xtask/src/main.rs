@@ -1,4 +1,5 @@
 mod bench;
+mod corpus;
 mod e2e;
 mod kicad;
 mod layers;
@@ -11,8 +12,9 @@ fn main() -> Result<()> {
         Some("layers") => layers::check(),
         Some("e2e") => e2e::run(&args[1..]),
         Some("bench") => bench::run(&args[1..]),
+        Some("corpus") => corpus::run(&args[1..]),
         _ => bail!(
-            "usage: cargo xtask layers | e2e [--local] [RECIPE…] | bench [--local] [--freerouting CMD] [--timeout S] [RECIPE…]"
+            "usage: cargo xtask layers | e2e [--local] [RECIPE…] | bench [--local] [--freerouting CMD] [--timeout S] [RECIPE…] | corpus [--timeout S] [--list FILE]"
         ),
     }
 }
