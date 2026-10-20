@@ -254,24 +254,32 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
     }
 
-    /// A straight track between the pad centres, when one fits on a layer both share.
+    /// The pad centres joined without a search, when they see each other on a
+    /// layer both share: straight if they line up at a multiple of 45°, else one
+    /// straight and one diagonal segment, as octilinear routing requires.
     fn direct_line(&self) -> Option<Vec<Step>> {
-        let segment = Segment::new(self.from.position, self.to.position);
-        let layer = self.routable_layers(self.from).find(|&l| {
-            self.to.is_on(l) && self.layout.is_track_clear(self.net, l, segment, self.width)
-        })?;
-        Some(vec![
-            Step {
-                at: self.from.position,
-                layer,
-                via: None,
-            },
-            Step {
-                at: self.to.position,
-                layer,
-                via: None,
-            },
-        ])
+        let candidates = octilinear_paths(self.from.position, self.to.position);
+        let fits = |layer: LayerId, path: &[Point]| {
+            path.windows(2).all(|pair| {
+                let segment = Segment::new(pair[0], pair[1]);
+                self.layout
+                    .is_track_clear(self.net, layer, segment, self.width)
+            })
+        };
+        self.routable_layers(self.from)
+            .filter(|&layer| self.to.is_on(layer))
+            .find_map(|layer| {
+                let path = candidates.iter().find(|path| fits(layer, path))?;
+                Some(
+                    path.iter()
+                        .map(|&at| Step {
+                            at,
+                            layer,
+                            via: None,
+                        })
+                        .collect(),
+                )
+            })
     }
 
     fn routable_layers<'p>(&'p self, pad: &'p Pad) -> impl Iterator<Item = LayerId> + 'p {
@@ -353,6 +361,18 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         reversed.reverse();
         reversed
     }
+}
+
+/// The octilinear ways from `from` to `to` with at most one bend: diagonal
+/// first, then straight first.
+fn octilinear_paths(from: Point, to: Point) -> Vec<Vec<Point>> {
+    let (dx, dy) = (to.x - from.x, to.y - from.y);
+    if dx == 0 || dy == 0 || dx.abs() == dy.abs() {
+        return vec![vec![from, to]];
+    }
+    let diagonal = dx.abs().min(dy.abs());
+    let step = Point::new(dx.signum() * diagonal, dy.signum() * diagonal);
+    vec![vec![from, from + step, to], vec![from, to - step, to]]
 }
 
 /// How many 45° steps lie between a heading and the next direction.

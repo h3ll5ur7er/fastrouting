@@ -163,3 +163,41 @@ fn reaches_pads_that_sit_off_the_grid() {
     );
     assert_legal(&design, &routes);
 }
+
+fn is_octilinear(
+    a: traxide_contracts::geometry::Point,
+    b: traxide_contracts::geometry::Point,
+) -> bool {
+    let (dx, dy) = ((b.x - a.x).abs(), (b.y - a.y).abs());
+    dx == 0 || dy == 0 || dx == dy
+}
+
+#[test]
+fn pads_in_sight_of_each_other_are_joined_at_45_degrees_not_at_any_angle() {
+    let design = DesignBuilder::new(20.0, 12.0)
+        .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)
+        .smd("A2", Some("A"), at(15.0, 8.0), 1.0, 0)
+        .build();
+    let routes = route(&design, &[("A1", "A2")]).remove(0).expect("routable");
+    let path = &routes.tracks[0].path;
+    assert_eq!(path.len(), 3, "one bend: {path:?}");
+    assert!(
+        path.windows(2).all(|p| is_octilinear(p[0], p[1])),
+        "{path:?}"
+    );
+    assert_legal(&design, &routes);
+}
+
+#[test]
+fn takes_the_other_bend_when_the_first_is_blocked() {
+    // A pad of net B sits where the diagonal-first bend would pass.
+    let design = DesignBuilder::new(20.0, 12.0)
+        .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)
+        .smd("A2", Some("A"), at(15.0, 8.0), 1.0, 0)
+        .smd("B1", Some("B"), at(8.0, 8.0), 1.0, 0)
+        .without_vias()
+        .build();
+    let routes = route(&design, &[("A1", "A2")]).remove(0).expect("routable");
+    let path = &routes.tracks[0].path;
+    assert_eq!(path, &[at(5.0, 5.0), at(12.0, 5.0), at(15.0, 8.0)]);
+}
