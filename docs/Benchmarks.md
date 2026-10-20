@@ -91,6 +91,15 @@ October 2026, `cargo xtask corpus --freerouting … --timeout 120` in the Benchm
 
 The judge is traxide's own Verification Engine, which reads the rules from the DSN as the router does; KiCad's DRC is the independent judge only for the KiCad-built boards above.
 
+**After the speed work of TRX-48** (commit efc52c4, same setup):
+
+| Router | Complete | Incomplete | Breaking rules | Stopped at 120 s | Failed | Time in all |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **traxide** | 40 | 27 | **0** | **6** | 3 | **1323 s** |
+| Freerouting 2.5.0 | 17 | 7 | 16 | 31 | 5 | 4863 s |
+
+Four boards that stopped now finish (Issue039 in 19 s, Issue113, Issue145 and Issue283 short of complete); Issue022 routes in 45 s instead of 76 s, Issue178 in 12 s instead of 69 s. One regression: the two Mars-64 boards finish in 18 s instead of 111 s, with 62 of 94 nets instead of 71: negotiation ends too early there ([[TRX-48]]).
+
 ## One state per node (M2, TRX-48)
 
 October 2026: on the real boards of the corpus, the long searches expanded about 8 states per node and layer: the heading a node was entered with was part of the search state, and as a bend costs only 0.1 mm, all nine ways into a node cost nearly the same and were each expanded. A state is now a node on a layer; its heading is the direction of the cheapest way in found, which bend costs and the rule against acute turns follow. Every board stays clean in KiCad 10's DRC; track lengths are within 0.2 % of before.

@@ -23,6 +23,10 @@ Searching free space first, and with rip-ups only where it finds no way, measure
 
 A heavier estimate, measured October 2026 against today's 1.2: at 1.5 the keyboard routed in 0.64 s instead of 1.45 s but with 128 vias instead of 113, Issue015 in 30 s instead of 35 s with 10 % more vias, and Issue110 took twice as long; at 2.0 Issue034 lost its completeness (143 of 147). The default stays 1.2; a heavier one would suit only a profile that trades vias for time.
 
+What the flooding searches pay, measured on Issue015 in October 2026: the largest estimated 72–88 mm and paid 105–250 mm, of which the length was 84–103 mm, 3–11 vias at 2 mm each (the estimate allows at most one), and on some searches 17–143 mm of rip-up and history costs. A coarse cost-to-target map that knows on which layer routed copper lies, and what a via costs, could capture most of that; the map of fixed copper alone could not.
+
+Regression to look into: ending negotiation after two rounds without gain leaves the Mars-64 boards at 62 of 94 nets instead of 71.
+
 Done so far: negotiation that ends when it goes round in circles ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]), far polygon edges passed over at a glance (Issue110 in 40 s instead of 132 s), an indexed outline (three times cheaper expansions on boards with rounded corners) and one search state per node and layer instead of nine (up to 2.5 times faster), [[Benchmarks#one-state-per-node-m2-trx-48]].
 
 **Depends on:** [[TRX-23]]
