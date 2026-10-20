@@ -4,7 +4,7 @@ use crate::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerId, LayerShape, Net, NetClass,
     NetClassId, NetId, Pad, PadId, Routes, ViaKind, ViaKindId,
 };
-use traxide_geometry::{Point, Polygon, Rect, Shape};
+use traxide_geometry::{Point, Polygon, Rect, Region, Shape};
 
 /// Millimetres in nanometres.
 pub fn mm(value: f64) -> i32 {
@@ -24,10 +24,10 @@ pub struct DesignBuilder {
 
 impl DesignBuilder {
     pub fn new(width_mm: f64, height_mm: f64) -> Self {
-        let outline = Polygon::rectangle(Rect {
+        let outline = Region::from(Polygon::rectangle(Rect {
             min: at(0.0, 0.0),
             max: at(width_mm, height_mm),
-        });
+        }));
         let design = Design {
             layers: vec![],
             outline,

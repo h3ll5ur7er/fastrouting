@@ -1,4 +1,4 @@
-use traxide_contracts::geometry::{Point, Polygon, Rect, Segment, Shape};
+use traxide_contracts::geometry::{Point, Polygon, Rect, Region, Segment, Shape};
 use traxide_contracts::testing::{DesignBuilder, at, mm};
 use traxide_contracts::{
     ConnectionId, Design, KeepoutScope, LayerId, LayoutAccess, NetId, Obstruction, Routes, Track,
@@ -242,15 +242,17 @@ fn l_shaped_board() -> Design {
         .smd("P1", Some("A"), at(1.0, 9.0), 0.5, 0)
         .smd("P2", Some("B"), at(2.0, 9.0), 0.5, 0)
         .build();
-    design.outline = Polygon::new(vec![
-        at(0.0, 0.0),
-        at(10.0, 0.0),
-        at(10.0, 5.0),
-        at(20.0, 5.0),
-        at(20.0, 10.0),
-        at(0.0, 10.0),
-    ])
-    .expect("a polygon");
+    design.outline = Region::from(
+        Polygon::new(vec![
+            at(0.0, 0.0),
+            at(10.0, 0.0),
+            at(10.0, 5.0),
+            at(20.0, 5.0),
+            at(20.0, 10.0),
+            at(0.0, 10.0),
+        ])
+        .expect("a polygon"),
+    );
     design
 }
 

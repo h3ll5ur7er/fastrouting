@@ -68,7 +68,8 @@ mod tests {
             outline: Polygon::rectangle(Rect {
                 min: Point::new(0, 0),
                 max: Point::new(1, 1),
-            }),
+            })
+            .into(),
             nets: vec![
                 Net {
                     name: "signal".into(),

@@ -1,12 +1,13 @@
 use crate::{LayerId, NetClassId, NetId, PadId, Routes, ViaKindId};
-use traxide_geometry::{Point, Polygon, Shape};
+use traxide_geometry::{Point, Region, Shape};
 
 /// A board to route, independent of the format it came from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Design {
     /// Copper layers from top to bottom.
     pub layers: Vec<Layer>,
-    pub outline: Polygon,
+    /// The board's outline: one polygon, or one per board of a panel.
+    pub outline: Region,
     pub nets: Vec<Net>,
     pub pads: Vec<Pad>,
     pub via_kinds: Vec<ViaKind>,

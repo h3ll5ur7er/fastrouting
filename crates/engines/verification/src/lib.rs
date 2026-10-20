@@ -73,10 +73,7 @@ fn edge_and_keepout_violations(
 ) -> Vec<Violation> {
     let mut violations = BTreeSet::new();
     for piece in pieces.iter().filter(|p| !p.is_pad()) {
-        if !piece
-            .shape
-            .is_inside(&design.outline, rules.edge_clearance())
-        {
+        if !design.outline.holds(&piece.shape, rules.edge_clearance()) {
             violations.insert(Violation::Edge {
                 layer: piece.layer,
                 item: piece.item,

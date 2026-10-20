@@ -164,7 +164,7 @@ fn reads_the_board_outline() {
         max: Point::new(mm(30.0), mm(20.0)),
     };
     assert_eq!(design.outline.bounds(), expected);
-    assert_eq!(design.outline.points().len(), 4);
+    assert_eq!(design.outline.polygons()[0].points().len(), 4);
 }
 
 #[test]
@@ -450,4 +450,20 @@ fn keepouts_of_holes_kicad_7_0_2_wrote_half_a_metre_too_wide_get_their_size_back
         "{:?}",
         design.keepouts
     );
+}
+
+#[test]
+fn a_boundary_of_two_paths_is_a_panel_of_two_boards() {
+    // The 30 × 20 mm board, and a second one 10 mm below it.
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"30000 -20000  0 -20000  0 0  30000 0  30000 -20000)",
+            b"30000 -20000  0 -20000  0 0  30000 0  30000 -20000)\n      (path pcb 0  30000 -50000  0 -50000  0 -30000  30000 -30000)",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    assert!(design.outline.contains(Point::new(mm(15.0), mm(10.0))));
+    assert!(design.outline.contains(Point::new(mm(15.0), mm(40.0))));
+    assert!(!design.outline.contains(Point::new(mm(15.0), mm(25.0))));
 }

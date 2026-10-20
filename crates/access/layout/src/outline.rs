@@ -1,5 +1,5 @@
 use crate::buckets::Buckets;
-use traxide_contracts::geometry::{Polygon, Rect, Segment, Shape};
+use traxide_contracts::geometry::{Rect, Region, Segment, Shape};
 
 /// The board's outline, indexed so that a question about a piece of copper
 /// looks only at the edges near it. Boards with rounded corners have outlines
@@ -7,7 +7,7 @@ use traxide_contracts::geometry::{Polygon, Rect, Segment, Shape};
 /// search slow.
 #[derive(Debug)]
 pub(crate) struct Outline {
-    polygon: Polygon,
+    region: Region,
     bounds: Rect,
     edges: Vec<Segment>,
     buckets: Buckets,
@@ -17,10 +17,10 @@ pub(crate) struct Outline {
 }
 
 impl Outline {
-    pub(crate) fn new(polygon: &Polygon, bucket_size: i32) -> Self {
-        let bounds = polygon.bounds();
+    pub(crate) fn new(region: &Region, bucket_size: i32) -> Self {
+        let bounds = region.bounds();
         let mut buckets = Buckets::new(bounds, bucket_size);
-        let edges: Vec<Segment> = polygon.edges().collect();
+        let edges: Vec<Segment> = region.edges().collect();
         for (index, edge) in edges.iter().enumerate() {
             let edge_bounds =
                 Rect::around([edge.a, edge.b]).unwrap_or_else(|| unreachable!("two points"));
@@ -30,11 +30,11 @@ impl Outline {
             .map(|cell| {
                 buckets
                     .is_empty(cell)
-                    .then(|| polygon.contains(buckets.centre_of(cell)))
+                    .then(|| region.contains(buckets.centre_of(cell)))
             })
             .collect();
         Self {
-            polygon: polygon.clone(),
+            region: region.clone(),
             bounds,
             edges,
             buckets,
@@ -64,6 +64,6 @@ impl Outline {
         if !self.bounds.contains(point) {
             return false;
         }
-        self.inside[self.buckets.cell_at(point)].unwrap_or_else(|| self.polygon.contains(point))
+        self.inside[self.buckets.cell_at(point)].unwrap_or_else(|| self.region.contains(point))
     }
 }

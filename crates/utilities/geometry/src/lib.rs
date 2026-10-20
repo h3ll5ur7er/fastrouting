@@ -7,6 +7,7 @@
 mod point;
 mod polygon;
 mod rect;
+mod region;
 mod segment;
 mod shape;
 mod transform;
@@ -14,6 +15,7 @@ mod transform;
 pub use point::{MAX_COORDINATE, Point};
 pub use polygon::Polygon;
 pub use rect::Rect;
+pub use region::Region;
 pub use segment::Segment;
 pub use shape::Shape;
 pub use transform::Transform;

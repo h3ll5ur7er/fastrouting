@@ -2,7 +2,7 @@ use super::sexpr::{self, Sexp};
 use super::units::Units;
 use crate::BoardError;
 use std::collections::HashMap;
-use traxide_contracts::geometry::{Point, Polygon, Rect, Segment, Shape, Transform};
+use traxide_contracts::geometry::{Point, Polygon, Rect, Region, Segment, Shape, Transform};
 use traxide_contracts::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerId, LayerShape, Net, NetClass,
     NetClassId, NetId, Pad, PadId, Routes, Track, Via, ViaKind, ViaKindId,
@@ -261,32 +261,42 @@ impl<'a> DsnReader<'a> {
             .ok_or_else(|| sexp.invalid("a polygon needs at least three points"))
     }
 
-    /// The signal boundary, which routing must stay inside, where the design has
-    /// one; otherwise the board's outline (the `pcb` boundary).
-    fn outline(&self) -> Result<Polygon, BoardError> {
+    /// The signal boundaries, which routing must stay inside, where the design
+    /// has them; otherwise the board's outline (the `pcb` boundaries). A panel
+    /// of several boards has one per board.
+    fn outline(&self) -> Result<Region, BoardError> {
         let first = self.structure.required_child("boundary")?;
-        let shape_of = |boundary: &'a Sexp| boundary.args().first();
-        let signal = self
+        let shapes: Vec<&Sexp> = self
             .structure
             .children("boundary")
-            .filter_map(shape_of)
-            .find(|shape| shape.args().first().and_then(Sexp::atom) == Some("signal"));
-        let shape = signal
-            .or_else(|| shape_of(first))
-            .ok_or_else(|| first.invalid("empty boundary"))?;
-        let polygon = match shape.keyword() {
-            Some("path" | "polygon") => {
-                self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
-            }
-            Some("rect") => {
-                let corners = self.units.points(&shape.args()[1..])?;
-                Polygon::rectangle(
-                    Rect::around(corners).ok_or_else(|| shape.invalid("empty rect"))?,
-                )
-            }
-            _ => return Err(shape.invalid("unsupported boundary shape")),
+            .flat_map(Sexp::args)
+            .filter(|shape| shape.keyword().is_some())
+            .collect();
+        let is_signal = |shape: &&Sexp| shape.args().first().and_then(Sexp::atom) == Some("signal");
+        let chosen: Vec<&Sexp> = if shapes.iter().any(is_signal) {
+            shapes.into_iter().filter(is_signal).collect()
+        } else {
+            shapes
         };
-        Ok(polygon.map(to_board))
+        let polygons = chosen
+            .into_iter()
+            .map(|shape| {
+                let polygon = match shape.keyword() {
+                    Some("path" | "polygon") => {
+                        self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
+                    }
+                    Some("rect") => {
+                        let corners = self.units.points(&shape.args()[1..])?;
+                        Polygon::rectangle(
+                            Rect::around(corners).ok_or_else(|| shape.invalid("empty rect"))?,
+                        )
+                    }
+                    _ => return Err(shape.invalid("unsupported boundary shape")),
+                };
+                Ok(polygon.map(to_board))
+            })
+            .collect::<Result<Vec<_>, BoardError>>()?;
+        Region::new(polygons).ok_or_else(|| first.invalid("empty boundary"))
     }
 
     fn keepouts(&self) -> Result<Vec<Keepout>, BoardError> {
