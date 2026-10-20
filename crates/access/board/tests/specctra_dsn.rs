@@ -412,3 +412,19 @@ fn a_class_without_a_name_or_nets_changes_nothing() {
             .all(|n| n.class == design.rules.default_class)
     );
 }
+
+#[test]
+fn a_polygon_whose_points_coincide_is_a_dot() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(via ",
+            b"(keepout \"\" (polygon signal 0  1000 -1000  1000 -1000  1000 -1000))\n    (via ",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    assert!(matches!(
+        design.keepouts[0].shape,
+        Shape::Capsule { radius: 0, .. }
+    ));
+}

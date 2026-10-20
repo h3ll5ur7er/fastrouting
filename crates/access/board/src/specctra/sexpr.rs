@@ -121,7 +121,17 @@ pub(crate) fn parse(text: &str) -> Result<Sexp, BoardError> {
                     let mut quoted = String::new();
                     loop {
                         match chars.next() {
-                            Some(q) if q == quote => break,
+                            // Tools write quotes inside quoted text unescaped, such
+                            // as an inch mark, or a pin quoted after its quoted
+                            // component: only a quote before a delimiter ends it.
+                            Some(q)
+                                if q == quote
+                                    && chars.peek().is_none_or(|&n| {
+                                        n.is_whitespace() || n == '(' || n == ')'
+                                    }) =>
+                            {
+                                break;
+                            }
                             Some(other) => {
                                 line += usize::from(other == '\n');
                                 quoted.push(other);
@@ -215,6 +225,18 @@ mod tests {
         let root = parse("(rule (clear 2) (CIRC x))").expect("valid");
         assert!(root.child("clearance").is_some());
         assert!(root.child("circle").is_some());
+    }
+
+    #[test]
+    fn a_quote_inside_a_quoted_string_ends_it_only_before_a_delimiter() {
+        // An inch mark KiCad wrote unescaped, and a pin quoted after its component.
+        let root = parse("(place DP3 (PN \"0.5\"\") (pins \"J3\"-\"D+\" R1-2))").expect("valid");
+        let part_number = root.child("pn").expect("kept apart from the pins");
+        assert_eq!(atoms(part_number), ["0.5\""]);
+        assert_eq!(
+            atoms(root.child("pins").expect("pins")),
+            ["J3\"-\"D+", "R1-2"]
+        );
     }
 
     #[test]

@@ -25,6 +25,16 @@ pub fn parse_dsn(text: &str) -> Result<Design, BoardError> {
     DsnReader::new(&root)?.read()
 }
 
+/// The points of a closed shape without repeats: a point written twice in a
+/// row, or the first point written again to close the shape.
+fn distinct(mut points: Vec<Point>) -> Vec<Point> {
+    points.dedup();
+    if points.len() > 1 && points.first() == points.last() {
+        points.pop();
+    }
+    points
+}
+
 /// The corners of a polyline path, as Freerouting writes wires: its numbers are
 /// lines, two points each, and each corner is where one line crosses the next.
 fn corners(points: &[Point]) -> Vec<Point> {
@@ -198,9 +208,9 @@ impl<'a> DsnReader<'a> {
                 ))
             }
             Some("polygon") => {
-                let points = self.units.points(&args[2..])?;
+                let points = distinct(self.units.points(&args[2..])?);
                 // Some tools draw a slot or a thin pad as a polygon of one or two
-                // points, which the aperture's width makes a line.
+                // points, which the aperture's width makes a line or a dot.
                 match points.as_slice() {
                     [a] => Shape::circle(*a, self.units.length(number(1)?)?.max(1)),
                     [a, b] => {
@@ -231,11 +241,8 @@ impl<'a> DsnReader<'a> {
     }
 
     fn polygon(&self, sexp: &Sexp, coordinates: &[Sexp]) -> Result<Polygon, BoardError> {
-        let mut points = self.units.points(coordinates)?;
-        if points.len() > 1 && points.first() == points.last() {
-            points.pop();
-        }
-        Polygon::new(points).ok_or_else(|| sexp.invalid("a polygon needs at least three points"))
+        Polygon::new(distinct(self.units.points(coordinates)?))
+            .ok_or_else(|| sexp.invalid("a polygon needs at least three points"))
     }
 
     /// The signal boundary, which routing must stay inside, where the design has
