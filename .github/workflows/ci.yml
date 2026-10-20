@@ -45,6 +45,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      # The plugin test runs traxide inside KiCad's image: a static build runs on its C library.
+      - run: rustup target add x86_64-unknown-linux-musl
       - run: docker pull kicad/kicad:${{ matrix.kicad }}
       - run: cargo xtask e2e
         env:

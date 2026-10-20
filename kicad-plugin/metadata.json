@@ -1,0 +1,14 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v1",
+  "name": "traxide",
+  "description": "A fast autorouter: routes the open board in seconds.",
+  "description_full": "Routes the board open in KiCad with traxide: KiCad exports it as Specctra DSN, traxide routes it, and KiCad imports the result, which replaces the board's tracks and vias. traxide is a fast, dependency-free autorouter written in Rust, licensed MIT OR Apache-2.0.",
+  "identifier": "com.github.h3ll5ur7er.traxide",
+  "type": "plugin",
+  "author": { "name": "traxide contributors", "contact": { "web": "https://github.com/h3ll5ur7er/fastrouting" } },
+  "license": "MIT",
+  "resources": { "homepage": "https://github.com/h3ll5ur7er/fastrouting" },
+  "versions": [
+    { "version": "0.1.0", "status": "development", "kicad_version": "9.0" }
+  ]
+}

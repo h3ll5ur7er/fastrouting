@@ -69,8 +69,19 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .concat()
             .join("\n  ")
     );
+    let through_plugin =
+        kicad.route_with_plugin(root, &out, recipe, &kicad.traxide_for_kicad(root)?)?;
+    ensure!(
+        through_plugin.is_clean(),
+        "routed through the KiCad plugin, KiCad's DRC found {} violations and {} unconnected items:\n  {}",
+        through_plugin.violations.len(),
+        through_plugin.unconnected.len(),
+        [through_plugin.violations, through_plugin.unconnected]
+            .concat()
+            .join("\n  ")
+    );
     Ok(format!(
-        "clean in KiCad's DRC; routed in {seconds:.2} s ({})",
+        "clean in KiCad's DRC, and through the KiCad plugin; routed in {seconds:.2} s ({})",
         summary.split(" → ").next().unwrap_or_default()
     ))
 }

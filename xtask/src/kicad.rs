@@ -110,23 +110,47 @@ impl Kicad {
                  kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
-        let imported: Imported = printed
-            .lines()
-            .find_map(|line| serde_json::from_str(line).ok())
-            .context("the import printed no statistics")?;
-        let drc: DrcReport = serde_json::from_str(&std::fs::read_to_string(out.join(report))?)?;
-        let mut kinds = std::collections::BTreeMap::new();
-        for finding in &drc.violations {
-            *kinds.entry(finding.kind.clone()).or_insert(0) += 1;
+        judged(&printed, &out.join(report))
+    }
+
+    /// Routes the exported board of `recipe` inside KiCad as the KiCad plugin
+    /// does, with the traxide at `traxide` as KiCad sees it, and judges it.
+    pub fn route_with_plugin(
+        &self,
+        root: &Path,
+        out: &Path,
+        recipe: &str,
+        traxide: &str,
+    ) -> Result<Judgement> {
+        let routed = format!("{recipe}.plugin");
+        let report = format!("{routed}.drc.json");
+        let printed = self.run(
+            root,
+            out,
+            &format!(
+                "python3 plugin_route.py {{out}}/{recipe}.kicad_pcb {{out}}/{routed}.kicad_pcb {traxide} && \
+                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
+            ),
+        )?;
+        judged(&printed, &out.join(report))
+    }
+
+    /// Where traxide is for KiCad: in the container, the static build of the
+    /// repository mounted at /work, which runs whatever the image's C library.
+    pub fn traxide_for_kicad(&self, root: &Path) -> Result<String> {
+        match self {
+            Self::Docker { .. } => {
+                let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+                let built = Command::new(&cargo)
+                    .args(["build", "--release", "--quiet", "-p", "traxide-cli"])
+                    .args(["--target", "x86_64-unknown-linux-musl"])
+                    .current_dir(root)
+                    .status()?;
+                ensure!(built.success(), "building the static traxide failed");
+                Ok("/work/target/x86_64-unknown-linux-musl/release/traxide".into())
+            }
+            Self::Local { .. } => Ok(root.join("target/release/traxide").display().to_string()),
         }
-        Ok(Judgement {
-            violations: drc.violations.iter().map(Finding::line).collect(),
-            violation_kinds: kinds.into_iter().collect(),
-            unconnected: drc.unconnected_items.iter().map(Finding::line).collect(),
-            tracks: imported.tracks,
-            vias: imported.vias,
-            length_mm: imported.length_mm,
-        })
     }
 
     /// Runs `script` (a shell command line) in the e2e scripts' folder; `{out}` stands for `out`.
@@ -164,6 +188,27 @@ impl Kicad {
         ensure!(output.status.success(), "KiCad failed: {script}\n{text}");
         Ok(text)
     }
+}
+
+/// The statistics a KiCad script printed as JSON, and the DRC report at `report`.
+fn judged(printed: &str, report: &Path) -> Result<Judgement> {
+    let imported: Imported = printed
+        .lines()
+        .find_map(|line| serde_json::from_str(line).ok())
+        .context("the import printed no statistics")?;
+    let drc: DrcReport = serde_json::from_str(&std::fs::read_to_string(report)?)?;
+    let mut kinds = std::collections::BTreeMap::new();
+    for finding in &drc.violations {
+        *kinds.entry(finding.kind.clone()).or_insert(0) += 1;
+    }
+    Ok(Judgement {
+        violations: drc.violations.iter().map(Finding::line).collect(),
+        violation_kinds: kinds.into_iter().collect(),
+        unconnected: drc.unconnected_items.iter().map(Finding::line).collect(),
+        tracks: imported.tracks,
+        vias: imported.vias,
+        length_mm: imported.length_mm,
+    })
 }
 
 /// So that files KiCad writes into the mounted folder belong to the caller.
