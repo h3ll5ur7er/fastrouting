@@ -9,6 +9,8 @@ members = [
     "crates/clients/*",
     "xtask",
 ]
+# Spikes are throwaway prototypes with their own lock file; none may reach a release build.
+exclude = ["spikes"]
 
 [workspace.package]
 version = "0.1.0"
