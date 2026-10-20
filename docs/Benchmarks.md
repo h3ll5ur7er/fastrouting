@@ -39,6 +39,23 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Real boards: the corpus against Freerouting (M2, TRX-15)
+
+October 2026, `cargo xtask corpus --freerouting … --timeout 120` in the Benchmark workflow, six shards on GitHub Actions runners (4 vCPUs each), on commit 7534cf5. The 76 boards are the DSN files of Freerouting's own bug reports. Both routers get the same DSN and 120 s; `traxide check` judges both sessions alike, counting only the rules a session breaks beyond those the board already broke.
+
+| Router | Complete | Incomplete | Breaking rules | Stopped at 120 s | Failed | Time in all |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **traxide** | **40** | 23 | **0** | **10** | 3 | **1806 s** |
+| Freerouting 2.5.0 | 15 | 5 | 19 | 32 | 5 | 4969 s |
+
+- **traxide broke no rule on any board.** Freerouting's sessions break rules on 19 boards, up to 520 violations on Issue632-MiniAutoPilot.
+- **Where both finished, traxide was 10–100 times faster**: the three Z80 boards (529 nets) in 0.2 s against 21.6 s or more than 120 s; Issue230 (764 nets) in 6 s against 62 s; Issue199 in 0.2 s with all 28 nets against 109 s with 1.
+- **Where Freerouting connected more**, seven boards, it broke rules to do so on six: Issue632 (211 of 211 nets with 520 violations, against traxide's 124 of 211, clean), Issue508-bm05, Issue110-Pajalnaja, Issue217 (104 of 104 with 6 violations, against 103 of 104) and both Issue069 boards. Issue508-bm06 (38 of 38 against 35 of 38, both clean) is the exception.
+- **traxide's gaps**: 10 boards stop at 120 s (large or congested ones: Issue039, 066, 103-Unrouted, 113, 145, 208, 219, 283, 289 ×2; [[TRX-48]]), and some finish incomplete where a pad is hemmed in or no way was found (Issue269-caniot 47 of 94, Issue102/326-Mars-64 71 of 94).
+- **Failures**: Issue006 is a schematic, not a design; Issue143-rpi_splitter_mod names a component that does not exist; Issue420 names a pin its component lacks. Three of Freerouting's five failures are the judge's: its sessions define their own via padstacks, which `traxide check` did not read ([[TRX-15]]).
+
+The judge is traxide's own Verification Engine, which reads the rules from the DSN as the router does; KiCad's DRC is the independent judge only for the KiCad-built boards above.
+
 ## One state per node (M2, TRX-48)
 
 October 2026: on the real boards of the corpus, the long searches expanded about 8 states per node and layer: the heading a node was entered with was part of the search state, and as a bend costs only 0.1 mm, all nine ways into a node cost nearly the same and were each expanded. A state is now a node on a layer; its heading is the direction of the cheapest way in found, which bend costs and the rule against acute turns follow. Every board stays clean in KiCad 10's DRC; track lengths are within 0.2 % of before.
