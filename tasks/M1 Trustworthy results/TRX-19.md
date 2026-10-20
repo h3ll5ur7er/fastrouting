@@ -13,6 +13,7 @@ The referee ([[Architecture/Volatilities]] V9): never shares clearance code with
 
 - [x] Clearance between all copper of different nets per layer, outline and keepouts (sweep along x, independent of Layout Access)
 - [ ] Widths and via rules
+- [ ] Clearances of a type of object in DSN, such as `(clearance 6 (type wire_via))`: read only the general clearance, the judge is stricter than such a board and counts some of Freerouting's legal copper as broken rules (Issue143, Issue270 of the corpus)
 - [x] Unconnected pins
 - [ ] Dangling copper
 - [ ] Metrics: completion, total length, vias, per-net length
