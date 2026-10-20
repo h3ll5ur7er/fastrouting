@@ -8,13 +8,12 @@
 
 mod grid;
 mod path;
-mod scratch;
 mod search;
 
 use std::collections::VecDeque;
 use traxide_contracts::{
-    Connection, ConnectionId, ConstraintSet, Design, Event, LayoutAccess, Obstruction, Plan,
-    Profile, Routes, RoutingResult,
+    Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, Obstruction,
+    Plan, Profile, Routes, RoutingResult,
 };
 use traxide_events::{CancelToken, Publisher};
 
@@ -49,6 +48,7 @@ impl<'a> Router<'a> {
     pub fn route_plan(
         &mut self,
         plan: &Plan,
+        corridors: Option<&Corridors>,
         layout: &mut impl LayoutAccess,
         cancel: &CancelToken,
         events: &impl Publisher<Event>,
@@ -66,7 +66,13 @@ impl<'a> Router<'a> {
                 break;
             }
             let connection = plan.connections[id.index()];
-            match self.find(connection, layout, may_rip_up.then_some(&rip_ups[..])) {
+            match self.find(
+                id,
+                connection,
+                corridors,
+                layout,
+                may_rip_up.then_some(&rip_ups[..]),
+            ) {
                 Some(found) => {
                     for displaced in routed_obstructions(layout, &found) {
                         layout.remove_route(displaced);
@@ -96,11 +102,28 @@ impl<'a> Router<'a> {
         }
     }
 
+    /// A route inside the connection's corridor; when the corridor turns out to
+    /// be blocked, as global routing only estimates room, anywhere in reach.
     fn find(
+        &mut self,
+        id: ConnectionId,
+        connection: Connection,
+        corridors: Option<&Corridors>,
+        layout: &impl LayoutAccess,
+        rip_ups: Option<&[u32]>,
+    ) -> Option<Routes> {
+        let in_corridor = corridors
+            .filter(|c| c.bounds(id).is_some())
+            .and_then(|c| self.search(connection, layout, rip_ups, Some((c, id))));
+        in_corridor.or_else(|| self.search(connection, layout, rip_ups, None))
+    }
+
+    fn search(
         &mut self,
         connection: Connection,
         layout: &impl LayoutAccess,
         rip_ups: Option<&[u32]>,
+        corridor: Option<(&Corridors, ConnectionId)>,
     ) -> Option<Routes> {
         let search = search::Search::new(
             self.design,
@@ -109,6 +132,7 @@ impl<'a> Router<'a> {
             connection,
             layout,
             rip_ups,
+            corridor,
         );
         let steps = search.run(&mut self.scratch)?;
         Some(path::to_routes(

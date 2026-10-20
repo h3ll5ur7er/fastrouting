@@ -633,6 +633,7 @@ dependencies = [
  "traxide-events",
  "traxide-layout-access",
  "traxide-rules",
+ "traxide-scratch",
  "traxide-verification",
 ]
 
@@ -645,6 +646,15 @@ name = "traxide-geometry"
 version = "0.1.0"
 dependencies = [
  "proptest",
+]
+
+[[package]]
+name = "traxide-global"
+version = "0.1.0"
+dependencies = [
+ "traxide-contracts",
+ "traxide-rules",
+ "traxide-scratch",
 ]
 
 [[package]]
@@ -683,6 +693,7 @@ dependencies = [
  "traxide-contracts",
  "traxide-detailed",
  "traxide-events",
+ "traxide-global",
  "traxide-layout-access",
  "traxide-planning",
  "traxide-profile-access",
@@ -696,6 +707,10 @@ version = "0.1.0"
 dependencies = [
  "traxide-contracts",
 ]
+
+[[package]]
+name = "traxide-scratch"
+version = "0.1.0"
 
 [[package]]
 name = "traxide-verification"

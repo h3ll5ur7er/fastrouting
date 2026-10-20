@@ -60,10 +60,15 @@ pub fn route(
     let mut layout = Layout::build(&design, &rules);
     events.publish(Event::StageStarted(Stage::Planning));
     let plan = traxide_planning::plan(&design);
+    let corridors = profile.global_routing.then(|| {
+        events.publish(Event::StageStarted(Stage::GlobalRouting));
+        traxide_global::route(&design, &plan, &rules, &profile)
+    });
     events.publish(Event::StageStarted(Stage::Routing));
     let total = plan.connections.len();
+    let mut router = Router::new(&design, &rules, &profile);
     let RoutingResult { routes, unrouted } =
-        Router::new(&design, &rules, &profile).route_plan(&plan, &mut layout, cancel, events);
+        router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());

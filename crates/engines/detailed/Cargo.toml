@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 traxide-contracts.workspace = true
 traxide-events.workspace = true
+traxide-scratch.workspace = true
 
 [dev-dependencies]
 traxide-contracts = { workspace = true, features = ["testing"] }

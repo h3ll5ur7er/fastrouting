@@ -8,3 +8,5 @@ rip_up_cost = 5.0
 max_rip_ups = 10
 # On a TKL-sized key matrix, 1.2 routed 15 times faster than 1.0 for 0.3 % more track.
 heuristic_weight = 1.2
+# Off: on the keyboard and the key matrices, corridors made detailed routing slower (docs/Benchmarks.md).
+global_routing = false

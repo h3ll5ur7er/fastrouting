@@ -1,15 +1,17 @@
+//! Memory a search reuses from one run to the next without clearing it.
+
 /// A dense array that forgets all its values in O(1): entries written before
 /// the last [`reset`](Self::reset) read as unset. One allocation then serves
 /// every search, however many connections are routed.
 #[derive(Debug, Default)]
-pub(crate) struct Stamped<T> {
+pub struct Stamped<T> {
     values: Vec<T>,
     stamps: Vec<u32>,
     generation: u32,
 }
 
 impl<T: Copy + Default> Stamped<T> {
-    pub(crate) fn reset(&mut self, len: usize) {
+    pub fn reset(&mut self, len: usize) {
         if self.stamps.len() < len {
             self.values.resize(len, T::default());
             self.stamps.resize(len, 0);
@@ -22,16 +24,16 @@ impl<T: Copy + Default> Stamped<T> {
         }
     }
 
-    pub(crate) fn get(&self, index: usize) -> Option<T> {
+    pub fn get(&self, index: usize) -> Option<T> {
         (self.stamps[index] == self.generation).then(|| self.values[index])
     }
 
-    pub(crate) fn set(&mut self, index: usize, value: T) {
+    pub fn set(&mut self, index: usize, value: T) {
         self.values[index] = value;
         self.stamps[index] = self.generation;
     }
 
-    pub(crate) fn get_or_insert_with(&mut self, index: usize, value: impl FnOnce() -> T) -> T {
+    pub fn get_or_insert_with(&mut self, index: usize, value: impl FnOnce() -> T) -> T {
         match self.get(index) {
             Some(known) => known,
             None => {

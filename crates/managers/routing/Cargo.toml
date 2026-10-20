@@ -13,6 +13,7 @@ traxide-board-access.workspace = true
 traxide-contracts.workspace = true
 traxide-detailed.workspace = true
 traxide-events.workspace = true
+traxide-global.workspace = true
 traxide-layout-access.workspace = true
 traxide-planning.workspace = true
 traxide-profile-access.workspace = true

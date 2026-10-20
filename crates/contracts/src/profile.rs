@@ -20,4 +20,7 @@ pub struct Profile {
     /// How strongly a search heads for its target: 1 finds the cheapest path;
     /// more finds a path within that factor of the cheapest, much faster.
     pub heuristic_weight: f64,
+    /// Whether global routing first plans a corridor for every connection, to
+    /// which detailed routing then keeps.
+    pub global_routing: bool,
 }

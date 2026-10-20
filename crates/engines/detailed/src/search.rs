@@ -1,13 +1,13 @@
 use crate::grid::{DIRECTIONS, Grid, Node};
 use crate::path::{self, Step};
-use crate::scratch::Stamped;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
-    Connection, ConstraintSet, Design, LayerId, LayoutAccess, NetId, Obstruction, Pad, Profile,
-    Via, ViaKindId,
+    Connection, ConnectionId, ConstraintSet, Corridors, Design, LayerId, LayoutAccess, NetId,
+    Obstruction, Pad, Profile, Via, ViaKindId,
 };
+use traxide_scratch::Stamped;
 
 /// No heading yet: just left a pad or a via.
 const UNSET: u8 = 8;
@@ -78,6 +78,8 @@ pub(crate) struct Search<'a, L> {
     rip_ups: Option<&'a [u32]>,
     /// The profile's heuristic weight in thousandths, so ranking stays in integers.
     weight_per_mille: i64,
+    /// The corridor global routing planned for this connection, if any.
+    corridor: Option<(&'a Corridors, ConnectionId)>,
 }
 
 impl<'a, L: LayoutAccess> Search<'a, L> {
@@ -88,14 +90,18 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         connection: Connection,
         layout: &'a L,
         rip_ups: Option<&'a [u32]>,
+        corridor: Option<(&'a Corridors, ConnectionId)>,
     ) -> Self {
         let (from, to) = (design.pad(connection.from), design.pad(connection.to));
-        let window = Rect {
+        let pads = Rect {
             min: from.position,
             max: from.position,
         }
-        .including(to.position)
-        .inflated(profile.detour_margin);
+        .including(to.position);
+        let window = match corridor.and_then(|(corridors, id)| corridors.bounds(id)) {
+            Some(bounds) => bounds.union(pads),
+            None => pads.inflated(profile.detour_margin),
+        };
         let pitch = i64::from(profile.grid_pitch);
         Self {
             design,
@@ -111,6 +117,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 .distance(Point::new(profile.grid_pitch, profile.grid_pitch))
                 .max(pitch),
             rip_ups,
+            corridor,
             weight_per_mille: (profile.heuristic_weight * 1000.0).round() as i64,
         }
     }
@@ -217,7 +224,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 let turn = turn(state.heading, direction);
                 let next = (state.node.0 + dx, state.node.1 + dy);
                 // Turns sharper than 90° leave acute angles that trap etchant.
-                if turn > 2 || !self.grid.contains(next) {
+                if turn > 2 || !self.grid.contains(next) || !self.in_corridor(next) {
                     continue;
                 }
                 let edge = (self.layer_node(state) * DIRECTIONS.len()) + direction;
@@ -320,6 +327,11 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
     }
 
+    fn in_corridor(&self, node: Node) -> bool {
+        self.corridor
+            .is_none_or(|(corridors, id)| corridors.allows(id, self.grid.point(node)))
+    }
+
     fn layer_node(&self, state: State) -> usize {
         state.layer as usize * self.grid.node_count() + self.grid.index(state.node)
     }
@@ -384,7 +396,12 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             .iter()
             .filter(|c| self.design.layers[c.layer.index()].routable)
         {
-            for node in self.grid.nodes_near(copper.shape.bounds(), pad.position) {
+            for node in self
+                .grid
+                .nodes_near(copper.shape.bounds(), pad.position)
+                .into_iter()
+                .filter(|&n| self.in_corridor(n))
+            {
                 let point = self.grid.point(node);
                 let segment = Segment::new(pad.position, point);
                 if let Some(extra) = self.track_extra(copper.layer, segment) {

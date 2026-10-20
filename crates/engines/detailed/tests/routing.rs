@@ -1,7 +1,8 @@
 use traxide_contracts::geometry::{Point, Polygon, Rect, Shape};
 use traxide_contracts::testing::{DesignBuilder, at};
 use traxide_contracts::{
-    Connection, Design, KeepoutScope, LayerId, Plan, Profile, Routes, RoutingResult, Violation,
+    Connection, ConnectionId, Corridors, Design, KeepoutScope, LayerId, Plan, Profile, Routes,
+    RoutingResult, Violation,
 };
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Silent};
@@ -18,6 +19,7 @@ fn profile() -> Profile {
         rip_up_cost: 5_000_000,
         max_rip_ups: 10,
         heuristic_weight: 1.0,
+        global_routing: false,
     }
 }
 
@@ -32,20 +34,35 @@ fn connection(design: &Design, from: &str, to: &str) -> Connection {
 
 /// Routes `pairs` as a plan, in that order.
 fn route_with(design: &Design, profile: &Profile, pairs: &[(&str, &str)]) -> RoutingResult {
+    route_in(design, profile, pairs, None)
+}
+
+fn route_in(
+    design: &Design,
+    profile: &Profile,
+    pairs: &[(&str, &str)],
+    corridors: Option<&Corridors>,
+) -> RoutingResult {
     let rules = traxide_rules::compile(design, Purpose::Routing);
     let mut layout = Layout::build(design, &rules);
-    let plan = Plan {
-        connections: pairs
-            .iter()
-            .map(|&(from, to)| connection(design, from, to))
-            .collect(),
-    };
-    Router::new(design, &rules, profile).route_plan(
-        &plan,
-        &mut layout,
-        &CancelToken::new(),
-        &Silent,
-    )
+    let connections = pairs
+        .iter()
+        .map(|&(from, to)| connection(design, from, to))
+        .collect();
+    let plan = Plan { connections };
+    let cancel = CancelToken::new();
+    Router::new(design, &rules, profile).route_plan(&plan, corridors, &mut layout, &cancel, &Silent)
+}
+
+/// A corridor of 1 mm cells on a board 20 cells wide, made of the given cells.
+fn corridor(cells: impl IntoIterator<Item = (i32, i32)>) -> Corridors {
+    let mut cells: Vec<u32> = cells
+        .into_iter()
+        .map(|(column, row)| (row * 20 + column) as u32)
+        .collect();
+    cells.sort_unstable();
+    cells.dedup();
+    Corridors::new(Point::new(0, 0), 1_000_000, 20, vec![cells])
 }
 
 fn route(design: &Design, pairs: &[(&str, &str)]) -> RoutingResult {
@@ -300,4 +317,46 @@ fn a_connection_searched_from_its_tighter_end_still_runs_from_its_first_pad() {
         "the via joins the two tracks"
     );
     assert_legal(&design, &routes);
+}
+
+#[test]
+fn keeps_inside_its_corridor() {
+    let design = DesignBuilder::new(20.0, 12.0)
+        .smd("A1", Some("A"), at(2.5, 8.5), 1.0, 0)
+        .smd("A2", Some("A"), at(17.5, 8.5), 1.0, 0)
+        .build();
+    // Up from A1, along row 3, down to A2: a detour the straight line would not take.
+    let detour = corridor(
+        (1..=4)
+            .flat_map(|c| (2..=9).map(move |r| (c, r)))
+            .chain((1..=18).flat_map(|c| (2..=4).map(move |r| (c, r))))
+            .chain((16..=18).flat_map(|c| (2..=9).map(move |r| (c, r)))),
+    );
+    let result = route_in(&design, &profile(), &[("A1", "A2")], Some(&detour));
+    assert_eq!(result.unrouted, []);
+    for point in result.routes.tracks.iter().flat_map(|t| &t.path) {
+        assert!(
+            detour.allows(ConnectionId(0), *point),
+            "{point:?} leaves the corridor"
+        );
+    }
+    assert_legal(&design, &result.routes);
+}
+
+#[test]
+fn searches_the_whole_window_when_its_corridor_is_blocked() {
+    let design = DesignBuilder::new(20.0, 12.0)
+        .smd("A1", Some("A"), at(2.5, 6.5), 1.0, 0)
+        .smd("A2", Some("A"), at(17.5, 6.5), 1.0, 0)
+        .keepout(
+            wall(at(9.5, 3.0), at(10.5, 12.0)),
+            None,
+            KeepoutScope::Everything,
+        )
+        .build();
+    // Straight across, right through the wall; the way around its top end lies outside.
+    let straight = corridor((1..=18).flat_map(|c| (5..=7).map(move |r| (c, r))));
+    let result = route_in(&design, &profile(), &[("A1", "A2")], Some(&straight));
+    assert_eq!(result.unrouted, []);
+    assert_legal(&design, &result.routes);
 }

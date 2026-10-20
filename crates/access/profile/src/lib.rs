@@ -80,6 +80,7 @@ struct Fields {
     rip_up_cost: Option<f64>,
     max_rip_ups: Option<u32>,
     heuristic_weight: Option<f64>,
+    global_routing: Option<bool>,
 }
 
 impl Fields {
@@ -92,6 +93,7 @@ impl Fields {
             rip_up_cost: other.rip_up_cost.or(self.rip_up_cost),
             max_rip_ups: other.max_rip_ups.or(self.max_rip_ups),
             heuristic_weight: other.heuristic_weight.or(self.heuristic_weight),
+            global_routing: other.global_routing.or(self.global_routing),
         }
     }
 
@@ -128,6 +130,7 @@ impl Fields {
                     });
                 }
             },
+            global_routing: self.global_routing.unwrap_or(false),
         })
     }
 }

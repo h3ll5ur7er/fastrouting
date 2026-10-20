@@ -44,6 +44,9 @@ The Rules Engine turns the design's rules into a `ConstraintSet`: a clearance ma
 
 ### Global routing
 
+> [!NOTE]
+> Built, and off by default: on the keyboard and the key matrices, corridors made detailed routing slower ([[Benchmarks#global-routing-corridors-measured-and-off-m2-trx-26]]). Turn it on with `global_routing = true` ([[Profiles]]).
+
 On a coarse 3D grid — cells of about 1–2.5 mm, one plane per copper layer — each edge has a capacity: the number of tracks that fit after obstacles.
 
 1. **Pattern routing** of every connection: L, Z and 3-bend shapes with a dynamic program over layers. Embarrassingly parallel.

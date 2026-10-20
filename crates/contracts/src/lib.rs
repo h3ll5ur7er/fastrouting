@@ -5,6 +5,7 @@
 //! indices into the arrays of a [`Design`].
 
 mod constraints;
+mod corridors;
 mod design;
 mod events;
 mod ids;
@@ -17,6 +18,7 @@ pub mod testing;
 mod verdict;
 
 pub use constraints::ConstraintSet;
+pub use corridors::Corridors;
 pub use design::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerShape, Net, NetClass, Pad, ViaKind,
 };
