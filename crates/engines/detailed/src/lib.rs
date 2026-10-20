@@ -26,9 +26,11 @@ use traxide_events::{CancelToken, Publisher};
 /// How many connections a batch looks through for each connection it may hold.
 const SCANNED_PER_BATCH_SLOT: usize = 4;
 
-/// One round left Issue034 of the corpus 3 connections short of complete; two
-/// complete it, and three only take longer elsewhere.
-const STALLED_ROUNDS: usize = 2;
+/// Measured on the corpus: one round left Issue034 3 connections short of
+/// complete; two left the Mars-64 boards at 72 connections of 106, where four
+/// route 78, as many as negotiating without end; four route the most of the
+/// churning boards in all, though they take longer.
+const STALLED_ROUNDS: usize = 4;
 
 pub struct Router<'a> {
     finder: Finder<'a>,

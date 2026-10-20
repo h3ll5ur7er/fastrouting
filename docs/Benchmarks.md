@@ -72,7 +72,18 @@ On congested corpus boards the routed count rose, then swung back and forth: Iss
 | Issue029-hw48na | 66 s, 83 of 91 | 45 s, 82 of 91 | **68 s, 83 of 91** | |
 | keyboard-tkl | 1.9 s, complete | 1.9 s, complete | **1.9 s, complete** | |
 
-One round cost Issue034 three connections; two keep every board as complete as before and end the circling. The boards stay slow for another reason: single searches of up to half a second each where the board is crowded ([[TRX-48]]).
+One round cost Issue034 three connections; two keep every board as complete as before and end the circling.
+
+Two turned out too few for the Mars-64 boards of the corpus (62 of 94 nets instead of 71). Measured again with four:
+
+| Board | Two rounds | **Four rounds** |
+| --- | --- | --- |
+| Issue102-Mars-64 | 22 s, 72 of 106 | **83 s, 78 of 106** (as many as without an end) |
+| Issue039-bug-design | 54 s, 155 of 204 | **65 s, 160 of 204** |
+| Issue110-RelayModule | 37 s, 81 of 88 | **74 s, 77 of 88** |
+| Issue029-hw48na | 46 s, 83 of 91 | **46 s, 83 of 91** |
+
+Four route the most in all (398 connections against 391) and stay within the corpus's 120 s, so negotiation now ends after four rounds without gain. The counts move unevenly between settings: where negotiation churns, which connection wins a contested place decides much. The boards stay slow for another reason: single searches of up to half a second each where the board is crowded ([[TRX-48]]).
 
 ## Real boards: the corpus against Freerouting (M2, TRX-15)
 

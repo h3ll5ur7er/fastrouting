@@ -27,7 +27,7 @@ What the flooding searches pay, measured on Issue015 in October 2026: the larges
 
 Tried in October 2026: such a coarse map (1 mm cells, entering a cell with routed copper of other connections costing their rip-up price, vias at their cost, Dijkstra from the target) as a floor under the straight-line estimate. It made things worse: the keyboard took 170 vias instead of 113, Issue015 expanded 20 million states instead of 9, Issue034 lost 10 connections; only Mars-64 gained (74 of 106 instead of 72, half the expansions). Charging every cell that holds routed copper overestimates, as a way can pass beside the copper inside the same cell; a map like this would have to count crossings, not cells.
 
-Regression to look into: ending negotiation after two rounds without gain leaves the Mars-64 boards at 62 of 94 nets instead of 71.
+Ending negotiation after two rounds without gain left the Mars-64 boards at 62 of 94 nets instead of 71; four rounds route them as completely as before ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]).
 
 Done so far: negotiation that ends when it goes round in circles ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]), far polygon edges passed over at a glance (Issue110 in 40 s instead of 132 s), an indexed outline (three times cheaper expansions on boards with rounded corners) and one search state per node and layer instead of nine (up to 2.5 times faster), [[Benchmarks#one-state-per-node-m2-trx-48]].
 
