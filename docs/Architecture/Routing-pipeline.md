@@ -1,0 +1,80 @@
+# Routing pipeline
+
+The stages the Routing Manager runs for a full autoroute, the engine behind each, and the algorithm each starts with. Every algorithm sits behind its engine's contract and can be replaced without touching the others; the reasons for the choices are in [Algorithms](../Research/Algorithms.md).
+
+[TOC]
+
+## Overview
+
+```mermaid
+flowchart LR
+  load[Load and compile rules] --> plan[Plan]
+  plan --> global[Global routing]
+  global --> detail[Detailed routing]
+  detail --> repair{Unrouted or violations?}
+  repair -- yes --> detail
+  repair -- no --> opt[Optimise]
+  opt --> verify[Verify]
+  verify --> store[Store]
+```
+
+| Stage | Engine | Starts with | Parallel on |
+| --- | --- | --- | --- |
+| Compile rules | Rules | Dense constraint tables | — |
+| Build layout | Layout Access | Obstacles inflated by clearance + half width, per net class and layer, in a uniform grid of buckets | Threads, by layer |
+| Plan | Planning | MST/RSMT decomposition, matrix and bus recognition, escape patterns, ordering | Threads, by net |
+| Global routing | Global Routing | Pattern routing, then PathFinder negotiation on a coarse 3D grid; track assignment on cell borders | Threads or GPU, by batch |
+| Detailed routing | Detailed Routing | Octilinear A* on an implicit graph inside each corridor; negotiated local rip-up | Threads, by batch of regions |
+| Repair | Detailed Routing | Walkaround and shove; later an exact switchbox solver | Threads, by window |
+| Optimise | Optimization | Pull-tight, mitering, via removal, stub removal | Threads, by region |
+| Verify | Verification | Full DRC with the compiled constraints, broad phase by spatial index | Threads, by tile |
+
+## Stages
+
+### Compile rules
+
+The Rules Engine turns the design's rules into a `ConstraintSet`: a clearance matrix indexed by (net class, net class, layer), widths per net and layer, the allowed via stacks per net, differential pairs and length groups. Everything later asks the constraint set, in O(1), never the original rules. Verification uses the same constraint set, so there is exactly one interpretation of the rules.
+
+### Plan
+
+- **Decompose** each multi-pin net into two-pin connections: a rectilinear Steiner tree (FLUTE-style) or MST, and ordered chains for the rows and columns of a key matrix.
+- **Recognise structure**: a switch and its diode become a short local stub; rows and columns become buses.
+- **Pre-route patterns**: escapes for QFN and BGA pads from templates, plane-connection vias for GND and power, the coupled regions of differential pairs.
+- **Order and batch**: connections are ordered (short and constrained first) and partitioned into batches whose inflated bounding boxes don't overlap, by a deterministic greedy colouring.
+
+### Global routing
+
+On a coarse 3D grid — cells of about 1–2.5 mm, one plane per copper layer — each edge has a capacity: the number of tracks that fit after obstacles.
+
+1. **Pattern routing** of every connection: L, Z and 3-bend shapes with a dynamic program over layers. Embarrassingly parallel.
+2. **Negotiation**: PathFinder with present and history costs over the connections that overflow, with bounded 3D A*, in batches, until no edge is overused or an iteration budget is spent.
+3. **Track assignment**: choose where each connection crosses each cell border (interval assignment per border), ordered to minimise crossings inside the cells.
+
+The output is a corridor per connection: its cells, layers and border crossings.
+
+### Detailed routing
+
+Inside its corridor, each connection is routed by A* over an implicit octilinear graph: the corners of inflated obstacles, the corridor's crossing points and a fine fallback grid. Clearance is checked exactly against Layout Access. Corridors of one batch don't overlap, so workers route them in parallel, each in a transaction (see [Parallelism and GPU](Parallelism-and-GPU.md)).
+
+Connections that fail, or conflict at commit, go to a local negotiation: the same PathFinder costs on a fine grid around the conflict, then **walkaround and shove** (moving neighbouring octilinear segments within the rules, as KiCad's interactive router does). Later, an exact ILP/SAT switchbox solver on small windows can route what is left, or prove that it can't be done and say so.
+
+Differential pairs are routed as one coupled entity with pose-based A* (position and heading), then split into two tracks.
+
+### Optimise
+
+Region by region, on copy-on-write snapshots: pull-tight within each trace's channel, 45° mitering, removing via pairs that one layer can carry, reassigning segments to layers to save vias, removing stubs; later length tuning in reserved meander regions and teardrops. A move is kept only when it improves the cost and adds no violation.
+
+### Verify
+
+An independent DRC over the result: clearances, widths, vias, unconnected pins, overlaps with keepouts and the board outline, plus metrics — completion, total length, vias, run time per stage. The router's own clearance checks are never trusted for sign-off. In the benchmark, KiCad's own DRC (`kicad-cli pcb drc`) is a second, external referee.
+
+## Why this is much faster than Freerouting
+
+Freerouting routes one connection at a time with a maze search over free-space *rooms* that are rebuilt after every change, escalates rip-up costs over many passes in place of negotiating congestion, has no global plan, and optimises by rerouting every item on a deep copy of the board, on one thread by default. Every row of the table above replaces one of those costs:
+
+- the global plan removes most blind rip-up passes, and negotiation converges in a few iterations;
+- a spatial index with inflated obstacles replaces rebuilding room polygons;
+- batches of non-overlapping corridors route on every core;
+- flat arrays of integers and cache-friendly heaps replace object graphs and a `TreeSet` priority queue.
+
+A 4-layer keyboard has roughly 150–300 two-pin connections and 20–30 multi-pin row and column nets, dense only around the MCU and flash. The search work is small; the target is **well under a second to a few seconds** on a laptop CPU, without a GPU.

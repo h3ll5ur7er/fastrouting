@@ -36,7 +36,7 @@ The method warns against encapsulating the *nature of the business*, which does 
 
 - **What a board is.** Layers, pads, nets, keepouts, tracks and vias have been the same for decades; the [data contracts](Contracts.md) model them directly.
 - **What routing is.** Connect every net's pins on copper without breaking a rule, minimising length and vias. The core use case is stable; only how it is done changes.
-- **Integer nanometre coordinates.** As in KiCad, every coordinate is an `i32` of nanometres (±2.1 m), with `i64` for products such as cross products. Exact, deterministic, SIMD-friendly. Not a volatility.
+- **Integer nanometre coordinates.** As in KiCad, every coordinate is an `i32` of nanometres, with exact `i64` products (see [Contracts](Contracts.md#units-and-geometry)). Exact, deterministic, SIMD-friendly. Not a volatility.
 - **IC (VLSI) routing, autoplacement, signal integrity simulation.** Different products. Out of scope until someone asks.
 
 ## Variabilities, not components

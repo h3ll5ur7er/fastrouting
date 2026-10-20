@@ -6,7 +6,7 @@ The `contracts` crate holds what every component agrees on: the data that flows 
 
 ## Units and geometry
 
-- Coordinates are `i32` nanometres, as in KiCad: exact, deterministic and compact (a point is 8 bytes, so a cache line holds 8). Products such as cross products are `i64`.
+- Coordinates are `i32` nanometres, as in KiCad: exact, deterministic and compact (a point is 8 bytes, so a cache line holds 8). Boards are limited to ±1 m, so differences fit in 31 bits and cross products are exact in `i64`; `i128` is used where three products meet (intersection points).
 - Angles of tracks are octilinear (0°, 45°, 90°…) by default; arcs are kept as arcs, never polylines.
 - Layers are indices into the stackup, `u8`. A board has at most 64 copper layers.
 - Identifiers (`NetId`, `PadId`, `LayerId`, `RouteId`) are dense indices into the design's arrays, never strings or pointers. Names live in side tables for reporting.

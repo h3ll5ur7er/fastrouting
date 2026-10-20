@@ -104,7 +104,7 @@ Engines hide **volatility in activity**: the algorithms. They are pure computati
 | Global Routing | Routes every connection on a coarse 3D grid with negotiated congestion, giving each a corridor and a layer assignment | V6 |
 | Detailed Routing | Turns corridors into exact, rule-correct tracks and vias: shape-based A* inside the corridor, rip-up and reroute, push and shove | V7 |
 | Optimization | Pull-tight, via removal, 45° and arc smoothing, length tuning, teardrops | V8 |
-| Verification | An independent DRC (no shared code with the router beyond the geometry utility) and quality metrics: completion, length, vias, violations | V9 |
+| Verification | An independent DRC and quality metrics: completion, length, vias, violations. It reads the same constraint set, so the rules have one interpretation, but shares no clearance code with the routing engines | V9 |
 
 The [Routing pipeline](Architecture/Routing-pipeline.md) explains the algorithms and why they were chosen.
 
@@ -114,7 +114,7 @@ Resource access components hide **how resources are reached** and expose atomic,
 
 | Component | Verbs (examples) | Hides |
 | --- | --- | --- |
-| Board Access | `load_design`, `store_routes`, `lock_board` | V10: Specctra DSN/SES, `.kicad_pcb`, the KiCad IPC API, later formats; their versions and quirks |
+| Board Access | `load_design`, `store_routes`, `lock_board` | V10: Specctra DSN/SES, `.kicad_pcb` with its project files, the KiCad IPC API (on KiCad 10 combined with rules read from the project files), later formats; their versions and quirks |
 | Layout Access | `build_layout`, `obstacles_near`, `clearance_violations`, `begin`/`commit` a transaction, `rip_up`, `snapshot` | V11: the spatial index, the memory layout, optimistic concurrency between workers |
 | Compute Access | `expand_wavefronts`, `update_congestion`, `route_batch` on a cost grid | V12: GPU (wgpu over Vulkan, Metal, DirectX 12) or CPU (threads and SIMD), device choice, buffers, fallback |
 | Profile Access | `load_profile` | V13: built-in profiles, `fastrouting.toml`, flags, KiCad project settings |
