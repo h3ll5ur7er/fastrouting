@@ -26,6 +26,10 @@ use traxide_events::{CancelToken, Publisher};
 /// How many connections a batch looks through for each connection it may hold.
 const SCANNED_PER_BATCH_SLOT: usize = 4;
 
+/// One round left Issue034 of the corpus 3 connections short of complete; two
+/// complete it, and three only take longer elsewhere.
+const STALLED_ROUNDS: usize = 2;
+
 pub struct Router<'a> {
     finder: Finder<'a>,
     /// One per thread: each search needs its own memory.
@@ -65,7 +69,10 @@ impl<'a> Router<'a> {
     /// Connections that cannot touch each other's copper are searched side by
     /// side in batches and committed in order (see `next_batch`).
     /// A connection is ripped up at most the profile's `max_rip_ups` times; those
-    /// that find no way within that are reported as unrouted.
+    /// that find no way within that are reported as unrouted. Once
+    /// STALLED_ROUNDS rounds of rip-ups, as many as there are connections each,
+    /// have routed no more connections than before, negotiation is going round
+    /// in circles: the connections left search without ripping up any other.
     pub fn route_plan(
         &mut self,
         plan: &Plan,
@@ -80,7 +87,8 @@ impl<'a> Router<'a> {
         let mut queue: VecDeque<ConnectionId> = (0..total).map(ConnectionId::from_index).collect();
         let mut unrouted = Vec::new();
         let mut hemmed_in = Vec::new();
-        let may_rip_up = self.finder.profile.max_rip_ups > 0;
+        let mut may_rip_up = self.finder.profile.max_rip_ups > 0;
+        let (mut most_routed, mut rip_ups_since_most) = (0, 0);
         let mut history =
             history::History::new(self.finder.design, self.finder.profile.history_cost);
         while !queue.is_empty() {
@@ -122,14 +130,25 @@ impl<'a> Router<'a> {
                     layout.remove_route(displaced);
                     routed[displaced.index()] = None;
                     rip_ups[displaced.index()] += 1;
+                    rip_ups_since_most += 1;
                     queue.push_back(displaced);
                 }
                 layout.add_route(id, &found);
                 routed[id.index()] = Some(found);
                 let done = routed.iter().filter(|r| r.is_some()).count();
+                if done > most_routed {
+                    (most_routed, rip_ups_since_most) = (done, 0);
+                } else if rip_ups_since_most >= STALLED_ROUNDS * total {
+                    may_rip_up = false;
+                }
                 events.publish(Event::ConnectionRouted { done, total });
             }
         }
+        eprintln!(
+            "\nPROBE rip-ups {} of {} connections",
+            rip_ups.iter().sum::<u32>(),
+            total
+        );
         unrouted.sort_unstable();
         hemmed_in.sort_unstable();
         hemmed_in.dedup();

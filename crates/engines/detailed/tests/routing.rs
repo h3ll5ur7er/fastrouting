@@ -1,8 +1,8 @@
 use traxide_contracts::geometry::{Point, Polygon, Rect, Shape};
 use traxide_contracts::testing::{DesignBuilder, at, mm};
 use traxide_contracts::{
-    Connection, ConnectionId, Corridors, Design, KeepoutScope, LayerId, Plan, Profile, Routes,
-    RoutingResult, Violation,
+    Connection, ConnectionId, Corridors, Design, Event, KeepoutScope, LayerId, Plan, Profile,
+    Routes, RoutingResult, Violation,
 };
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Silent};
@@ -360,9 +360,8 @@ fn rips_up_a_connection_in_the_way_and_routes_it_again_elsewhere() {
     assert_legal(&design, &result.routes);
 }
 
-#[test]
-fn gives_up_when_two_connections_need_the_same_only_way() {
-    let design = DesignBuilder::new(20.0, 6.0)
+fn one_way_for_two() -> Design {
+    DesignBuilder::new(20.0, 6.0)
         .layers(1)
         .without_vias()
         .keepout(
@@ -374,10 +373,50 @@ fn gives_up_when_two_connections_need_the_same_only_way() {
         .smd("Y2", Some("Y"), at(18.0, 5.55), 0.4, 0)
         .smd("X1", Some("X"), at(3.0, 5.55), 0.4, 0)
         .smd("X2", Some("X"), at(17.0, 5.55), 0.4, 0)
-        .build();
+        .build()
+}
+
+#[test]
+fn gives_up_when_two_connections_need_the_same_only_way() {
+    let design = one_way_for_two();
     let result = route(&design, &[("X1", "X2"), ("Y1", "Y2")]);
     assert_eq!(result.unrouted.len(), 1);
     assert_legal(&design, &result.routes);
+}
+
+#[test]
+fn stops_ripping_up_once_a_round_of_rip_ups_routes_no_more_connections() {
+    let design = one_way_for_two();
+    let rules = traxide_rules::compile(
+        &design,
+        Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
+    let mut layout = Layout::build(&design, &rules);
+    let plan = Plan {
+        connections: vec![
+            connection(&design, "X1", "X2"),
+            connection(&design, "Y1", "Y2"),
+        ],
+    };
+    let commits = std::cell::Cell::new(0);
+    let count = |event: Event| {
+        if matches!(event, Event::ConnectionRouted { .. }) {
+            commits.set(commits.get() + 1);
+        }
+    };
+    let result = Router::new(&design, &rules, &profile()).route_plan(
+        &plan,
+        None,
+        &mut layout,
+        &CancelToken::new(),
+        &count,
+    );
+    assert_eq!(result.unrouted.len(), 1);
+    // Each taking the gap from the other until both were ripped up ten times
+    // committed 21 routes.
+    assert!(commits.get() <= 5, "{} routes committed", commits.get());
 }
 
 #[test]

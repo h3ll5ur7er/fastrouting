@@ -39,6 +39,20 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Negotiation that goes round in circles (M2, TRX-48)
+
+On congested corpus boards the routed count rose, then swung back and forth: Issue039 between 135 and 151 of 204 connections for as long as it was let run, as connections took each other's ways in turn, each up to 20 times. Negotiation now ends once two rounds of rip-ups, as many as there are connections each, have routed no more connections than the best so far; the connections left search without ripping up others. Measured on this machine:
+
+| Board | Before | One round | **Two rounds** | Three rounds |
+| --- | --- | --- | --- | --- |
+| Issue039-bug-design | > 150 s | 28 s, 158 of 204 | **54 s, 155 of 204** | 84 s, 153 of 204 |
+| Issue110-RelayModule | > 150 s | 97 s, 77 of 88 | **134 s, 81 of 88** | |
+| Issue034-Green14SegLED | 40 s, 147 of 147 | 28 s, 144 of 147 | **41 s, 147 of 147** | 42 s, 147 of 147 |
+| Issue029-hw48na | 66 s, 83 of 91 | 45 s, 82 of 91 | **68 s, 83 of 91** | |
+| keyboard-tkl | 1.9 s, complete | 1.9 s, complete | **1.9 s, complete** | |
+
+One round cost Issue034 three connections; two keep every board as complete as before and end the circling. The boards stay slow for another reason: single searches of up to half a second each where the board is crowded ([[TRX-48]]).
+
 ## Real boards: the corpus against Freerouting (M2, TRX-15)
 
 October 2026, `cargo xtask corpus --freerouting … --timeout 120` in the Benchmark workflow, six shards on GitHub Actions runners (4 vCPUs each), on commit 7534cf5. The 76 boards are the DSN files of Freerouting's own bug reports. Both routers get the same DSN and 120 s; `traxide check` judges both sessions alike, counting only the rules a session breaks beyond those the board already broke.
