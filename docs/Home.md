@@ -5,7 +5,7 @@
 Freerouting does the job, but it has needed a Java runtime until its native builds of October 2026, still routes on one CPU core, and can take hours on boards like a 4-layer RP2350 tenkeyless keyboard ([Prior art](Research/Prior-art.md)). traxide is one native binary per platform, uses every CPU core and, when there is one, the GPU, and routes with the algorithms that replaced maze routing in chip design: negotiated congestion global routing followed by parallel detailed routing.
 
 > [!NOTE]
-> traxide is a walking skeleton: it routes DSN boards end to end, and KiCad 10's DRC finds the results clean, but it is not yet fast or complete on large boards. See [[Benchmarks]] and the [Project plan](Project-plan.md).
+> traxide routes a 4-layer RP2350 ISO TKL keyboard completely in about 10 s, clean in KiCad 10's DRC, where Freerouting 2.5 takes 266 s and leaves 199 violations ([[Benchmarks]]). It reads DSN and writes SES; reading KiCad's own files and a KiCad plugin come next ([Project plan](Project-plan.md)).
 
 ## Goals
 

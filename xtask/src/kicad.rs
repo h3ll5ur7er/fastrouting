@@ -19,6 +19,8 @@ pub enum Kicad {
 #[derive(Debug)]
 pub struct Judgement {
     pub violations: Vec<String>,
+    /// How many violations of each kind, such as `clearance` or `hole_clearance`.
+    pub violation_kinds: Vec<(String, usize)>,
     pub unconnected: Vec<String>,
     pub tracks: usize,
     pub vias: usize,
@@ -39,6 +41,8 @@ struct DrcReport {
 
 #[derive(Debug, Deserialize)]
 struct Finding {
+    #[serde(rename = "type")]
+    kind: String,
     description: String,
     #[serde(default)]
     items: Vec<FindingItem>,
@@ -111,8 +115,13 @@ impl Kicad {
             .find_map(|line| serde_json::from_str(line).ok())
             .context("the import printed no statistics")?;
         let drc: DrcReport = serde_json::from_str(&std::fs::read_to_string(out.join(report))?)?;
+        let mut kinds = std::collections::BTreeMap::new();
+        for finding in &drc.violations {
+            *kinds.entry(finding.kind.clone()).or_insert(0) += 1;
+        }
         Ok(Judgement {
             violations: drc.violations.iter().map(Finding::line).collect(),
+            violation_kinds: kinds.into_iter().collect(),
             unconnected: drc.unconnected_items.iter().map(Finding::line).collect(),
             tracks: imported.tracks,
             vias: imported.vias,

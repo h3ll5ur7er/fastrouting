@@ -146,6 +146,31 @@ fn table(runs: &[Run]) -> String {
             ),
         });
     }
+    let kinds: Vec<String> = runs
+        .iter()
+        .filter_map(|run| {
+            let judgement = run
+                .judgement
+                .as_ref()
+                .filter(|j| !j.violation_kinds.is_empty())?;
+            let counts: Vec<String> = judgement
+                .violation_kinds
+                .iter()
+                .map(|(kind, n)| format!("{n} {kind}"))
+                .collect();
+            Some(format!(
+                "- {} by {}: {}",
+                run.board,
+                run.router,
+                counts.join(", ")
+            ))
+        })
+        .collect();
+    if !kinds.is_empty() {
+        rows.push(String::new());
+        rows.push("Violations by kind:".into());
+        rows.extend(kinds);
+    }
     rows.join("\n")
 }
 

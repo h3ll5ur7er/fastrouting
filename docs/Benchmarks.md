@@ -13,6 +13,19 @@ time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 
 The machine: a 4-core cloud container (x86-64), one thread used.
 
+## traxide against Freerouting 2.5.0
+
+October 2026, `cargo xtask bench` in the Benchmark workflow on a GitHub Actions runner (ubuntu-latest, 4 vCPUs): both routers get the same DSN exported by KiCad 10, KiCad 10 imports each session, and KiCad's own DRC judges both. Freerouting ran with its defaults (`-de board.dsn -do board.ses --gui.enabled=false`); traxide with its default profile.
+
+| Board | Router | Time | Unconnected | Violations | Tracks | Vias | Track length |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| matrix-6x17 | **traxide** | **1.4 s** | 0 | **0** | 547 | **23** | **5947 mm** |
+| matrix-6x17 | Freerouting | 54.4 s | 0 | 30 | 852 | 40 | 6605 mm |
+| keyboard-tkl | **traxide** | **9.8 s** | 0 | **0** | 1552 | **108** | **8304 mm** |
+| keyboard-tkl | Freerouting | 266.2 s | 0 | 199 | 1645 | 225 | 8548 mm |
+
+traxide is 27–39 times faster, with half the vias and less track, and its boards are the ones KiCad finds clean. Part of Freerouting's violations come from rules a DSN does not carry, such as KiCad's copper-to-edge clearance, which traxide assumes for boards from KiCad ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]); the benchmark now lists violations by kind, so the next run will say how many.
+
 ## Global routing corridors: measured, and off (M2, TRX-26)
 
 October 2026: the Global Routing Engine plans a corridor for every connection on a grid of cells four track pitches wide (1.4 mm on the keyboard), with negotiated congestion; detailed routing then keeps inside the corridor, or searches the whole window when the corridor turns out to be blocked.
