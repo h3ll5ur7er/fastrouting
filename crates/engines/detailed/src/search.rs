@@ -1,7 +1,8 @@
 use crate::grid::{DIRECTIONS, Grid, Node};
 use crate::path::Step;
+use crate::scratch::Stamped;
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::BinaryHeap;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
     Connection, ConstraintSet, Design, LayerId, LayoutAccess, NetId, Pad, Profile, Via, ViaKindId,
@@ -9,25 +10,51 @@ use traxide_contracts::{
 
 /// No heading yet: just left a pad or a via.
 const UNSET: u8 = 8;
+const HEADINGS: usize = 9;
+/// The slot of the target pad's centre, reached from any node near it.
+const TARGET: u32 = u32::MAX;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// Search memory kept between connections, so each search costs no allocation.
+#[derive(Debug, Default)]
+pub(crate) struct Scratch {
+    best: Stamped<i64>,
+    /// The slot a state was reached from and the via taken, packed (see `Came`).
+    came: Stamped<u64>,
+    edge_clear: Stamped<bool>,
+    via_clear: Stamped<bool>,
+    /// What the last stretch to the target's centre costs, by layer and node.
+    finish: Stamped<i64>,
+}
+
+/// A state of the search: a node, a layer and the heading it was entered with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct State {
     node: Node,
     layer: u32,
     heading: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum Vertex {
-    Grid(State),
-    /// The centre of the target pad, reached from any node near it.
-    Target,
-}
-
 #[derive(Debug, Clone, Copy)]
 struct Came {
-    from: Option<State>,
+    from: Option<u32>,
     via: Option<ViaKindId>,
+}
+
+impl Came {
+    fn pack(self) -> u64 {
+        let from = self.from.map_or(0, |slot| u64::from(slot) + 1);
+        let via = self.via.map_or(0, |kind| u64::from(kind.0) + 1);
+        from | via << 32
+    }
+
+    fn unpack(packed: u64) -> Self {
+        let from = (packed & 0xFFFF_FFFF) as u32;
+        let via = (packed >> 32) as u32;
+        Self {
+            from: from.checked_sub(1),
+            via: via.checked_sub(1).map(ViaKindId),
+        }
+    }
 }
 
 pub(crate) struct Search<'a, L> {
@@ -75,135 +102,123 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
     }
 
-    pub(crate) fn run(self) -> Option<Vec<Step>> {
+    pub(crate) fn run(self, scratch: &mut Scratch) -> Option<Vec<Step>> {
         if let Some(direct) = self.direct_line() {
             return Some(direct);
         }
-        let target_access = self.access(self.to);
-        let mut best: HashMap<Vertex, i64> = HashMap::new();
-        let mut came: HashMap<State, Came> = HashMap::new();
-        let mut target_came: Option<State> = None;
+        let layers = self.design.layers.len();
+        let nodes = self.grid.node_count();
+        scratch.best.reset(nodes * layers * HEADINGS);
+        scratch.came.reset(nodes * layers * HEADINGS);
+        scratch.edge_clear.reset(nodes * layers * DIRECTIONS.len());
+        scratch.via_clear.reset(nodes * self.via_kinds.len());
+        scratch.finish.reset(nodes * layers);
+        for (state, cost) in self.access(self.to) {
+            scratch.finish.set(self.layer_node(state), cost);
+        }
+
+        let mut best_target = i64::MAX;
+        let mut target_came = None;
         let mut open = BinaryHeap::new();
         for (state, cost) in self.access(self.from) {
-            if cost < *best.get(&Vertex::Grid(state)).unwrap_or(&i64::MAX) {
-                best.insert(Vertex::Grid(state), cost);
-                came.insert(
-                    state,
+            let slot = self.slot(state);
+            if cost < scratch.best.get(slot as usize).unwrap_or(i64::MAX) {
+                scratch.best.set(slot as usize, cost);
+                scratch.came.set(
+                    slot as usize,
                     Came {
                         from: None,
                         via: None,
-                    },
+                    }
+                    .pack(),
                 );
-                open.push(Reverse((
-                    cost + self.estimate(state),
-                    cost,
-                    Vertex::Grid(state),
-                )));
+                open.push(Reverse((cost + self.estimate(state), cost, slot)));
             }
         }
-        let mut edge_clear: HashMap<(Node, u32, usize), bool> = HashMap::new();
-        let mut via_clear: HashMap<(Node, ViaKindId), bool> = HashMap::new();
-        while let Some(Reverse((_, cost, vertex))) = open.pop() {
-            if cost > *best.get(&vertex).unwrap_or(&i64::MAX) {
+        while let Some(Reverse((_, cost, slot))) = open.pop() {
+            if slot == TARGET {
+                return Some(self.steps(target_came?, scratch));
+            }
+            if cost > scratch.best.get(slot as usize).unwrap_or(i64::MAX) {
                 continue;
             }
-            let Vertex::Grid(state) = vertex else {
-                return Some(self.steps(target_came?, &came));
-            };
-            let mut relax = |next: Vertex,
+            let state = self.state(slot);
+            let mut relax = |next: Option<State>,
                              step_cost: i64,
-                             origin: Came,
-                             open: &mut BinaryHeap<_>| {
+                             via: Option<ViaKindId>,
+                             scratch: &mut Scratch| {
                 let total = cost + step_cost;
-                if total < *best.get(&next).unwrap_or(&i64::MAX) {
-                    best.insert(next, total);
-                    match next {
-                        Vertex::Grid(next_state) => {
-                            came.insert(next_state, origin);
-                            open.push(Reverse((total + self.estimate(next_state), total, next)));
-                        }
-                        Vertex::Target => {
-                            target_came = origin.from;
-                            open.push(Reverse((total, total, next)));
+                let came = Came {
+                    from: Some(slot),
+                    via,
+                };
+                match next {
+                    Some(next) => {
+                        let next_slot = self.slot(next);
+                        if total < scratch.best.get(next_slot as usize).unwrap_or(i64::MAX) {
+                            scratch.best.set(next_slot as usize, total);
+                            scratch.came.set(next_slot as usize, came.pack());
+                            open.push(Reverse((total + self.estimate(next), total, next_slot)));
                         }
                     }
+                    None if total < best_target => {
+                        best_target = total;
+                        target_came = Some(slot);
+                        open.push(Reverse((total, total, TARGET)));
+                    }
+                    None => {}
                 }
             };
-            if let Some(&(_, finish)) = target_access
-                .iter()
-                .find(|(s, _)| s.node == state.node && s.layer == state.layer)
-            {
-                relax(
-                    Vertex::Target,
-                    finish,
-                    Came {
-                        from: Some(state),
-                        via: None,
-                    },
-                    &mut open,
-                );
+            if let Some(finish) = scratch.finish.get(self.layer_node(state)) {
+                relax(None, finish, None, scratch);
             }
-            for (index, (dx, dy)) in DIRECTIONS.iter().enumerate() {
-                let turn = turn(state.heading, index);
-                if turn > 2 {
-                    continue;
-                }
+            for (direction, (dx, dy)) in DIRECTIONS.iter().enumerate() {
+                let turn = turn(state.heading, direction);
                 let next = (state.node.0 + dx, state.node.1 + dy);
-                if !self.grid.contains(next) {
+                // Turns sharper than 90° leave acute angles that trap etchant.
+                if turn > 2 || !self.grid.contains(next) {
                     continue;
                 }
-                let clear = *edge_clear
-                    .entry((state.node, state.layer, index))
-                    .or_insert_with(|| {
-                        let segment =
-                            Segment::new(self.grid.point(state.node), self.grid.point(next));
-                        self.layout.is_track_clear(
-                            self.net,
-                            LayerId(state.layer),
-                            segment,
-                            self.width,
-                        )
-                    });
+                let edge = (self.layer_node(state) * DIRECTIONS.len()) + direction;
+                let clear = scratch.edge_clear.get_or_insert_with(edge, || {
+                    let segment = Segment::new(self.grid.point(state.node), self.grid.point(next));
+                    self.layout
+                        .is_track_clear(self.net, LayerId(state.layer), segment, self.width)
+                });
                 if clear {
                     let length = if dx * dy == 0 {
                         i64::from(self.profile.grid_pitch)
                     } else {
                         self.diagonal
                     };
-                    let step_cost = length + i64::from(turn) * self.profile.bend_cost;
                     let next = State {
                         node: next,
                         layer: state.layer,
-                        heading: index as u8,
+                        heading: direction as u8,
                     };
                     relax(
-                        Vertex::Grid(next),
-                        step_cost,
-                        Came {
-                            from: Some(state),
-                            via: None,
-                        },
-                        &mut open,
+                        Some(next),
+                        length + i64::from(turn) * self.profile.bend_cost,
+                        None,
+                        scratch,
                     );
                 }
             }
-            for &kind in self.via_kinds {
-                let kind_of = self.design.via_kind(kind);
-                for layer in self
-                    .design
-                    .layer_ids()
-                    .filter(|&l| l.0 != state.layer && self.design.layers[l.index()].routable)
-                {
-                    if !kind_of.connects(LayerId(state.layer), layer) {
-                        continue;
-                    }
-                    let clear = *via_clear.entry((state.node, kind)).or_insert_with(|| {
-                        let via = Via {
+            for (position, &kind) in self.via_kinds.iter().enumerate() {
+                let spans = self.design.via_kind(kind);
+                let others = self.design.layer_ids().filter(|&l| {
+                    l.0 != state.layer
+                        && self.design.layers[l.index()].routable
+                        && spans.connects(LayerId(state.layer), l)
+                });
+                for layer in others.collect::<Vec<_>>() {
+                    let check = self.grid.index(state.node) * self.via_kinds.len() + position;
+                    let clear = scratch.via_clear.get_or_insert_with(check, || {
+                        self.layout.is_via_clear(&Via {
                             net: self.net,
                             kind,
                             position: self.grid.point(state.node),
-                        };
-                        self.layout.is_via_clear(&via)
+                        })
                     });
                     if clear {
                         let next = State {
@@ -211,20 +226,32 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                             layer: layer.0,
                             heading: UNSET,
                         };
-                        relax(
-                            Vertex::Grid(next),
-                            self.profile.via_cost,
-                            Came {
-                                from: Some(state),
-                                via: Some(kind),
-                            },
-                            &mut open,
-                        );
+                        relax(Some(next), self.profile.via_cost, Some(kind), scratch);
                     }
                 }
             }
         }
         None
+    }
+
+    fn layer_node(&self, state: State) -> usize {
+        state.layer as usize * self.grid.node_count() + self.grid.index(state.node)
+    }
+
+    fn slot(&self, state: State) -> u32 {
+        u32::try_from(self.layer_node(state) * HEADINGS + usize::from(state.heading))
+            .expect("search windows below 2³² states")
+    }
+
+    fn state(&self, slot: u32) -> State {
+        let slot = slot as usize;
+        let (layer_node, heading) = (slot / HEADINGS, slot % HEADINGS);
+        let nodes = self.grid.node_count();
+        State {
+            node: self.grid.node(layer_node % nodes),
+            layer: (layer_node / nodes) as u32,
+            heading: heading as u8,
+        }
     }
 
     /// A straight track between the pad centres, when one fits on a layer both share.
@@ -294,21 +321,28 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         distance + via
     }
 
-    fn steps(&self, last: State, came: &HashMap<State, Came>) -> Vec<Step> {
+    fn steps(&self, last: u32, scratch: &Scratch) -> Vec<Step> {
+        let last_layer = LayerId(self.state(last).layer);
         let mut reversed = vec![Step {
             at: self.to.position,
-            layer: LayerId(last.layer),
+            layer: last_layer,
             via: None,
         }];
         let mut current = Some(last);
-        while let Some(state) = current {
-            let origin = came[&state];
+        while let Some(slot) = current {
+            let state = self.state(slot);
+            let came = Came::unpack(
+                scratch
+                    .came
+                    .get(slot as usize)
+                    .expect("every reached state knows its origin"),
+            );
             reversed.push(Step {
                 at: self.grid.point(state.node),
                 layer: LayerId(state.layer),
-                via: origin.via,
+                via: came.via,
             });
-            current = origin.from;
+            current = came.from;
         }
         let first_layer = reversed.last().map_or(LayerId(0), |s| s.layer);
         reversed.push(Step {

@@ -45,6 +45,10 @@ impl Rect {
             && other.min.y <= self.max.y
     }
 
+    pub fn contains_rect(self, other: Self) -> bool {
+        self.contains(other.min) && self.contains(other.max)
+    }
+
     pub fn contains(self, p: Point) -> bool {
         (self.min.x..=self.max.x).contains(&p.x) && (self.min.y..=self.max.y).contains(&p.y)
     }

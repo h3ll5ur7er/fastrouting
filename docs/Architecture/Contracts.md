@@ -73,26 +73,23 @@ classDiagram
 
 ## Service contracts
 
-Each component implements a trait from `contracts`. Engines are written against the access traits as generic parameters, so the compiler inlines across the boundary (see [Architecture](../Architecture.md#performance-within-the-boundaries)).
+Engines reach resource access only through traits in `traxide-contracts`; the manager picks the implementation and the compiler monomorphises the call (see [Architecture](../Architecture.md#performance-within-the-boundaries)). Where only one implementation exists and only managers call it, a component exposes plain functions instead of a trait (YAGNI): Board Access's `load_design` and `store_routes`, Profile Access's `load_profile`, the engines' `compile`, `plan` and `verify`.
+
+The routing state, as built:
+
+![[crates/contracts/src/layout.rs#L4-L17]]
+
+Transactions for parallel workers (`begin`, `commit`) join this trait with [[TRX-27]].
+
+## For tests
+
+With the `testing` feature, `traxide_contracts::testing` builds designs in a few lines, in millimetres:
 
 ```rust
-pub trait LayoutAccess: Sync {
-    type Txn<'a>: LayoutTxn where Self: 'a;
-    fn obstacles_near(&self, layer: LayerId, area: Rect, out: &mut Vec<Obstacle>);
-    fn begin(&self, region: Rect) -> Self::Txn<'_>;
-}
-
-pub trait LayoutTxn {
-    fn add(&mut self, item: RouteItem) -> Result<(), Conflict>;
-    fn commit(self) -> Result<(), Conflict>; // optimistic: fails if another worker changed the region
-}
-
-pub trait DetailedRouting {
-    fn route<L: LayoutAccess, C: ComputeAccess>(
-        &self, batch: &Batch, corridors: &Corridors, rules: &ConstraintSet,
-        layout: &L, compute: &C, cancel: &CancelToken,
-    ) -> BatchOutcome;
-}
+let design = DesignBuilder::new(20.0, 10.0)
+    .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)
+    .tht("J1-1", Some("A"), at(15.0, 5.0), 1.7)
+    .build();
 ```
 
-The traits are a sketch; [[TRX-4]] fixes them.
+Only test code enables the feature; release builds never contain it.

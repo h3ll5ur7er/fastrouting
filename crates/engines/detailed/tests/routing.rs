@@ -28,7 +28,7 @@ fn route(design: &Design, pairs: &[(&str, &str)]) -> Vec<Option<Routes>> {
     let rules = traxide_rules::compile(design, traxide_rules::Purpose::Routing);
     let mut layout = Layout::build(design, &rules);
     let profile = profile();
-    let router = Router::new(design, &rules, &profile);
+    let mut router = Router::new(design, &rules, &profile);
     pairs
         .iter()
         .map(|&(from, to)| router.route(connection(design, from, to), &mut layout))

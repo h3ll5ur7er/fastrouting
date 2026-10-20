@@ -38,6 +38,28 @@ impl Grid {
         Point::new(x * self.pitch, y * self.pitch)
     }
 
+    pub(crate) fn node_count(&self) -> usize {
+        self.columns() * usize::try_from(self.max.1 - self.min.1 + 1).unwrap_or(0)
+    }
+
+    fn columns(&self) -> usize {
+        usize::try_from(self.max.0 - self.min.0 + 1).unwrap_or(0)
+    }
+
+    /// A dense index of a node inside the window, for arrays over all nodes.
+    pub(crate) fn index(&self, (x, y): Node) -> usize {
+        debug_assert!(self.contains((x, y)));
+        (y - self.min.1) as usize * self.columns() + (x - self.min.0) as usize
+    }
+
+    pub(crate) fn node(&self, index: usize) -> Node {
+        let columns = self.columns();
+        (
+            self.min.0 + (index % columns) as i32,
+            self.min.1 + (index / columns) as i32,
+        )
+    }
+
     pub(crate) fn contains(&self, (x, y): Node) -> bool {
         (self.min.0..=self.max.0).contains(&x) && (self.min.1..=self.max.1).contains(&y)
     }
@@ -85,6 +107,21 @@ mod tests {
         assert!(grid.contains((0, 1)) && grid.contains((2, 1)));
         assert!(!grid.contains((-1, 1)) && !grid.contains((3, 1)));
         assert!(!grid.contains((0, 0)), "the window's edge is not inside it");
+    }
+
+    #[test]
+    fn dense_indices_round_trip() {
+        let grid = Grid::covering(
+            Rect {
+                min: Point::new(-550, 0),
+                max: Point::new(250, 100),
+            },
+            100,
+        );
+        for node in [(-5, 1), (2, 1), (0, 1)] {
+            assert_eq!(grid.node(grid.index(node)), node);
+        }
+        assert_eq!(grid.node_count(), 8);
     }
 
     #[test]

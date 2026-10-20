@@ -6,6 +6,7 @@
 
 mod grid;
 mod path;
+mod scratch;
 mod search;
 
 use traxide_contracts::{Connection, ConstraintSet, Design, LayoutAccess, Profile, Routes};
@@ -14,6 +15,7 @@ pub struct Router<'a> {
     design: &'a Design,
     rules: &'a ConstraintSet,
     profile: &'a Profile,
+    scratch: search::Scratch,
 }
 
 impl std::fmt::Debug for Router<'_> {
@@ -30,13 +32,18 @@ impl<'a> Router<'a> {
             design,
             rules,
             profile,
+            scratch: search::Scratch::default(),
         }
     }
 
     /// Routes `connection` and adds its copper to `layout`; `None` when no path fits.
-    pub fn route(&self, connection: Connection, layout: &mut impl LayoutAccess) -> Option<Routes> {
-        let steps =
-            search::Search::new(self.design, self.rules, self.profile, connection, layout).run()?;
+    pub fn route(
+        &mut self,
+        connection: Connection,
+        layout: &mut impl LayoutAccess,
+    ) -> Option<Routes> {
+        let search = search::Search::new(self.design, self.rules, self.profile, connection, layout);
+        let steps = search.run(&mut self.scratch)?;
         let routes = path::to_routes(
             &steps,
             connection.net,

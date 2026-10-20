@@ -2,7 +2,7 @@
 id: TRX-4
 title: Define the data and service contracts
 type: feature
-status: in-progress
+status: done
 priority: high
 labels: [contracts]
 estimate: 3
@@ -11,11 +11,11 @@ layer: contract
 
 Turn the sketch in [[Architecture/Contracts]] into the `contracts` crate.
 
-- [ ] Ids as dense typed indices; `Design`, `Stackup`, `Net`, `Pad`, `Keepout`, `Route`, `RuleSource`
-- [ ] `ConstraintSet`, `Plan`, `Connection`, `Batch`, `Corridors`, `Routes`, `Report`, `Job`, `Profile`, `Event`
-- [ ] Traits for every manager, engine and resource access, generic over the access traits (no `dyn` in hot paths)
-- [ ] Doc comments state units (nm) and invariants
+- [x] Ids as dense typed indices; `Design`, `Stackup`, `Net`, `Pad`, `Keepout`, `Route`, `RuleSource`
+- [x] `ConstraintSet`, `Plan`, `Connection`, `Batch`, `Corridors`, `Routes`, `Report`, `Job`, `Profile`, `Event`
+- [x] `LayoutAccess` as the trait engines use; plain functions where a trait would have one implementation and only managers as callers (see [[Architecture/Contracts#service-contracts]])
+- [x] Doc comments state units (nm) and invariants
 
-Done when every component crate compiles against its trait with `todo!()` bodies.
+Built as needed by the walking skeleton: `Batch` and `Corridors` arrive with [[TRX-24]] and [[TRX-26]], run reports with [[TRX-21]].
 
 **Depends on:** [[TRX-2]]

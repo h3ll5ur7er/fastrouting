@@ -31,8 +31,10 @@ crates/
     kicad/                   the KiCad PCM package around the binary
     viewer/                  optional live viewer
     wasm/                    the web demo
-xtask/                       repository tasks: layer check, corpus, release
-corpus/                      benchmark boards and baselines (Git LFS)
+xtask/                       repository tasks: layer check, end-to-end test, later corpus and release
+e2e/kicad/                   the KiCad half of the end-to-end test: board recipes, import, export
+fixtures/boards/             small DSN boards shared by the tests of several crates
+corpus/                      benchmark boards and baselines (Git LFS), with [[TRX-15]]
 docs/                        this wiki
 tasks/                       the task board
 ```
@@ -56,11 +58,16 @@ CI runs the check on every pull request, next to `cargo fmt --check`, `cargo cli
 ## Building
 
 ```bash
-cargo build --release            # the traxide binary in target/release
-cargo run -p traxide-cli -- route board.dsn -o board.ses
+cargo build --release                                  # the traxide binary in target/release
+cargo run --release -p traxide-cli -- route board.dsn  # writes board.ses next to it
+cargo test --all-features                              # unit and end-to-end tests
+cargo xtask layers                                     # the layer rules
+cargo xtask e2e                                        # the KiCad round trip, see below
 ```
 
-Release builds use `lto = "fat"`, `codegen-units = 1` and `panic = "abort"`. The GPU backend is a default feature (`gpu`); `--no-default-features` builds a CPU-only binary.
+Release builds use `lto = "fat"`, `codegen-units = 1` and `panic = "abort"`. Once the GPU backend exists ([[TRX-28]]) it will be a default feature, and `--no-default-features` will build a CPU-only binary.
+
+`traxide route` exits with 0 when every connection is routed, 2 when some are not, 3 when the independent check finds a broken rule (a bug: please report it with the board) and 1 on errors.
 
 ## Craftsmanship
 
@@ -82,7 +89,13 @@ Three levels, all run by `cargo test` except where noted:
 
 - **Unit tests** next to the code. Engines are pure and take contracts, so most tests build a small `Design` in code.
 - **End-to-end tests** in `tests/` of the CLI crate: run the `traxide` binary on DSN files and check the SES it writes — every connection routed, no clearance violation.
-- **Real-world tests** through KiCad (`cargo xtask e2e`, needs KiCad with its Python module): generate boards in KiCad, export DSN, route with `traxide`, import the SES back into KiCad and require KiCad's own DRC to report no violations and no unconnected items. KiCad, not our code, is the judge.
+- **Real-world tests** through KiCad: `cargo xtask e2e` builds the board recipes of `e2e/kicad/boards.py` with KiCad's Python API, exports them as DSN, routes them with `traxide`, imports the sessions back into KiCad and requires KiCad's own DRC (`kicad-cli pcb drc`) to report no violations and no unconnected items. KiCad, not our code, is the judge. Results land in `target/e2e/<recipe>/`.
+  - By default KiCad runs in the official Docker image `kicad/kicad:10.0`; `TRAXIDE_KICAD_IMAGE=kicad/kicad:9.0` tests KiCad 9. CI runs both.
+  - `cargo xtask e2e --local` uses an installed KiCad instead: `TRAXIDE_KICAD_PYTHON` names a Python that can `import pcbnew` (on macOS the one inside `KiCad.app`), `TRAXIDE_KICAD_CLI` the `kicad-cli`.
+  - Name recipes to run only those: `cargo xtask e2e crossing matrix-6x17`. The default set stays fast; bigger boards are benchmarks ([[Benchmarks]]).
+  - KiCad 7 and 8 are not supported: they are not what people route with, and KiCad 7 cannot import sessions from a script.
+- **Ground truth** from KiCad: `e2e/kicad/fixtures.py` exports boards together with KiCad's own placement of every pad; `crates/access/board/tests/kicad_ground_truth.rs` holds the DSN reader to it.
+- **Test designs** in code: `traxide-contracts` with the `testing` feature offers `DesignBuilder`, so engine tests build boards in a few lines.
 - **Property tests** (`proptest`) for geometry and for Layout Access: random shapes, random concurrent transactions.
 - **Golden tests** for Board Access: parse, write, parse again, compare; and fixed DSN files with expected SES output.
 - **Determinism tests**: route the same board with 1, 4 and all threads, CPU and GPU, and require identical routes.
@@ -90,7 +103,7 @@ Three levels, all run by `cargo test` except where noted:
 
 ## Benchmarking
 
-`cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
+Until the benchmark exists ([[TRX-22]]), [[Benchmarks]] records measurements by hand. Then `cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
 
 ## Clean-room rules
 

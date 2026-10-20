@@ -58,6 +58,19 @@ impl Polygon {
         inside
     }
 
+    /// The rectangle this polygon is, if it is one with axis-parallel sides.
+    pub fn as_rect(&self) -> Option<Rect> {
+        let bounds = self.bounds();
+        let corners = [
+            bounds.min,
+            Point::new(bounds.max.x, bounds.min.y),
+            bounds.max,
+            Point::new(bounds.min.x, bounds.max.y),
+        ];
+        (self.points.len() == 4 && corners.iter().all(|c| self.points.contains(c)))
+            .then_some(bounds)
+    }
+
     pub fn map(&self, f: impl Fn(Point) -> Point) -> Self {
         Self {
             points: self.points.iter().map(|&p| f(p)).collect(),
@@ -108,6 +121,25 @@ mod tests {
         .expect("eight points");
         assert!(!u.contains(Point::new(15, 20)));
         assert!(u.contains(Point::new(5, 20)));
+    }
+
+    #[test]
+    fn an_axis_parallel_rectangle_is_recognised() {
+        assert_eq!(
+            square().as_rect(),
+            Some(Rect {
+                min: Point::new(0, 0),
+                max: Point::new(10, 10)
+            })
+        );
+        let tilted = Polygon::new(vec![
+            Point::new(0, 5),
+            Point::new(5, 0),
+            Point::new(10, 5),
+            Point::new(5, 10),
+        ])
+        .expect("four points");
+        assert_eq!(tilted.as_rect(), None);
     }
 
     #[test]

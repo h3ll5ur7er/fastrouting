@@ -61,7 +61,7 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::Planning));
     let plan = traxide_planning::plan(&design);
     events.publish(Event::StageStarted(Stage::Routing));
-    let router = Router::new(&design, &rules, &profile);
+    let mut router = Router::new(&design, &rules, &profile);
     let mut routes = Routes::default();
     let mut unrouted: Vec<Connection> = Vec::new();
     let total = plan.connections.len();

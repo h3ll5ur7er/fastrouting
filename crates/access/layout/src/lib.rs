@@ -39,6 +39,9 @@ enum Item {
 pub struct Layout<'a> {
     design: &'a Design,
     rules: &'a ConstraintSet,
+    /// Where copper is far enough from the edge, when the board is a plain
+    /// rectangle: the common case, and a much cheaper test than the general one.
+    safe_area: Option<Rect>,
     obstacles: Vec<Obstacle>,
     layers: Vec<Buckets>,
 }
@@ -52,9 +55,14 @@ impl<'a> Layout<'a> {
             .iter()
             .map(|_| Buckets::new(bounds, BUCKET_SIZE))
             .collect();
+        let safe_area = design
+            .outline
+            .as_rect()
+            .map(|r| r.inflated(-rules.edge_clearance()));
         let mut layout = Self {
             design,
             rules,
+            safe_area,
             obstacles: Vec::new(),
             layers,
         };
@@ -93,7 +101,11 @@ impl<'a> Layout<'a> {
     }
 
     fn is_clear(&self, net: NetId, layer: LayerId, shape: &Shape, item: Item) -> bool {
-        if !shape.is_inside(&self.design.outline, self.rules.edge_clearance()) {
+        let inside = match self.safe_area {
+            Some(area) => area.contains_rect(shape.bounds()),
+            None => shape.is_inside(&self.design.outline, self.rules.edge_clearance()),
+        };
+        if !inside {
             return false;
         }
         let reach = shape.bounds().inflated(self.rules.largest_clearance());
