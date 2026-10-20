@@ -84,6 +84,8 @@ Seven boards complete, among them Issue217, which Freerouting completed only by 
 
 Rip-up and reroute stops ripping up once twice as many rip-ups as there are connections have passed without more connections routed; the connections still queued then search without crossing anything, and fail. That rule ends negotiation on every congested board (Issue039: 472 rip-ups for 204 connections; Mars-64: 412 for 106). No profile setting helps:
 
+Since this analysis, negotiation ends after four rounds without gain instead of two ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]): the Mars-64 boards route 78 connections of 106 again (71 of 94 nets), as without an end; the gap to Freerouting's 94 of 94 stays.
+
 | Profile change | Issue039 (204) | Mars-64 (106) | Issue283 (200) | RelayModule (88) |
 | --- | ---: | ---: | ---: | ---: |
 | none (default) | 155 | 72 | 178 | 81 |
