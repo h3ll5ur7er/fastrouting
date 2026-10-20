@@ -24,7 +24,16 @@ October 2026, `cargo xtask bench` in the Benchmark workflow on a GitHub Actions 
 | keyboard-tkl | **traxide** | **9.8 s / 7.2 s** | 0 | **0** | 1552 / 1550 | **108** | **8304 mm** |
 | keyboard-tkl | Freerouting | 266.2 s / 480.9 s | 0 | 199 / 199 | 1645 / 1577 | 225 / 230 | 8548 / 8574 mm |
 
-traxide is 39–90 times faster on the matrix and 27–67 times on the keyboard, with about half the vias and less track, and its boards are the ones KiCad finds clean. traxide's routes are the same in every run; Freerouting's differ from run to run.
+**After the speed work of M2** ([[TRX-49]], [[TRX-24]], [[TRX-50]]), the same benchmark on a CI runner:
+
+| Board | Router | Time | Unconnected | Violations | Tracks | Vias | Track length |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| matrix-6x17 | **traxide** | **0.5 s** | 0 | **0** | 561 | **19** | **5942 mm** |
+| matrix-6x17 | Freerouting | 29.2 s | 0 | 7 | 831 | 47 | 6672 mm |
+| keyboard-tkl | **traxide** | **1.5 s** | **0** | **0** | 1616 | **107** | **8279 mm** |
+| keyboard-tkl | Freerouting | 105.3 s | 1 | 199 | 1647 | 244 | 8345 mm |
+
+Freerouting's times vary a lot between runners (29–90 s and 105–481 s over three runs); traxide's routes never change. In the first two runs, traxide was 39–90 times faster on the matrix and 27–67 times on the keyboard, with about half the vias and less track, and its boards are the ones KiCad finds clean. traxide's routes are the same in every run; Freerouting's differ from run to run.
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
