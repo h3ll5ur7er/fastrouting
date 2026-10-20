@@ -1,0 +1,4 @@
+# Pinned so that every machine and CI lint and format alike; bump deliberately.
+[toolchain]
+channel = "1.99.0"
+components = ["clippy", "rustfmt"]

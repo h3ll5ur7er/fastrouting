@@ -87,10 +87,8 @@ impl Units {
     }
 
     pub(crate) fn points(&self, coordinates: &[Sexp]) -> Result<Vec<Point>, BoardError> {
-        coordinates
-            .chunks_exact(2)
-            .map(|xy| self.point(&xy[0], &xy[1]))
-            .collect()
+        let (pairs, _odd_one_out) = coordinates.as_chunks::<2>();
+        pairs.iter().map(|[x, y]| self.point(x, y)).collect()
     }
 
     /// `nm` in whole steps, rounded half away from zero.
