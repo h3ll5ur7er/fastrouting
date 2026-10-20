@@ -1,17 +1,45 @@
-use crate::{LayerId, NetId, Track, Via};
+use crate::{ConnectionId, LayerId, NetId, Routes, Via};
 use traxide_geometry::Segment;
+
+/// What stands in the way of new copper.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Obstruction {
+    None,
+    /// Only routed connections, which could be ripped up; sorted, without duplicates.
+    Routed(Vec<ConnectionId>),
+    /// Something that stays: a pad, a keepout, the board edge, locked copper.
+    Fixed,
+}
 
 /// The routing state: what copper is where, and whether more fits.
 ///
 /// Engines use it through this trait; the manager chooses the implementation.
 pub trait LayoutAccess {
-    /// Whether a track segment of `net` fits on `layer` without breaking a rule.
-    fn is_track_clear(&self, net: NetId, layer: LayerId, segment: Segment, width: i32) -> bool;
+    /// What keeps a track segment of `net` on `layer` from fitting.
+    fn track_obstruction(
+        &self,
+        net: NetId,
+        layer: LayerId,
+        segment: Segment,
+        width: i32,
+    ) -> Obstruction;
 
-    /// Whether `via` fits on every layer it spans without breaking a rule.
-    fn is_via_clear(&self, via: &Via) -> bool;
+    /// What keeps `via` from fitting on the layers it spans.
+    fn via_obstruction(&self, via: &Via) -> Obstruction;
 
-    fn add_track(&mut self, track: &Track);
+    /// Whether a track segment fits; implementations may answer faster than
+    /// [`track_obstruction`](Self::track_obstruction), as they may stop at the first conflict.
+    fn is_track_clear(&self, net: NetId, layer: LayerId, segment: Segment, width: i32) -> bool {
+        self.track_obstruction(net, layer, segment, width) == Obstruction::None
+    }
 
-    fn add_via(&mut self, via: &Via);
+    fn is_via_clear(&self, via: &Via) -> bool {
+        self.via_obstruction(via) == Obstruction::None
+    }
+
+    /// Adds the copper routed for `connection`.
+    fn add_route(&mut self, connection: ConnectionId, routes: &Routes);
+
+    /// Removes all copper routed for `connection`.
+    fn remove_route(&mut self, connection: ConnectionId);
 }

@@ -4,3 +4,5 @@ grid_pitch = 0.1
 via_cost = 2.0
 bend_cost = 0.1
 detour_margin = 5.0
+rip_up_cost = 5.0
+max_rip_ups = 10

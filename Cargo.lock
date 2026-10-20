@@ -630,8 +630,10 @@ name = "traxide-detailed"
 version = "0.1.0"
 dependencies = [
  "traxide-contracts",
+ "traxide-events",
  "traxide-layout-access",
  "traxide-rules",
+ "traxide-verification",
 ]
 
 [[package]]

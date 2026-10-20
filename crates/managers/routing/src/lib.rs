@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
-use traxide_contracts::{Connection, Event, Routes, Stage, Verdict};
+use traxide_contracts::{Connection, Event, RoutingResult, Stage, Verdict};
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Publisher};
 use traxide_layout_access::Layout;
@@ -61,24 +61,9 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::Planning));
     let plan = traxide_planning::plan(&design);
     events.publish(Event::StageStarted(Stage::Routing));
-    let mut router = Router::new(&design, &rules, &profile);
-    let mut routes = Routes::default();
-    let mut unrouted: Vec<Connection> = Vec::new();
     let total = plan.connections.len();
-    for (done, &connection) in plan.connections.iter().enumerate() {
-        if cancel.is_cancelled() {
-            unrouted.extend(&plan.connections[done..]);
-            break;
-        }
-        match router.route(connection, &mut layout) {
-            Some(found) => routes.extend(found),
-            None => unrouted.push(connection),
-        }
-        events.publish(Event::ConnectionRouted {
-            done: done + 1,
-            total,
-        });
-    }
+    let RoutingResult { routes, unrouted } =
+        Router::new(&design, &rules, &profile).route_plan(&plan, &mut layout, cancel, events);
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());

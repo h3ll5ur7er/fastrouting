@@ -21,8 +21,8 @@ pub use design::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerShape, Net, NetClass, Pad, ViaKind,
 };
 pub use events::{Event, Stage};
-pub use ids::{LayerId, NetClassId, NetId, PadId, ViaKindId};
-pub use layout::LayoutAccess;
+pub use ids::{ConnectionId, LayerId, NetClassId, NetId, PadId, ViaKindId};
+pub use layout::{LayoutAccess, Obstruction};
 pub use plan::{Connection, Plan};
 pub use profile::Profile;
 pub use routes::{Routes, RoutingResult, Track, Via};

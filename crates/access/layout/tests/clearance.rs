@@ -1,7 +1,8 @@
 use traxide_contracts::geometry::{Point, Polygon, Rect, Segment, Shape};
 use traxide_contracts::testing::{DesignBuilder, at, mm};
 use traxide_contracts::{
-    Design, KeepoutScope, LayerId, LayoutAccess, NetId, Track, Via, ViaKindId,
+    ConnectionId, Design, KeepoutScope, LayerId, LayoutAccess, NetId, Obstruction, Routes, Track,
+    Via, ViaKindId,
 };
 use traxide_layout_access::Layout;
 
@@ -18,6 +19,18 @@ fn board() -> Design {
 
 fn segment(from: Point, to: Point) -> Segment {
     Segment::new(from, to)
+}
+
+fn track_of(net: NetId, along: Segment) -> Routes {
+    Routes {
+        tracks: vec![Track {
+            net,
+            layer: TOP,
+            width: mm(0.2),
+            path: vec![along.a, along.b],
+        }],
+        vias: vec![],
+    }
 }
 
 fn check(design: &Design, f: impl FnOnce(&mut Layout<'_>, NetId, NetId)) {
@@ -77,12 +90,7 @@ fn copper_keeps_its_clearance_from_the_board_edge() {
 fn added_tracks_block_other_nets_only() {
     check(&board(), |layout, a, b| {
         let across = segment(at(10.0, 1.0), at(10.0, 9.0));
-        layout.add_track(&Track {
-            net: a,
-            layer: TOP,
-            width: mm(0.2),
-            path: vec![across.a, across.b],
-        });
+        layout.add_route(ConnectionId(0), &track_of(a, across));
         let crossing = segment(at(8.0, 3.0), at(12.0, 3.0));
         assert!(!layout.is_track_clear(b, TOP, crossing, mm(0.2)));
         assert!(layout.is_track_clear(a, TOP, crossing, mm(0.2)));
@@ -108,7 +116,13 @@ fn a_via_needs_room_on_every_layer_it_spans() {
         "the pad on the bottom layer is in the way"
     );
     assert!(layout.is_via_clear(&via(8.0)));
-    layout.add_via(&via(8.0));
+    layout.add_route(
+        ConnectionId(0),
+        &Routes {
+            tracks: vec![],
+            vias: vec![via(8.0)],
+        },
+    );
     assert!(!layout.is_track_clear(
         design.net_named("A"),
         TOP,
@@ -136,4 +150,67 @@ fn keepouts_block_what_they_are_meant_to_block() {
         kind: ViaKindId(0),
         position: at(10.0, 5.0)
     }));
+}
+
+#[test]
+fn obstructions_name_the_routed_connections_in_the_way() {
+    let design = DesignBuilder::new(20.0, 10.0)
+        .smd("P1", Some("A"), at(2.0, 5.0), 1.0, 0)
+        .smd("P2", Some("B"), at(18.0, 5.0), 1.0, 0)
+        .smd("P3", Some("C"), at(18.0, 8.0), 1.0, 0)
+        .build();
+    let rules = traxide_rules::compile(&design, traxide_rules::Purpose::Routing);
+    let mut layout = Layout::build(&design, &rules);
+    let (a, b, c) = (
+        design.net_named("A"),
+        design.net_named("B"),
+        design.net_named("C"),
+    );
+    layout.add_route(
+        ConnectionId(7),
+        &track_of(b, segment(at(10.0, 1.0), at(10.0, 9.0))),
+    );
+    layout.add_route(
+        ConnectionId(3),
+        &track_of(c, segment(at(12.0, 1.0), at(12.0, 9.0))),
+    );
+    let across = segment(at(8.0, 5.0), at(14.0, 5.0));
+    assert_eq!(
+        layout.track_obstruction(a, TOP, across, mm(0.2)),
+        Obstruction::Routed(vec![ConnectionId(3), ConnectionId(7)])
+    );
+    assert_eq!(
+        layout.track_obstruction(a, BOTTOM, across, mm(0.2)),
+        Obstruction::None
+    );
+}
+
+#[test]
+fn pads_and_the_board_edge_are_fixed_obstructions() {
+    check(&board(), |layout, a, _| {
+        let into_b = segment(at(10.0, 5.0), at(15.0, 5.0));
+        assert_eq!(
+            layout.track_obstruction(a, TOP, into_b, mm(0.2)),
+            Obstruction::Fixed
+        );
+        let off_board = segment(at(19.0, 5.0), at(21.0, 5.0));
+        assert_eq!(
+            layout.track_obstruction(a, TOP, off_board, mm(0.2)),
+            Obstruction::Fixed
+        );
+    });
+}
+
+#[test]
+fn removing_a_route_clears_its_copper() {
+    check(&board(), |layout, a, b| {
+        layout.add_route(
+            ConnectionId(0),
+            &track_of(a, segment(at(10.0, 1.0), at(10.0, 9.0))),
+        );
+        let crossing = segment(at(8.0, 3.0), at(12.0, 3.0));
+        assert!(!layout.is_track_clear(b, TOP, crossing, mm(0.2)));
+        layout.remove_route(ConnectionId(0));
+        assert!(layout.is_track_clear(b, TOP, crossing, mm(0.2)));
+    });
 }

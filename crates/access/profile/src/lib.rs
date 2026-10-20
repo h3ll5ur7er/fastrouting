@@ -72,6 +72,8 @@ struct Fields {
     via_cost: Option<f64>,
     bend_cost: Option<f64>,
     detour_margin: Option<f64>,
+    rip_up_cost: Option<f64>,
+    max_rip_ups: Option<u32>,
 }
 
 impl Fields {
@@ -81,6 +83,8 @@ impl Fields {
             via_cost: other.via_cost.or(self.via_cost),
             bend_cost: other.bend_cost.or(self.bend_cost),
             detour_margin: other.detour_margin.or(self.detour_margin),
+            rip_up_cost: other.rip_up_cost.or(self.rip_up_cost),
+            max_rip_ups: other.max_rip_ups.or(self.max_rip_ups),
         }
     }
 
@@ -105,6 +109,9 @@ impl Fields {
             via_cost: positive_nm(self.via_cost, "via_cost")?,
             bend_cost: positive_nm(self.bend_cost, "bend_cost")?,
             detour_margin: length(self.detour_margin, "detour_margin")?,
+            rip_up_cost: positive_nm(self.rip_up_cost, "rip_up_cost")?,
+            // Zero is allowed: it turns rip-up off.
+            max_rip_ups: self.max_rip_ups.unwrap_or(0),
         })
     }
 }
@@ -135,6 +142,17 @@ mod tests {
         let profile = load_profile("default", None).expect("built in");
         assert_eq!(profile.grid_pitch, 100_000);
         assert_eq!(profile.via_cost, 2_000_000);
+    }
+
+    #[test]
+    fn rip_up_can_be_turned_off() {
+        let file = file_with("[profiles.default]\nmax_rip_ups = 0\n");
+        assert_eq!(
+            load_profile("default", Some(&file))
+                .expect("valid")
+                .max_rip_ups,
+            0
+        );
     }
 
     #[test]

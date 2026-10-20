@@ -5,7 +5,8 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
-    Connection, ConstraintSet, Design, LayerId, LayoutAccess, NetId, Pad, Profile, Via, ViaKindId,
+    Connection, ConstraintSet, Design, LayerId, LayoutAccess, NetId, Obstruction, Pad, Profile,
+    Via, ViaKindId,
 };
 
 /// No heading yet: just left a pad or a via.
@@ -13,6 +14,8 @@ const UNSET: u8 = 8;
 const HEADINGS: usize = 9;
 /// The slot of the target pad's centre, reached from any node near it.
 const TARGET: u32 = u32::MAX;
+/// The cost of an edge or via that may not be taken at all.
+const BLOCKED: i64 = -1;
 
 /// Search memory kept between connections, so each search costs no allocation.
 #[derive(Debug, Default)]
@@ -20,8 +23,10 @@ pub(crate) struct Scratch {
     best: Stamped<i64>,
     /// The slot a state was reached from and the via taken, packed (see `Came`).
     came: Stamped<u64>,
-    edge_clear: Stamped<bool>,
-    via_clear: Stamped<bool>,
+    /// What crossing obstructions costs on top of an edge's length, or `BLOCKED`.
+    edge_extra: Stamped<i64>,
+    /// The same for a via at a node.
+    via_extra: Stamped<i64>,
     /// What the last stretch to the target's centre costs, by layer and node.
     finish: Stamped<i64>,
 }
@@ -68,6 +73,9 @@ pub(crate) struct Search<'a, L> {
     to: &'a Pad,
     grid: Grid,
     diagonal: i64,
+    /// How often each connection has been ripped up; `None` when routed copper
+    /// may not be crossed at all.
+    rip_ups: Option<&'a [u32]>,
 }
 
 impl<'a, L: LayoutAccess> Search<'a, L> {
@@ -77,6 +85,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         profile: &'a Profile,
         connection: Connection,
         layout: &'a L,
+        rip_ups: Option<&'a [u32]>,
     ) -> Self {
         let (from, to) = (design.pad(connection.from), design.pad(connection.to));
         let window = Rect {
@@ -99,6 +108,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             diagonal: Point::new(0, 0)
                 .distance(Point::new(profile.grid_pitch, profile.grid_pitch))
                 .max(pitch),
+            rip_ups,
         }
     }
 
@@ -110,8 +120,8 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         let nodes = self.grid.node_count();
         scratch.best.reset(nodes * layers * HEADINGS);
         scratch.came.reset(nodes * layers * HEADINGS);
-        scratch.edge_clear.reset(nodes * layers * DIRECTIONS.len());
-        scratch.via_clear.reset(nodes * self.via_kinds.len());
+        scratch.edge_extra.reset(nodes * layers * DIRECTIONS.len());
+        scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
         for (state, cost) in self.access(self.to) {
             scratch.finish.set(self.layer_node(state), cost);
@@ -180,12 +190,12 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     continue;
                 }
                 let edge = (self.layer_node(state) * DIRECTIONS.len()) + direction;
-                let clear = scratch.edge_clear.get_or_insert_with(edge, || {
+                let extra = scratch.edge_extra.get_or_insert_with(edge, || {
                     let segment = Segment::new(self.grid.point(state.node), self.grid.point(next));
-                    self.layout
-                        .is_track_clear(self.net, LayerId(state.layer), segment, self.width)
+                    self.track_extra(LayerId(state.layer), segment)
+                        .unwrap_or(BLOCKED)
                 });
-                if clear {
+                if extra != BLOCKED {
                     let length = if dx * dy == 0 {
                         i64::from(self.profile.grid_pitch)
                     } else {
@@ -196,12 +206,8 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                         layer: state.layer,
                         heading: direction as u8,
                     };
-                    relax(
-                        Some(next),
-                        length + i64::from(turn) * self.profile.bend_cost,
-                        None,
-                        scratch,
-                    );
+                    let cost = length + i64::from(turn) * self.profile.bend_cost + extra;
+                    relax(Some(next), cost, None, scratch);
                 }
             }
             for (position, &kind) in self.via_kinds.iter().enumerate() {
@@ -213,25 +219,74 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 });
                 for layer in others.collect::<Vec<_>>() {
                     let check = self.grid.index(state.node) * self.via_kinds.len() + position;
-                    let clear = scratch.via_clear.get_or_insert_with(check, || {
-                        self.layout.is_via_clear(&Via {
+                    let extra = scratch.via_extra.get_or_insert_with(check, || {
+                        let via = Via {
                             net: self.net,
                             kind,
                             position: self.grid.point(state.node),
-                        })
+                        };
+                        self.via_extra(&via).unwrap_or(BLOCKED)
                     });
-                    if clear {
+                    if extra != BLOCKED {
                         let next = State {
                             node: state.node,
                             layer: layer.0,
                             heading: UNSET,
                         };
-                        relax(Some(next), self.profile.via_cost, Some(kind), scratch);
+                        relax(
+                            Some(next),
+                            self.profile.via_cost + extra,
+                            Some(kind),
+                            scratch,
+                        );
                     }
                 }
             }
         }
         None
+    }
+
+    /// What a track segment costs beyond its length: nothing when it is clear,
+    /// the price of ripping up what it crosses when that is allowed, else `None`.
+    fn track_extra(&self, layer: LayerId, segment: Segment) -> Option<i64> {
+        match self.rip_ups {
+            None => self
+                .layout
+                .is_track_clear(self.net, layer, segment, self.width)
+                .then_some(0),
+            Some(_) => self.rip_up_price(
+                self.layout
+                    .track_obstruction(self.net, layer, segment, self.width),
+            ),
+        }
+    }
+
+    fn via_extra(&self, via: &Via) -> Option<i64> {
+        match self.rip_ups {
+            None => self.layout.is_via_clear(via).then_some(0),
+            Some(_) => self.rip_up_price(self.layout.via_obstruction(via)),
+        }
+    }
+
+    /// Each crossed connection costs more the more often it was ripped up before,
+    /// so that connections settle instead of taking turns (negotiated congestion's
+    /// history cost); one ripped up too often may not be crossed again.
+    fn rip_up_price(&self, obstruction: Obstruction) -> Option<i64> {
+        match obstruction {
+            Obstruction::None => Some(0),
+            Obstruction::Fixed => None,
+            Obstruction::Routed(connections) => {
+                let rip_ups = self.rip_ups?;
+                connections
+                    .iter()
+                    .map(|c| {
+                        let times = rip_ups[c.index()];
+                        (times < self.profile.max_rip_ups)
+                            .then(|| self.profile.rip_up_cost * i64::from(times + 1))
+                    })
+                    .sum()
+            }
+        }
     }
 
     fn layer_node(&self, state: State) -> usize {
@@ -301,16 +356,13 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             for node in self.grid.nodes_near(copper.shape.bounds(), pad.position) {
                 let point = self.grid.point(node);
                 let segment = Segment::new(pad.position, point);
-                if self
-                    .layout
-                    .is_track_clear(self.net, copper.layer, segment, self.width)
-                {
+                if let Some(extra) = self.track_extra(copper.layer, segment) {
                     let state = State {
                         node,
                         layer: copper.layer.0,
                         heading: UNSET,
                     };
-                    states.push((state, pad.position.distance(point)));
+                    states.push((state, pad.position.distance(point) + extra));
                 }
             }
         }

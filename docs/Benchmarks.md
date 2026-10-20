@@ -13,6 +13,19 @@ time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 
 The machine: a 4-core cloud container (x86-64), one thread used.
 
+## Rip-up and reroute (M1, TRX-23)
+
+October 2026, the same search, plus negotiated rip-up and reroute and octilinear shortcuts ([[TRX-47]]).
+
+| Board | Connections | Routed | Vias | Time | KiCad DRC |
+| --- | --- | --- | --- | --- | --- |
+| placements | 7 | 7 | 0 | < 0.01 s | clean |
+| crossing | 2 | 2 | 2 | 0.07 s | clean |
+| matrix-3x4 | 36 | 36 | 4 | 0.7 s | clean |
+| matrix-6x17 | 306 | **306** | 35 | 33 s | **clean, nothing unconnected** |
+
+Complete, and still slow: the next work is speed ([[TRX-24]] to [[TRX-27]], [[TRX-48]]).
+
 ## Walking skeleton (M0)
 
 October 2026, sequential A* on a 0.1 mm octilinear grid, no rip-up, no global routing.
@@ -28,7 +41,7 @@ October 2026, sequential A* on a 0.1 mm octilinear grid, no rip-up, no global ro
 
 The picture shows matrix-3x4 after the round trip: top copper red, bottom blue, vias as small rings. Columns run on top, rows on the bottom, and the header's column pins reach their columns through vias. The straight diagonals from the header and the stubs from switches to diodes run at any angle, which [[TRX-47]] changes to 45° steps.
 
-### What the numbers say
+### What the numbers say (M0)
 
 - **Correct before fast.** KiCad agrees with traxide's own verification on every board: what traxide stores breaks no rule.
 - **Most connections are trivial.** In matrix-3x4, 32 of 36 connections are straight lines; the rest cost the time. Four searches popped up to 470 000 states each, because the search state includes the heading (9 per node and layer) and a row of switch pads forces long detours that the straight-line estimate does not foresee.

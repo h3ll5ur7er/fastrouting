@@ -20,6 +20,10 @@ dense_id!(
     /// A copper layer, by its position in the stack from the top.
     LayerId
 );
+dense_id!(
+    /// A connection of a [`Plan`](crate::Plan), by its position in the plan.
+    ConnectionId
+);
 dense_id!(NetId);
 dense_id!(NetClassId);
 dense_id!(PadId);
