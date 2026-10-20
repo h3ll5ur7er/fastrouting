@@ -17,4 +17,6 @@ The detailed search walks a 0.1 mm grid: millions of states on a large board, mo
 
 Measured in [[TRX-27]]: the keyboard's time is in its few long connections, which overlap everything and so cannot run side by side. The worst, from the MCU across the board, popped 4.4 million of its window's 17.7 million grid states and took 2 s, mostly expanding states again ([[TRX-49]] fixed that: 0.77 s); most searches touch under 2 % of their window.
 
+Measured on real boards ([[TRX-15]]'s corpus), October 2026: on Issue029-hw48na, the long searches cost 1.1–4 times their straight-line estimate and flood up to 1.8 million states each. A coarse distance map of the fixed copper (0.5 mm cells, Dijkstra from the target) as the estimate barely raised it (24 → 34 mm where 98 mm were paid) and made nothing faster: what makes those paths dear is negotiation, crossing routed copper, not detours around fixed copper. The outline index, this task's first step, made each expansion three times cheaper on boards with rounded corners.
+
 **Depends on:** [[TRX-23]]
