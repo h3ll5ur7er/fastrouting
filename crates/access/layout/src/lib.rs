@@ -3,8 +3,10 @@
 //! layer, queried one item at a time.
 
 mod buckets;
+mod outline;
 
 use buckets::Buckets;
+use outline::Outline;
 use traxide_contracts::geometry::{Point, Rect, Segment, Shape};
 use traxide_contracts::{
     ConnectionId, ConstraintSet, Design, KeepoutScope, LayerId, LayoutAccess, NetId, Obstruction,
@@ -55,9 +57,7 @@ enum Wanted {
 pub struct Layout<'a> {
     design: &'a Design,
     rules: &'a ConstraintSet,
-    /// Where copper is far enough from the edge, when the board is a plain
-    /// rectangle: the common case, and a much cheaper test than the general one.
-    safe_area: Option<Rect>,
+    outline: Outline,
     obstacles: Vec<Obstacle>,
     layers: Vec<Buckets>,
     /// The obstacles of each routed connection, by connection.
@@ -73,14 +73,10 @@ impl<'a> Layout<'a> {
             .iter()
             .map(|_| Buckets::new(bounds, BUCKET_SIZE))
             .collect();
-        let safe_area = design
-            .outline
-            .as_rect()
-            .map(|r| r.inflated(-rules.edge_clearance()));
         let mut layout = Self {
             design,
             rules,
-            safe_area,
+            outline: Outline::new(&design.outline, BUCKET_SIZE),
             obstacles: Vec::new(),
             layers,
             routed: Vec::new(),
@@ -126,11 +122,7 @@ impl<'a> Layout<'a> {
         item: Item,
         wanted: Wanted,
     ) -> Obstruction {
-        let inside = match self.safe_area {
-            Some(area) => area.contains_rect(shape.bounds()),
-            None => shape.is_inside(&self.design.outline, self.rules.edge_clearance()),
-        };
-        if !inside {
+        if !self.outline.holds(shape, self.rules.edge_clearance()) {
             return Obstruction::Fixed;
         }
         let reach = shape.bounds().inflated(self.rules.largest_clearance());

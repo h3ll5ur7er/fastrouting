@@ -214,3 +214,41 @@ fn removing_a_route_clears_its_copper() {
         assert!(layout.is_track_clear(b, TOP, crossing, mm(0.2)));
     });
 }
+
+/// A 20 × 10 mm board without its top right quarter, like a board with a notch;
+/// its two pads sit far from where the tests look.
+fn l_shaped_board() -> Design {
+    let mut design = DesignBuilder::new(20.0, 10.0)
+        .smd("P1", Some("A"), at(1.0, 9.0), 0.5, 0)
+        .smd("P2", Some("B"), at(2.0, 9.0), 0.5, 0)
+        .build();
+    design.outline = Polygon::new(vec![
+        at(0.0, 0.0),
+        at(10.0, 0.0),
+        at(10.0, 5.0),
+        at(20.0, 5.0),
+        at(20.0, 10.0),
+        at(0.0, 10.0),
+    ])
+    .expect("a polygon");
+    design
+}
+
+#[test]
+fn copper_in_a_cut_out_is_off_the_board() {
+    check(&l_shaped_board(), |layout, a, _| {
+        assert!(!layout.is_track_clear(a, TOP, segment(at(14.0, 2.0), at(16.0, 2.0)), mm(0.2)));
+    });
+}
+
+#[test]
+fn copper_keeps_its_clearance_from_every_edge_of_a_shaped_board() {
+    check(&l_shaped_board(), |layout, a, _| {
+        let clear = |from, to| layout.is_track_clear(a, TOP, segment(from, to), mm(0.2));
+        assert!(clear(at(12.0, 5.3), at(16.0, 5.3)));
+        assert!(!clear(at(12.0, 5.29), at(16.0, 5.29)));
+        assert!(clear(at(9.7, 1.0), at(9.7, 4.0)));
+        assert!(!clear(at(9.71, 1.0), at(9.71, 4.0)));
+        assert!(clear(at(4.0, 7.0), at(8.0, 7.0)));
+    });
+}

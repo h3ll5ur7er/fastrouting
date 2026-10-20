@@ -35,6 +35,29 @@ impl Buckets {
             .flat_map(|cell| self.cells[cell].iter().copied())
     }
 
+    pub(crate) fn cell_count(&self) -> usize {
+        self.cells.len()
+    }
+
+    /// The cell `at` falls in, or the nearest cell at the edge of the area.
+    pub(crate) fn cell_at(&self, at: Point) -> usize {
+        self.cells_in(Rect { min: at, max: at })
+            .next()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn centre_of(&self, cell: usize) -> Point {
+        let (column, row) = (cell % self.columns, cell / self.columns);
+        let at = |index: usize, from: i32| {
+            from + i32::try_from(index).unwrap_or(i32::MAX / 2) * self.size + self.size / 2
+        };
+        Point::new(at(column, self.origin.x), at(row, self.origin.y))
+    }
+
+    pub(crate) fn is_empty(&self, cell: usize) -> bool {
+        self.cells[cell].is_empty()
+    }
+
     fn cells_in(&self, area: Rect) -> impl Iterator<Item = usize> + use<> {
         // Items beyond the board still land in the outermost cells, so nothing is lost.
         let clamp = |value: i32, from: i32, count: usize| {
