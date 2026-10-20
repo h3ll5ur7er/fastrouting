@@ -1,0 +1,74 @@
+(pcb /out/crossing.dsn
+  (parser
+    (string_quote ")
+    (space_in_quoted_tokens on)
+    (host_cad "KiCad's Pcbnew")
+    (host_version "9.0.9")
+  )
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu
+      (type signal)
+      (property
+        (index 0)
+      )
+    )
+    (layer B.Cu
+      (type signal)
+      (property
+        (index 1)
+      )
+    )
+    (boundary
+      (path pcb 0  30000 -30000  0 -30000  0 0  30000 0  30000 -30000)
+    )
+    (via "Via[0-1]_600:300_um")
+    (rule
+      (width 200)
+      (clearance 200)
+      (clearance 50 (type smd_smd))
+    )
+  )
+  (placement
+    (component traxide:TP
+      (place TP3 15000.000000 -5000.000000 front 0.000000)
+      (place TP1 5000.000000 -15000.000000 front 0.000000)
+      (place TP2 25000.000000 -15000.000000 front 0.000000)
+      (place TP4 15000.000000 -25000.000000 front 0.000000)
+    )
+  )
+  (library
+    (image traxide:TP
+      (pin Rect[T]Pad_1200.000000x1200.000000_um 1 0 0)
+    )
+    (padstack Rect[T]Pad_1200.000000x1200.000000_um
+      (shape (rect F.Cu -600 -600 600 600))
+      (attach off)
+    )
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600))
+      (shape (circle B.Cu 600))
+      (attach off)
+    )
+  )
+  (network
+    (net ACROSS
+      (pins TP1-1 TP2-1)
+    )
+    (net DOWN
+      (pins TP3-1 TP4-1)
+    )
+    (class kicad_default ACROSS DOWN
+      (circuit
+        (use_via "Via[0-1]_600:300_um")
+      )
+      (rule
+        (width 200)
+        (clearance 200)
+      )
+    )
+  )
+  (wiring
+  )
+)

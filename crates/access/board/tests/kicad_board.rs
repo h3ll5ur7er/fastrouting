@@ -1,5 +1,5 @@
-//! Boards read from KiCad 10's own files, compared with what KiCad states in
-//! them and with KiCad's own DSN export of the same boards.
+//! Boards read from KiCad's own files, compared with what KiCad states in them
+//! and with KiCad's own DSN export of the same boards, from KiCad 10 and 9.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -82,9 +82,24 @@ fn the_boards_own_tracks_and_vias_are_existing_copper() {
 
 #[test]
 fn a_board_file_agrees_with_kicads_dsn_export_of_it() {
-    for recipe in ["placements", "crossing", "matrix-3x4", "keyboard-tkl"] {
-        let from_board = board(&format!("{recipe}.kicad_pcb"));
-        let from_dsn = board(&format!("{recipe}.dsn"));
+    let boards = [
+        "kicad10/placements",
+        "kicad10/crossing",
+        "kicad10/matrix-3x4",
+        "kicad10/keyboard-tkl",
+        "kicad9/placements",
+        "kicad9/crossing",
+        "kicad9/matrix-3x4",
+    ];
+    for recipe in boards {
+        let read = |extension: &str| {
+            let path = format!(
+                "{}/tests/fixtures/{recipe}.{extension}",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            load_design(Path::new(&path)).expect("KiCad's files are valid")
+        };
+        let (from_board, from_dsn) = (read("kicad_pcb"), read("dsn"));
         let layers = |d: &Design| d.layers.clone();
         assert_eq!(layers(&from_board), layers(&from_dsn), "{recipe}");
         assert_eq!(pads_by_net(&from_board), pads_by_net(&from_dsn), "{recipe}");

@@ -1,0 +1,101 @@
+(pcb /out/placements.dsn
+  (parser
+    (string_quote ")
+    (space_in_quoted_tokens on)
+    (host_cad "KiCad's Pcbnew")
+    (host_version "9.0.9")
+  )
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu
+      (type signal)
+      (property
+        (index 0)
+      )
+    )
+    (layer B.Cu
+      (type signal)
+      (property
+        (index 1)
+      )
+    )
+    (boundary
+      (path pcb 0  60000 -40000  0 -40000  0 0  60000 0  60000 -40000)
+    )
+    (via "Via[0-1]_600:300_um")
+    (rule
+      (width 200)
+      (clearance 200)
+      (clearance 50 (type smd_smd))
+    )
+  )
+  (placement
+    (component traxide:U
+      (place U1 10000.000000 -10000.000000 front 0.000000)
+      (place U2 25000.000000 -10000.000000 front 30.000000)
+      (place U4 10000.000000 -25000.000000 back 270.000000)
+      (place U3 40000.000000 -10000.000000 back 0.000000)
+      (place U5 25000.000000 -25000.000000 back 330.000000)
+    )
+    (component traxide:J
+      (place J1 45000.000000 -28000.000000 front 45.000000)
+    )
+  )
+  (library
+    (image traxide:U
+      (pin Rect[T]Pad_1000.000000x600.000000_um 1 -1500 0)
+      (pin Rect[T]Pad_800.000000x500.000000_um (rotate 30) 2 1000 -800)
+    )
+    (image traxide:J
+      (pin Round[A]Pad_1700.000000_um 1 -1270 0)
+      (pin Round[A]Pad_1700.000000_um 2 1270 0)
+    )
+    (padstack Round[A]Pad_1700.000000_um
+      (shape (circle F.Cu 1700))
+      (shape (circle B.Cu 1700))
+      (attach off)
+    )
+    (padstack Rect[T]Pad_800.000000x500.000000_um
+      (shape (rect F.Cu -400 -250 400 250))
+      (attach off)
+    )
+    (padstack Rect[T]Pad_1000.000000x600.000000_um
+      (shape (rect F.Cu -500 -300 500 300))
+      (attach off)
+    )
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600))
+      (shape (circle B.Cu 600))
+      (attach off)
+    )
+  )
+  (network
+    (net A
+      (pins U1-1 U1-2 J1-1)
+    )
+    (net B
+      (pins U2-1 U2-2 J1-2)
+    )
+    (net C
+      (pins U3-1 U3-2)
+    )
+    (net D
+      (pins U4-1 U4-2)
+    )
+    (net E
+      (pins U5-1 U5-2)
+    )
+    (class kicad_default A B C D E
+      (circuit
+        (use_via "Via[0-1]_600:300_um")
+      )
+      (rule
+        (width 200)
+        (clearance 200)
+      )
+    )
+  )
+  (wiring
+  )
+)
