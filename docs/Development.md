@@ -56,6 +56,8 @@ Crates appear when the task that needs them starts, not before (YAGNI): the layo
 
 CI runs the check on every pull request, next to `cargo fmt --check`, `cargo clippy -- -D warnings` and the tests.
 
+CI lints on Windows too, where some types are larger (a path takes 32 bytes, not 24) and size lints can fire that Linux never shows. Linting for Windows needs no Windows: `rustup target add x86_64-pc-windows-msvc`, then `cargo clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings`.
+
 ## Building
 
 ```bash

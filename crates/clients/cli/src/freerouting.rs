@@ -11,7 +11,9 @@ use traxide_routing::RouteJob;
 pub(crate) enum Invocation {
     Help,
     Route {
-        job: RouteJob,
+        /// Boxed: a job is far larger than the help, above all where paths are
+        /// large, as on Windows.
+        job: Box<RouteJob>,
         /// Options traxide understands but does not follow, said once each.
         warnings: Vec<String>,
     },
@@ -87,7 +89,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
     let input: PathBuf = input.context("-de names no board to route")?;
     let output = output.unwrap_or_else(|| input.with_extension("ses"));
     Ok(Invocation::Route {
-        job: RouteJob {
+        job: Box::new(RouteJob {
             input,
             output: Some(output),
             profile: "default".into(),
@@ -95,7 +97,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
             threads,
             unrouted_net_classes,
             drc_report,
-        },
+        }),
         warnings,
     })
 }
@@ -140,7 +142,7 @@ mod tests {
 
     fn route(args: &[&str]) -> (RouteJob, Vec<String>) {
         match parsed(args).expect("valid") {
-            Invocation::Route { job, warnings } => (job, warnings),
+            Invocation::Route { job, warnings } => (*job, warnings),
             Invocation::Help => panic!("routes"),
         }
     }
