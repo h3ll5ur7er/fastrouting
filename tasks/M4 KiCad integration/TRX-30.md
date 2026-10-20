@@ -1,0 +1,18 @@
+---
+id: TRX-30
+title: Read and write KiCad board files in Board Access
+type: feature
+status: todo
+priority: high
+labels: [board-access, kicad]
+estimate: 5
+layer: access
+---
+
+The `kicad-file` adapter ([[Research/KiCad-integration]]).
+
+- [ ] Zero-copy S-expression parser for `.kicad_pcb` (KiCad 9 and 10 formats); footprints, pads, zones, keepouts, tracks, vias
+- [ ] Net classes and board setup from `.kicad_pro`; custom rules from `.kicad_dru` as a `RuleSource`
+- [ ] Write back new `segment`, `arc` and `via` nodes, keeping every other byte; refuse if the file changed since loading
+
+**Depends on:** [[TRX-7]]

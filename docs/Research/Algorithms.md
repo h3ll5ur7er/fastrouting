@@ -1,6 +1,6 @@
 # Algorithms
 
-A survey of PCB and VLSI routing algorithms as of October 2026: what exists, what works, and what fastrouting takes from each. The pipeline that results is in [Routing pipeline](../Architecture/Routing-pipeline.md).
+A survey of PCB and VLSI routing algorithms as of October 2026: what exists, what works, and what traxide takes from each. The pipeline that results is in [Routing pipeline](../Architecture/Routing-pipeline.md).
 
 [TOC]
 
@@ -65,7 +65,7 @@ Every net (in modern variants, every net touching overuse) is ripped up and rero
 | Academic (PRNet, HubRouter, DSBRouter, FanoutNet, CircuitNet predictors) | Generative global routing still needs a classical reroute step; congestion predictors reach Pearson ≈ 0.64 |
 | PCBWorld (LG AI Research, 2026) | RL environment on KiCad's router with KiCad DRC rewards and 679 real boards: its policy *approaches* rule-based routers, it doesn't beat them |
 
-**Verdict**: no published evidence shows learned routers beating well-engineered search with negotiation on DRC-clean completion. ML is useful *around* the search — predicted congestion as a prior for history costs, net ordering and batching policies, candidate ranking — never instead of the exact, DRC-checked inner loop. fastrouting leaves room for that in the Planning and Global Routing engines and builds none of it first.
+**Verdict**: no published evidence shows learned routers beating well-engineered search with negotiation on DRC-clean completion. ML is useful *around* the search — predicted congestion as a prior for history costs, net ordering and batching policies, candidate ranking — never instead of the exact, DRC-checked inner loop. traxide leaves room for that in the Planning and Global Routing engines and builds none of it first.
 
 ## Parallelism
 
@@ -74,7 +74,7 @@ Every net (in modern variants, every net touching overuse) is ripped up and rero
 3. **Region decomposition**: global routing fixes corridors and crossing points on region borders, then each region is routed independently and stitched (tscircuit, TritonRoute panels).
 4. **Parallel search inside one net**: GPU SSSP (near-far, delta-stepping, GAMER sweeps), SIMD wavefronts over bit-packed rows. Pays off only on large grids. On a keyboard board each net is tiny, so **net and region parallelism dominate**.
 
-See [Parallelism and GPU](../Architecture/Parallelism-and-GPU.md) for what fastrouting does with this.
+See [Parallelism and GPU](../Architecture/Parallelism-and-GPU.md) for what traxide does with this.
 
 ## Post-routing optimisation
 
@@ -82,7 +82,7 @@ See [Parallelism and GPU](../Architecture/Parallelism-and-GPU.md) for what fastr
 - **Via minimisation**: layer reassignment of segments as 2-colouring or max-cut on a conflict graph (ILP for small instances), plus removing via pairs where one layer suffices.
 - **Mitering**: 90° corners to 45° chamfers where clearance allows.
 - **Finishing**: teardrops, stub removal, stitching vias next to layer changes of the USB pair.
-- Freerouting's optimiser — rip up each item, reroute it, keep it if better — is sound in concept; it is slow because it is sequential and deep-copies the board per candidate. fastrouting does region-bounded moves in parallel on copy-on-write regions.
+- Freerouting's optimiser — rip up each item, reroute it, keep it if better — is sound in concept; it is slow because it is sequential and deep-copies the board per candidate. traxide does region-bounded moves in parallel on copy-on-write regions.
 
 ## References
 

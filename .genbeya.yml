@@ -1,8 +1,8 @@
-name: fastrouting
+name: traxide
 wikiRoot: docs
 wikiHome: Home.md
 taskRoot: tasks
-taskPrefix: FR
+taskPrefix: TRX
 statuses:
   - backlog
   - todo

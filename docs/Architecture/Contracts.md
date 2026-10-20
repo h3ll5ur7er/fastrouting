@@ -95,4 +95,4 @@ pub trait DetailedRouting {
 }
 ```
 
-The traits are a sketch; [[FR-4]] fixes them.
+The traits are a sketch; [[TRX-4]] fixes them.

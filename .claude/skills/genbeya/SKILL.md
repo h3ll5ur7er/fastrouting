@@ -1,6 +1,6 @@
 ---
 name: genbeya
-description: Plan, track and document work in this repository with Genbeya tasks and wiki pages. Use when planning or breaking down work, when starting, updating or finishing a task, when looking up or recording project knowledge, and when referencing tasks such as FR-12 in commits, pull requests or documentation. Tasks live in tasks/, the wiki in docs/.
+description: Plan, track and document work in this repository with Genbeya tasks and wiki pages. Use when planning or breaking down work, when starting, updating or finishing a task, when looking up or recording project knowledge, and when referencing tasks such as TRX-12 in commits, pull requests or documentation. Tasks live in tasks/, the wiki in docs/.
 ---
 
 # Genbeya tasks and wiki
@@ -18,7 +18,7 @@ Edit the files directly; Genbeya picks up changes on its own.
    - Read and edit each area where it lives. Commit edits on the content branch right away, in that worktree (`git -C <worktree> add …` and `git -C <worktree> commit -m …`); Genbeya pushes them when someone syncs. Never copy files between the content branch and the checkout: the copy in the other place is out of date.
 2. Read `.genbeya.yml` where the settings live. When it disagrees with the values below, the file wins:
    - `wikiRoot` is the wiki folder (here `docs`), `wikiHome` its home page relative to that folder (here `Home.md`).
-   - `taskRoot` is the task folder (here `tasks`), `taskPrefix` the prefix of task IDs (here `FR`).
+   - `taskRoot` is the task folder (here `tasks`), `taskPrefix` the prefix of task IDs (here `TRX`).
    - `statuses` are the workflow states in board order: the first is where new ideas wait, the last means done. An entry is a state's name, or a mapping whose `name` is the state.
    - `hiddenColumns` are states the board leaves out; tasks may still be in them.
    - `types` lists the task types: names, or mappings whose `name` is the type (with an `icon` and a colour `tone` for Genbeya). Without `types`, the types are `bug`, `feature`, `improvement` and `chore`; `types: []` means none.
@@ -26,11 +26,11 @@ Edit the files directly; Genbeya picks up changes on its own.
 
 ## Tasks
 
-Each task is one Markdown file named after its ID, in the task folder or in an epic folder below it: `tasks/FR-12.md`, `tasks/Login rework/FR-14.md`.
+Each task is one Markdown file named after its ID, in the task folder or in an epic folder below it: `tasks/TRX-12.md`, `tasks/Login rework/TRX-14.md`.
 
 ```markdown
 ---
-id: FR-12
+id: TRX-12
 title: Virtualize long lists
 type: improvement
 status: todo
@@ -54,10 +54,10 @@ Render only the visible rows of long lists.
 
 ### Create a task
 
-1. Take the next free ID: the highest number used with the prefix by any task below the task folder, epics included, plus one (`FR-12` → `FR-13`). Make sure no file of that name exists anywhere below the task folder.
+1. Take the next free ID: the highest number used with the prefix by any task below the task folder, epics included, plus one (`TRX-12` → `TRX-13`). Make sure no file of that name exists anywhere below the task folder.
 2. Write `<task folder>/[<epic>/]<ID>.md` with `id`, `title` and `status`, the optional fields that apply, and a description that says what done means.
 3. For a task of a type, start from the type's template if `<task folder>/.templates/<type>.md` exists: its description is the outline to fill in, and its frontmatter presets fields such as `priority` or `labels` (never `id`, `title` or `status`).
-4. Break the work down into a checklist. Give a step its own task only when it deserves tracking of its own, and reference it from the description (`[[FR-13]]`).
+4. Break the work down into a checklist. Give a step its own task only when it deserves tracking of its own, and reference it from the description (`[[TRX-13]]`).
 
 ### Work on a task
 
@@ -74,13 +74,13 @@ Keep the board true while you work. Use the configured states by their meaning, 
 
 In wiki pages and task descriptions, `[[…]]` links anything in the repository, and Genbeya shows what it points to:
 
-- `[[FR-12]]` is a task, shown with its title and state.
+- `[[TRX-12]]` is a task, shown with its title and state.
 - `[[Getting started]]` or `[[Guide/Wiki]]` is a wiki page, by title or by its path below the wiki folder without `.md`.
 - `[[src/app.ts]]` or `[[src/app.ts#L10-L20]]` is a file, or lines of it.
-- `[[FR-12|the login bug]]` is any reference with your own text.
+- `[[TRX-12|the login bug]]` is any reference with your own text.
 - `![[src/app.ts#L10-L20]]` on a line of its own embeds those lines, always in their current version.
 
-Task IDs written plainly (`FR-12`) link to the task as well. Name the task you worked on in commit messages and pull request descriptions (`FR-12: Virtualize the file tree`), so the history leads back to it.
+Task IDs written plainly (`TRX-12`) link to the task as well. Name the task you worked on in commit messages and pull request descriptions (`TRX-12: Virtualize the file tree`), so the history leads back to it.
 
 ## Wiki
 

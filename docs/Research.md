@@ -1,6 +1,6 @@
 # Research
 
-What we learned before designing fastrouting (October 2026), and the decisions it led to. The subpages hold the details and the sources.
+What we learned before designing traxide (October 2026), and the decisions it led to. The subpages hold the details and the sources.
 
 | Page | Covers |
 | --- | --- |
@@ -16,7 +16,7 @@ What we learned before designing fastrouting (October 2026), and the decisions i
 3. **A GPU doesn't buy quality**, and on a keyboard-sized board it hardly buys speed: per-net searches are tiny, so net- and region-level parallelism on CPU cores dominates. OrthoRoute, a GPU KiCad router, routes well under Freerouting's completion rate.
 4. **ML doesn't replace search yet.** No published result beats engineered search with negotiation on DRC-clean completion; ML helps with priors, ordering and batching.
 5. **The bar moved.** Freerouting 2.5 ships native binaries and an IPC mode; quality on public corpora (PCBench, PCBWorld) decides adoption.
-6. **KiCad now takes native plugins.** IPC plugins can be executables (`runtime.type: exec`), so fastrouting needs no Python either.
+6. **KiCad now takes native plugins.** IPC plugins can be executables (`runtime.type: exec`), so traxide needs no Python either.
 
 ## Decisions
 
@@ -30,3 +30,5 @@ What we learned before designing fastrouting (October 2026), and the decisions i
 | DSN/SES first, then KiCad files, then the IPC API | Freerouting parity and corpora first; headless next; in-editor last | [KiCad integration](Research/KiCad-integration.md) |
 | An independent Verification Engine gates every result and every release | Quality decides adoption | [Use cases](Architecture/Use-cases.md) |
 | No ML in the first milestones; hooks in Planning and Global Routing | No evidence it beats search yet | [Algorithms](Research/Algorithms.md#machine-learning) |
+| Named traxide | *fastrouting* was too close to fastroute and FastRoute | [Prior art](Research/Prior-art.md#naming) |
+| Licensed `MIT OR Apache-2.0`, built clean-room | Usable where copyleft is banned; the Rust ecosystem's default, with a patent grant | [Development](Development.md#clean-room-rules) |

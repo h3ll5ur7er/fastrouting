@@ -1,6 +1,6 @@
 # KiCad integration
 
-The three ways fastrouting meets KiCad, what each can and cannot do in KiCad 9, 10 and the coming 11, and which Board Access adapter implements it.
+The three ways traxide meets KiCad, what each can and cannot do in KiCad 9, 10 and the coming 11, and which Board Access adapter implements it.
 
 [TOC]
 
@@ -23,11 +23,11 @@ The three ways fastrouting meets KiCad, what each can and cannot do in KiCad 9, 
 
 ## The plugin
 
-KiCad's `plugin.json` (API v1) allows `runtime.type` **`"exec"`**: the plugin is a native executable with an entry point and arguments per action. fastrouting's KiCad plugin is therefore **the same binary, no Python**:
+KiCad's `plugin.json` (API v1) allows `runtime.type` **`"exec"`**: the plugin is a native executable with an entry point and arguments per action. traxide's KiCad plugin is therefore **the same binary, no Python**:
 
 - There is no per-OS entry point, so there is one PCM package per platform; PCM's `metadata.json` lists platforms per version.
 - KiCad 11 nightlies reportedly stop bundling Python, which makes Python plugins such as Freerouting's (which installs a JRE on demand) and OrthoRoute's (which builds a virtual environment) more fragile — an advantage for a native plugin.
-- Konnect, a Rust KiCad plugin, already ships this way. An open kicad-python issue reports toolbar icons of PCM-installed IPC plugins not showing; test it ([[FR-17]]).
+- Konnect, a Rust KiCad plugin, already ships this way. An open kicad-python issue reports toolbar icons of PCM-installed IPC plugins not showing; test it ([[TRX-17]]).
 - macOS: notarise the binary; whether PCM's download sets the quarantine attribute needs testing.
 
 ## What is read

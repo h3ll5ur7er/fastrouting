@@ -74,8 +74,8 @@ In the order they are built:
 
 ## Risks
 
-1. **Quality decides adoption, not speed.** Freerouting improves quickly. Every release is gated on PCBench and PCBWorld completion and DRC-clean rates ([[FR-22]]).
+1. **Quality decides adoption, not speed.** Freerouting improves quickly. Every release is gated on PCBench and PCBWorld completion and DRC-clean rates ([[TRX-22]]).
 2. **The GPU may not pay off** on typical boards. It is milestone M3 and benchmark-gated.
-3. **KiCad IPC churn** between 10 and 11, the API being off by default, PCM icon issues ([[FR-17]]).
-4. **Determinism under parallelism**: fixed batch order, seeded tie-breaks, tested ([[FR-27]]).
-5. **Licence**: the repository is GPL-3.0, like Freerouting and KiCad, so Freerouting's ideas and code may be studied and reused; MIT crates such as Topola's are compatible. A permissive licence later would require avoiding Freerouting code.
+3. **KiCad IPC churn** between 10 and 11, the API being off by default, PCM icon issues ([[TRX-17]]).
+4. **Determinism under parallelism**: fixed batch order, seeded tie-breaks, tested ([[TRX-27]]).
+5. **Licence**: traxide is `MIT OR Apache-2.0`, so companies that ban copyleft can use it. That rules out copying from GPL projects — Freerouting, KiCad, the GPL Rust port of Freerouting — and makes every dependency's licence matter; see [[Development#clean-room-rules]]. One open point: KiCad's IPC API `.proto` files carry GPL-3.0 headers, while `kicad-ipc-rs`, generated from them, is MIT ([[TRX-17]] settles whether we can depend on it, or must talk to KiCad from our own message definitions).

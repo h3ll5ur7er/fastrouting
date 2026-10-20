@@ -1,6 +1,6 @@
 # Prior art
 
-What exists in October 2026, what each does well, and what fastrouting learns from it.
+What exists in October 2026, what each does well, and what traxide learns from it.
 
 [TOC]
 
@@ -9,11 +9,11 @@ What exists in October 2026, what each does well, and what fastrouting learns fr
 GPL-3.0, Java 25, descended from Alfons Wirth's Specctra-like router. Versions 2.2 to 2.5 shipped in 2026; **v2.5.0 (5 October 2026) ships GraalVM native CLI binaries** for Linux x64, macOS and Windows x64 and a **KiCad 10 IPC mode**, and its next release aims to drop Java from the KiCad path.
 
 > [!IMPORTANT]
-> "No JVM" alone stops being a reason to switch. fastrouting has to win on **speed, use of all cores, routing quality and determinism**, measured on public corpora.
+> "No JVM" alone stops being a reason to switch. traxide has to win on **speed, use of all cores, routing quality and determinism**, measured on public corpora.
 
 ### How it routes
 
-From the current sources (`app/freerouting/autoroute/`):
+In outline, as its sources (`app/freerouting/autoroute/`) were summarised during research. These are ideas, not code; see [[Development#clean-room-rules]] for why traxide's code never comes from Freerouting:
 
 - **Free space as rooms and doors**: convex free-space polygons (`ExpansionRoom`), completed lazily, joined by `ExpansionDoor`s.
 - **Search**: `MazeSearchEngine`, an A*-like search over rooms; the queue is a Java `TreeSet`; cost is per-layer trace cost, bend penalty and the rip-up cost of crossed obstacles; the estimate includes via costs.
@@ -56,8 +56,8 @@ Issue #289 records a board that took 4 h 46 min and 2.5 GB at about 11 % CPU. Th
 | **PCBench** (in the Freerouting repository) | 1,157 boards | Freerouting v2.5.0 routes 75.4 % completely and 75.0 % with zero DRC violations; the corpus takes it 2,997 s |
 | **PCBWorld-Bench** (LG AI Research, 2026) | 679 real KiCad boards plus generators | DRC-grounded metrics; Freerouting and KiCadRoutingTools as baselines |
 
-Both are acceptance tests from the first milestone ([[FR-15]]), next to our own keyboard boards.
+Both are acceptance tests from the first milestone ([[TRX-15]]), next to our own keyboard boards.
 
 ## Naming
 
-"fastroute" (the Rust port above) and OpenROAD's FastRoute global router are close to "fastrouting". Not a blocker, but worth deciding before the first release ([[FR-35]]).
+The project began as *fastrouting*, too close to "fastroute" (the Rust port above) and OpenROAD's FastRoute global router. It is now **traxide**: *trace* + *oxide*, copper traces and the oxide that is rust. In October 2026 neither crates.io nor a web search showed anything else of that name.

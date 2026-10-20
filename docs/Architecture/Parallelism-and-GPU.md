@@ -1,6 +1,6 @@
 # Parallelism and GPU
 
-How fastrouting uses 24 cores and a GPU without giving up deterministic results, and where each kind of parallelism lives in the [Architecture](../Architecture.md).
+How traxide uses 24 cores and a GPU without giving up deterministic results, and where each kind of parallelism lives in the [Architecture](../Architecture.md).
 
 [TOC]
 
@@ -50,7 +50,7 @@ sequenceDiagram
 - The engine **commits in connection order**, not completion order. Layout Access checks each commit against what was committed before it in the same batch (optimistic concurrency: versions per spatial bucket). Conflicts are rare by construction and go to the next batch.
 - Ties in every priority queue break on (cost, connection id, position), never on memory addresses or hash order. Random choices use a seeded generator per connection.
 
-That makes the result a function of the input alone. Tests route every corpus board with 1, 4 and all threads and require identical output ([[FR-27]]).
+That makes the result a function of the input alone. Tests route every corpus board with 1, 4 and all threads and require identical output ([[TRX-27]]).
 
 ## Global routing on CPU and GPU
 

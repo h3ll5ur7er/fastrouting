@@ -20,14 +20,14 @@ crates/
     board/                   DSN/SES, .kicad_pcb, KiCad IPC API adapters
     layout/                  the routing state: spatial index, transactions
     compute/                 CPU (rayon, SIMD) and GPU (wgpu) backends
-    profile/                 profiles, fastrouting.toml, overrides
+    profile/                 profiles, traxide.toml, overrides
     run/                     reports, checkpoints, corpus, baselines
   engines/
     rules/  planning/  global/  detailed/  optimization/  verification/
   managers/
     routing/  inspection/
   clients/
-    cli/                     the fastrouting binary, including the Freerouting-compatible mode
+    cli/                     the traxide binary, including the Freerouting-compatible mode
     kicad/                   the KiCad PCM package around the binary
     viewer/                  optional live viewer
     wasm/                    the web demo
@@ -37,7 +37,7 @@ docs/                        this wiki
 tasks/                       the task board
 ```
 
-Crates are named `fr-<component>` (`fr-detailed`, `fr-board-access`). The binary is `fastrouting`.
+Crates are named `traxide-<component>` (`traxide-detailed`, `traxide-board-access`). The binary is `traxide`.
 
 ## Layer rules
 
@@ -45,7 +45,7 @@ The call rules of the [Architecture](Architecture.md#rules-between-components) a
 
 - clients → managers, contracts, utilities
 - managers → engines, access, contracts, utilities
-- engines → `fr-layout-access`, `fr-compute-access`, contracts, utilities (never another engine)
+- engines → `traxide-layout-access`, `traxide-compute-access`, contracts, utilities (never another engine)
 - access → contracts, utilities, third-party crates for their resource (never another access crate)
 - utilities → contracts at most; contracts → geometry only
 
@@ -54,8 +54,8 @@ CI runs the check on every pull request, next to `cargo fmt --check`, `cargo cli
 ## Building
 
 ```bash
-cargo build --release            # the fastrouting binary in target/release
-cargo run -p fr-cli -- route board.dsn -o board.ses
+cargo build --release            # the traxide binary in target/release
+cargo run -p traxide-cli -- route board.dsn -o board.ses
 ```
 
 Release builds use `lto = "fat"`, `codegen-units = 1` and `panic = "abort"`. The GPU backend is a default feature (`gpu`); `--no-default-features` builds a CPU-only binary.
@@ -72,6 +72,16 @@ Release builds use `lto = "fat"`, `codegen-units = 1` and `panic = "abort"`. The
 
 `cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
 
+## Clean-room rules
+
+traxide is licensed `MIT OR Apache-2.0` ([LICENSE-MIT](../LICENSE-MIT), [LICENSE-APACHE](../LICENSE-APACHE)), so that anyone, including companies that ban copyleft, can use it. That only holds if no GPL code gets in:
+
+- **Don't read the source of GPL routers while writing traxide's code**: Freerouting, KiCad's router (PNS), the GPL Rust port of Freerouting. Learn from papers, documentation, their observable behaviour and the summaries in [[Research/Prior-art]] — ideas are free, code is not.
+- **Formats and interfaces are fair to implement from their specifications**: Specctra DSN/SES, KiCad's file formats, Freerouting's command line flags and API.
+- **Dependencies must be permissive** (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode, MPL-2.0 for unmodified files). `cargo deny check licenses` enforces this in CI. Code from MIT projects such as Topola, KiCadRoutingTools or AutoRoute may be reused with its copyright notice.
+- **Corpus boards** are test data, not part of the binary; each keeps its own licence in `corpus/`.
+- Contributions are accepted under both licences (inbound = outbound), stated in the contribution guide.
+
 ## Commits and branches
 
-Name the task in commit messages and pull requests (`FR-12: Route connections with multi-layer A*`). Tasks and wiki pages are committed with the work they describe.
+Name the task in commit messages and pull requests (`TRX-12: Route connections with multi-layer A*`). Tasks and wiki pages are committed with the work they describe.

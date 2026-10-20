@@ -6,7 +6,7 @@ The plan follows the project design half of the iDesign Method: one activity per
 
 ## Milestones
 
-Epics are milestones: `tasks/<milestone>/FR-n.md`.
+Epics are milestones: `tasks/<milestone>/TRX-n.md`.
 
 | Milestone | Integration point: done when | Effort (days) |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ Epics are milestones: `tasks/<milestone>/FR-n.md`.
 | **M5 Routing quality** | Optimisation, push and shove, differential pairs, length matching; corpus completion and DRC-clean rate above Freerouting's (UC4) | 28 |
 | Later | Viewer, web demo, BGA escape, HTTP API (UC7) | 17 |
 
-Total: about **165 developer days** including [[FR-1]].
+Total: about **165 developer days** including [[TRX-1]].
 
 ## Dependency network
 
@@ -27,65 +27,65 @@ The critical path is drawn bold red.
 
 ```mermaid
 flowchart LR
-    FR1["FR-1 Architecture"]
+    FR1["TRX-1 Architecture"]
   subgraph Research["Research spikes"]
-    FR15["FR-15 Corpus, baselines"]
-    FR16["FR-16 Spike: wgpu"]
-    FR17["FR-17 Spike: KiCad IPC"]
-    FR18["FR-18 Spike: Rust routers"]
+    FR15["TRX-15 Corpus, baselines"]
+    FR16["TRX-16 Spike: wgpu"]
+    FR17["TRX-17 Spike: KiCad IPC"]
+    FR18["TRX-18 Spike: Rust routers"]
   end
   subgraph M0["M0 Walking skeleton"]
-    FR2["FR-2 Workspace"]
-    FR3["FR-3 Layer check, CI"]
-    FR4["FR-4 Contracts"]
-    FR5["FR-5 Geometry"]
-    FR6["FR-6 Diag, events, pool"]
-    FR7["FR-7 DSN reader"]
-    FR8["FR-8 SES writer"]
-    FR9["FR-9 Profile Access"]
-    FR10["FR-10 Rules: basic"]
-    FR11["FR-11 Layout Access"]
-    FR12["FR-12 Detailed: A*"]
-    FR13["FR-13 Routing Manager"]
-    FR14["FR-14 CLI route"]
+    FR2["TRX-2 Workspace"]
+    FR3["TRX-3 Layer check, CI"]
+    FR4["TRX-4 Contracts"]
+    FR5["TRX-5 Geometry"]
+    FR6["TRX-6 Diag, events, pool"]
+    FR7["TRX-7 DSN reader"]
+    FR8["TRX-8 SES writer"]
+    FR9["TRX-9 Profile Access"]
+    FR10["TRX-10 Rules: basic"]
+    FR11["TRX-11 Layout Access"]
+    FR12["TRX-12 Detailed: A*"]
+    FR13["TRX-13 Routing Manager"]
+    FR14["TRX-14 CLI route"]
   end
   subgraph M1["M1 Trustworthy results"]
-    FR19["FR-19 Verification"]
-    FR20["FR-20 Check use case"]
-    FR21["FR-21 Run Access"]
-    FR22["FR-22 Benchmark gate"]
-    FR23["FR-23 Rip-up, gridless"]
+    FR19["TRX-19 Verification"]
+    FR20["TRX-20 Check use case"]
+    FR21["TRX-21 Run Access"]
+    FR22["TRX-22 Benchmark gate"]
+    FR23["TRX-23 Rip-up, gridless"]
   end
   subgraph M2["M2 Parallel routing"]
-    FR24["FR-24 Planning"]
-    FR25["FR-25 Compute: CPU"]
-    FR26["FR-26 Global routing"]
-    FR27["FR-27 Parallel detailed"]
+    FR24["TRX-24 Planning"]
+    FR25["TRX-25 Compute: CPU"]
+    FR26["TRX-26 Global routing"]
+    FR27["TRX-27 Parallel detailed"]
   end
   subgraph M3["M3 GPU acceleration"]
-    FR28["FR-28 Compute: GPU"]
-    FR29["FR-29 GPU global"]
+    FR28["TRX-28 Compute: GPU"]
+    FR29["TRX-29 GPU global"]
   end
   subgraph M4["M4 KiCad integration"]
-    FR30["FR-30 KiCad files"]
-    FR31["FR-31 KiCad IPC"]
-    FR32["FR-32 Rules: KiCad"]
-    FR33["FR-33 KiCad plugin"]
-    FR34["FR-34 Freerouting CLI"]
-    FR35["FR-35 Release"]
+    FR30["TRX-30 KiCad files"]
+    FR31["TRX-31 KiCad IPC"]
+    FR32["TRX-32 Rules: KiCad"]
+    FR33["TRX-33 KiCad plugin"]
+    FR34["TRX-34 Freerouting CLI"]
+    FR35["TRX-35 Release"]
   end
   subgraph M5["M5 Routing quality"]
-    FR36["FR-36 Optimization"]
-    FR37["FR-37 Push and shove"]
-    FR38["FR-38 Diff pairs"]
-    FR39["FR-39 Length matching"]
-    FR40["FR-40 Checkpoints"]
+    FR36["TRX-36 Optimization"]
+    FR37["TRX-37 Push and shove"]
+    FR38["TRX-38 Diff pairs"]
+    FR39["TRX-39 Length matching"]
+    FR40["TRX-40 Checkpoints"]
   end
   subgraph Later["Later"]
-    FR41["FR-41 Viewer"]
-    FR42["FR-42 Web demo"]
-    FR43["FR-43 BGA escape"]
-    FR44["FR-44 HTTP API"]
+    FR41["TRX-41 Viewer"]
+    FR42["TRX-42 Web demo"]
+    FR43["TRX-43 BGA escape"]
+    FR44["TRX-44 HTTP API"]
   end
   FR1 --> FR2
   FR2 --> FR3
@@ -167,11 +167,11 @@ flowchart LR
 
 With enough developers, the longest chain decides the end date:
 
-[[FR-1]] → [[FR-2]] → [[FR-4]] → [[FR-10]] → [[FR-11]] → [[FR-12]] → [[FR-13]] → [[FR-24]] → [[FR-26]] → [[FR-27]] → [[FR-36]] → [[FR-39]]: **49 days**.
+[[TRX-1]] → [[TRX-2]] → [[TRX-4]] → [[TRX-10]] → [[TRX-11]] → [[TRX-12]] → [[TRX-13]] → [[TRX-24]] → [[TRX-26]] → [[TRX-27]] → [[TRX-36]] → [[TRX-39]]: **49 days**.
 
 - Contracts, rules, Layout Access and the first detailed router are the spine: everything waits for them. Put the strongest developer on the critical path and keep it free of other work.
 - M4 (KiCad) hangs off the DSN reader, not off the router, so a second developer can start it around day 7: plugin and files are ready by day ~27.
-- The research spikes need only [[FR-1]] and can start at once; the benchmark corpus ([[FR-15]]) must be ready before M1 closes.
+- The research spikes need only [[TRX-1]] and can start at once; the benchmark corpus ([[TRX-15]]) must be ready before M1 closes.
 
 ## Staffing
 

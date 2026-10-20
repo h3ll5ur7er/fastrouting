@@ -1,0 +1,19 @@
+---
+id: TRX-23
+title: Rip up and reroute with shape-based geometry
+type: improvement
+status: todo
+priority: high
+labels: [detailed-routing]
+estimate: 8
+layer: engine
+---
+
+Make the detailed router complete real boards.
+
+- [ ] Implicit octilinear graph from corners of inflated obstacles plus a fine fallback grid (gridless)
+- [ ] Negotiated local rip-up: present and history costs on a fine grid around failures
+- [ ] Every test ends with the Verification Engine; zero violations
+- [ ] The keyboard board routes completely
+
+**Depends on:** [[TRX-12]], [[TRX-19]]

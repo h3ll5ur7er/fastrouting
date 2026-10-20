@@ -1,12 +1,12 @@
 # Volatilities
 
-fastrouting is decomposed by volatility, following the iDesign Method (Juval Löwy, *Righting Software*): every component encapsulates one thing that is likely to change, so that change stays inside it. This page lists what we expect to change, along the two axes the method asks about, and where each volatility is encapsulated. [Architecture](../Architecture.md) shows the resulting components.
+traxide is decomposed by volatility, following the iDesign Method (Juval Löwy, *Righting Software*): every component encapsulates one thing that is likely to change, so that change stays inside it. This page lists what we expect to change, along the two axes the method asks about, and where each volatility is encapsulated. [Architecture](../Architecture.md) shows the resulting components.
 
 [TOC]
 
 ## The two axes
 
-- **Over time, for the same user**: what a keyboard designer needs from fastrouting next year that they don't need today — new constraint kinds, a new KiCad version, a better algorithm, a GPU they just bought.
+- **Over time, for the same user**: what a keyboard designer needs from traxide next year that they don't need today — new constraint kinds, a new KiCad version, a better algorithm, a GPU they just bought.
 - **Across users, at the same time**: what differs between two people routing today — KiCad on Windows versus a CI job on Linux, a 2-layer macropad versus an 8-layer BGA board, a laptop without a GPU versus a desktop with one, "route it in 5 seconds" versus "route it as well as you can".
 
 Anything that varies along either axis is a candidate. A candidate becomes a component only when it is a real volatility (it changes the system's behaviour or structure, and is expensive to change if spread out), not a mere *variability* that a parameter covers.
@@ -27,12 +27,12 @@ Anything that varies along either axis is a candidate. A candidate becomes a com
 | V10 | **Where the board comes from and where the result goes**: Specctra DSN/SES files, `.kicad_pcb`, the KiCad IPC API of a running KiCad, later tscircuit JSON, IPC-2581, other EDA tools; and their versions | Users, time | Board Access |
 | V11 | **How the routing state is stored and queried**: the spatial index (uniform grid, R-tree, BVH), memory layout, how parallel workers commit without locking each other out, snapshots for rip-up and checkpoints | Time | Layout Access |
 | V12 | **Where data-parallel work runs**: a GPU through Vulkan, Metal or DirectX 12, CPU threads with SIMD, a single thread in a browser; device selection, buffers and fallback | Users, time | Compute Access |
-| V13 | **Where settings come from**: built-in profiles, a `fastrouting.toml`, command line flags, KiCad project settings | Users | Profile Access |
+| V13 | **Where settings come from**: built-in profiles, a `traxide.toml`, command line flags, KiCad project settings | Users | Profile Access |
 | V14 | **Where runs are kept**: reports, checkpoints, the benchmark corpus and its baselines | Time | Run Access |
 
 ## Not volatilities
 
-The method warns against encapsulating the *nature of the business*, which does not change, and against speculative volatility that nobody will pay for. For fastrouting these stay out of the decomposition:
+The method warns against encapsulating the *nature of the business*, which does not change, and against speculative volatility that nobody will pay for. For traxide these stay out of the decomposition:
 
 - **What a board is.** Layers, pads, nets, keepouts, tracks and vias have been the same for decades; the [data contracts](Contracts.md) model them directly.
 - **What routing is.** Connect every net's pins on copper without breaking a rule, minimising length and vias. The core use case is stable; only how it is done changes.

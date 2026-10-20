@@ -10,7 +10,7 @@ Terms used across the wiki and the code.
 | **Constraint set** | The Rules Engine's output: dense tables of clearances, widths, via stacks, pairs and length groups |
 | **Corridor** | The region of the board, with a layer assignment, that global routing reserves for one connection; detailed routing stays inside it |
 | **Congestion** | How much demand for routing resources exceeds their capacity in a grid cell or edge |
-| **Design** | fastrouting's format-neutral model of a board, as loaded by Board Access |
+| **Design** | traxide's format-neutral model of a board, as loaded by Board Access |
 | **DRC** | Design rule check: finding clearance, width, via and other rule violations |
 | **DSN / SES** | Specctra design and session files: the board exported for an autorouter, and the routing it returns. KiCad, Freerouting and many EDA tools speak them |
 | **Escape / fanout** | Routing out of dense pin fields (BGA, QFN) to where regular routing can take over |

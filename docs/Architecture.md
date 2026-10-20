@@ -1,6 +1,6 @@
 # Architecture
 
-fastrouting is decomposed by volatility, following the iDesign Method: each component hides one thing that is likely to change ([Volatilities](Architecture/Volatilities.md)), calls only go down, and the core use cases are carried out by composing the same few components ([Use cases](Architecture/Use-cases.md)).
+traxide is decomposed by volatility, following the iDesign Method: each component hides one thing that is likely to change ([Volatilities](Architecture/Volatilities.md)), calls only go down, and the core use cases are carried out by composing the same few components ([Use cases](Architecture/Use-cases.md)).
 
 [TOC]
 
@@ -40,7 +40,7 @@ flowchart TB
     mem[(Routing state in memory)]
     gpu[(GPU: Vulkan, Metal, DX12)]
     cpu[(CPU cores, SIMD)]
-    cfg[(Profiles, fastrouting.toml)]
+    cfg[(Profiles, traxide.toml)]
     runs[(Reports, checkpoints, corpus)]
   end
   subgraph Utilities
@@ -76,8 +76,8 @@ Clients hide **how the router is invoked** (V1). Each turns its input into a job
 
 | Client | Purpose |
 | --- | --- |
-| `fastrouting` CLI | `route`, `optimize`, `check`, `bench`: the primary interface, scriptable in CI |
-| Freerouting-compatible CLI | Accepts Freerouting's flags (`-de board.dsn -do board.ses -mp 20 …`), so tools that call Freerouting, including KiCad's Freerouting plugin, can call fastrouting instead |
+| `traxide` CLI | `route`, `optimize`, `check`, `bench`: the primary interface, scriptable in CI |
+| Freerouting-compatible CLI | Accepts Freerouting's flags (`-de board.dsn -do board.ses -mp 20 …`), so tools that call Freerouting, including KiCad's Freerouting plugin, can call traxide instead |
 | KiCad plugin | A KiCad Plugin and Content Manager package: a button in the PCB editor that routes the open board through the IPC API, with progress and undo |
 | Viewer | A window that draws the board and the routing as it happens, for debugging the engines and for demos |
 | Web demo | The managers compiled to WebAssembly, on CPU or WebGPU, in a browser tab |
@@ -117,7 +117,7 @@ Resource access components hide **how resources are reached** and expose atomic,
 | Board Access | `load_design`, `store_routes`, `lock_board` | V10: Specctra DSN/SES, `.kicad_pcb` with its project files, the KiCad IPC API (on KiCad 10 combined with rules read from the project files), later formats; their versions and quirks |
 | Layout Access | `build_layout`, `obstacles_near`, `clearance_violations`, `begin`/`commit` a transaction, `rip_up`, `snapshot` | V11: the spatial index, the memory layout, optimistic concurrency between workers |
 | Compute Access | `expand_wavefronts`, `update_congestion`, `route_batch` on a cost grid | V12: GPU (wgpu over Vulkan, Metal, DirectX 12) or CPU (threads and SIMD), device choice, buffers, fallback |
-| Profile Access | `load_profile` | V13: built-in profiles, `fastrouting.toml`, flags, KiCad project settings |
+| Profile Access | `load_profile` | V13: built-in profiles, `traxide.toml`, flags, KiCad project settings |
 | Run Access | `record_run`, `store_checkpoint`, `load_corpus`, `baseline_of` | V14: where reports, checkpoints, the corpus and baselines live |
 
 ### Utilities

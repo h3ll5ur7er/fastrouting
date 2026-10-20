@@ -1,6 +1,6 @@
 # Use cases
 
-The iDesign Method validates an architecture by showing that the core use cases are carried out by the same components, interacting differently, rather than by components built for each use case. These are fastrouting's core use cases and their call chains. Solid arrows are synchronous calls, dashed arrows events or queued calls.
+The iDesign Method validates an architecture by showing that the core use cases are carried out by the same components, interacting differently, rather than by components built for each use case. These are traxide's core use cases and their call chains. Solid arrows are synchronous calls, dashed arrows events or queued calls.
 
 [TOC]
 
