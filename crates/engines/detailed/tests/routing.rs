@@ -339,23 +339,42 @@ fn short_detours() -> Profile {
 
 #[test]
 fn without_rip_up_a_connection_that_takes_anothers_only_way_leaves_it_unrouted() {
-    let design = two_gaps();
+    let design = one_way_for_two();
     let result = route_with(
         &design,
         &Profile {
             max_rip_ups: 0,
             history_cost: 0,
-            ..short_detours()
+            ..profile()
         },
-        &[("Y1", "Y2"), ("X1", "X2")],
+        &[("X1", "X2"), ("Y1", "Y2")],
     );
-    assert_eq!(result.unrouted, [connection(&design, "X1", "X2")]);
+    assert_eq!(result.unrouted, [connection(&design, "Y1", "Y2")]);
 }
 
 #[test]
 fn rips_up_a_connection_in_the_way_and_routes_it_again_elsewhere() {
     let design = two_gaps();
     let result = route_with(&design, &short_detours(), &[("Y1", "Y2"), ("X1", "X2")]);
+    assert_eq!(result.unrouted, []);
+    assert_legal(&design, &result.routes);
+}
+
+#[test]
+fn a_connection_whose_only_way_runs_further_round_than_its_window_routes() {
+    // The wall's end lies 15 mm beyond the pads, three times the margin.
+    let design = DesignBuilder::new(40.0, 20.0)
+        .layers(1)
+        .without_vias()
+        .keepout(
+            wall(at(19.5, 0.0), at(20.5, 17.0)),
+            None,
+            KeepoutScope::Everything,
+        )
+        .smd("A1", Some("A"), at(15.0, 2.0), 0.6, 0)
+        .smd("A2", Some("A"), at(25.0, 2.0), 0.6, 0)
+        .build();
+    let result = route(&design, &[("A1", "A2")]);
     assert_eq!(result.unrouted, []);
     assert_legal(&design, &result.routes);
 }

@@ -32,6 +32,9 @@ const SCANNED_PER_BATCH_SLOT: usize = 4;
 /// churning boards in all, though they take longer.
 const STALLED_ROUNDS: usize = 4;
 
+/// How much wider each window of a search that found no way grows.
+const WIDER_WINDOW: i32 = 4;
+
 pub struct Router<'a> {
     finder: Finder<'a>,
     /// One per thread: each search needs its own memory.
@@ -84,68 +87,48 @@ impl<'a> Router<'a> {
         events: &impl Publisher<Event>,
     ) -> RoutingResult {
         let total = plan.connections.len();
-        let mut routed: Vec<Option<Routes>> = vec![None; total];
-        let mut rip_ups = vec![0_u32; total];
-        let mut queue: VecDeque<ConnectionId> = (0..total).map(ConnectionId::from_index).collect();
+        let mut state = Negotiated {
+            routed: vec![None; total],
+            rip_ups: vec![0; total],
+            queue: (0..total).map(ConnectionId::from_index).collect(),
+            history: history::History::new(self.finder.design, self.finder.profile.history_cost),
+            may_rip_up: self.finder.profile.max_rip_ups > 0,
+            most_routed: 0,
+            rip_ups_since_most: 0,
+        };
         let mut unrouted = Vec::new();
         let mut hemmed_in = Vec::new();
-        let mut may_rip_up = self.finder.profile.max_rip_ups > 0;
-        let (mut most_routed, mut rip_ups_since_most) = (0, 0);
-        let mut history =
-            history::History::new(self.finder.design, self.finder.profile.history_cost);
-        while !queue.is_empty() {
+        while !state.queue.is_empty() {
             if cancel.is_cancelled() {
-                unrouted.extend(queue.drain(..));
+                unrouted.extend(state.queue.drain(..));
                 break;
             }
-            let batch = self.next_batch(&mut queue, plan, corridors);
-            let found = self.find_all(
-                &batch,
-                plan,
-                corridors,
-                layout,
-                may_rip_up.then_some(search::Negotiation {
-                    rip_ups: &rip_ups,
-                    history: &history,
-                }),
-            );
+            let batch = self.next_batch(&mut state.queue, plan, corridors);
+            let found = self.find_all(&batch, plan, corridors, layout, state.negotiation());
+            let mut no_way = Vec::new();
             for (id, found) in batch.iter().copied().zip(found) {
-                let found = match found {
-                    Ok(found) => found,
-                    Err(failure) => {
-                        if let NoRoute::HemmedIn(pad) = failure {
-                            hemmed_in.push(pad);
-                        }
-                        unrouted.push(id);
-                        continue;
+                match found {
+                    Ok(found) => {
+                        state.commit(self.finder.design, layout, id, found, &batch, events)
                     }
-                };
-                let displaced = routed_obstructions(layout, &found);
-                if !displaced.is_empty() {
-                    record_collisions(&mut history, self.finder.design, layout, &found);
+                    Err(NoRoute::NotFound) => no_way.push(id),
+                    Err(NoRoute::HemmedIn(pad)) => {
+                        hemmed_in.push(pad);
+                        unrouted.push(id);
+                    }
                 }
-                debug_assert!(
-                    displaced.iter().all(|d| !batch.contains(d)),
-                    "connections of one batch keep out of each other's territory"
-                );
-                for displaced in displaced {
-                    layout.remove_route(displaced);
-                    routed[displaced.index()] = None;
-                    rip_ups[displaced.index()] += 1;
-                    rip_ups_since_most += 1;
-                    queue.push_back(displaced);
+            }
+            // After the batch, one at a time, so that a wider window cannot meet
+            // the copper of a connection searched beside it.
+            for id in no_way {
+                let connection = plan.connections[id.index()];
+                match self.find_wider(connection, layout, state.negotiation()) {
+                    Some(found) => state.commit(self.finder.design, layout, id, found, &[], events),
+                    None => unrouted.push(id),
                 }
-                layout.add_route(id, &found);
-                routed[id.index()] = Some(found);
-                let done = routed.iter().filter(|r| r.is_some()).count();
-                if done > most_routed {
-                    (most_routed, rip_ups_since_most) = (done, 0);
-                } else if rip_ups_since_most >= STALLED_ROUNDS * total {
-                    may_rip_up = false;
-                }
-                events.publish(Event::ConnectionRouted { done, total });
             }
         }
+        let Negotiated { routed, .. } = state;
         unrouted.sort_unstable();
         hemmed_in.sort_unstable();
         hemmed_in.dedup();
@@ -161,6 +144,38 @@ impl<'a> Router<'a> {
                 .collect(),
             hemmed_in,
         }
+    }
+
+    /// A search in windows grown WIDER_WINDOW times wider each, alone, until one
+    /// finds a way or the last covered the whole board: the way round a row of
+    /// headers or the board's own wiring is often longer than the margin.
+    fn find_wider(
+        &mut self,
+        connection: Connection,
+        layout: &impl LayoutAccess,
+        negotiation: Option<search::Negotiation>,
+    ) -> Option<Routes> {
+        let board = self.finder.design.outline.bounds();
+        let mut wider = self.finder.profile.clone();
+        while !search::window(self.finder.design, wider.detour_margin, connection, None)
+            .contains_rect(board)
+        {
+            wider.detour_margin = wider.detour_margin.saturating_mul(WIDER_WINDOW);
+            let finder = Finder {
+                profile: &wider,
+                ..self.finder
+            };
+            if let Ok(found) = finder.search(
+                &mut self.scratches[0],
+                connection,
+                layout,
+                negotiation,
+                None,
+            ) {
+                return Some(found);
+            }
+        }
+        None
     }
 
     /// Takes up to the profile's `batch_size` connections from the front of
@@ -284,11 +299,11 @@ impl Finder<'_> {
         connection: Connection,
         corridors: Option<&Corridors>,
     ) -> Rect {
-        let anywhere = search::window(self.design, self.profile, connection, None);
+        let anywhere = search::window(self.design, self.profile.detour_margin, connection, None);
         let window = match corridors.filter(|c| c.bounds(id).is_some()) {
             Some(corridors) => anywhere.union(search::window(
                 self.design,
-                self.profile,
+                self.profile.detour_margin,
                 connection,
                 Some((corridors, id)),
             )),
@@ -353,6 +368,64 @@ impl Finder<'_> {
             connection.net,
             self.rules.track_width(connection.net),
         ))
+    }
+}
+
+/// Where routing stands: the routes so far and what negotiation has learnt.
+struct Negotiated {
+    routed: Vec<Option<Routes>>,
+    rip_ups: Vec<u32>,
+    queue: VecDeque<ConnectionId>,
+    history: history::History,
+    may_rip_up: bool,
+    most_routed: usize,
+    rip_ups_since_most: usize,
+}
+
+impl Negotiated {
+    fn negotiation(&self) -> Option<search::Negotiation<'_>> {
+        self.may_rip_up.then_some(search::Negotiation {
+            rip_ups: &self.rip_ups,
+            history: &self.history,
+        })
+    }
+
+    /// Adds `found` for `id`, ripping up the routed connections it crosses,
+    /// which never include another of `batch`.
+    fn commit(
+        &mut self,
+        design: &Design,
+        layout: &mut impl LayoutAccess,
+        id: ConnectionId,
+        found: Routes,
+        batch: &[ConnectionId],
+        events: &impl Publisher<Event>,
+    ) {
+        let displaced = routed_obstructions(layout, &found);
+        if !displaced.is_empty() {
+            record_collisions(&mut self.history, design, layout, &found);
+        }
+        debug_assert!(
+            displaced.iter().all(|d| !batch.contains(d)),
+            "connections of one batch keep out of each other's territory"
+        );
+        for displaced in displaced {
+            layout.remove_route(displaced);
+            self.routed[displaced.index()] = None;
+            self.rip_ups[displaced.index()] += 1;
+            self.rip_ups_since_most += 1;
+            self.queue.push_back(displaced);
+        }
+        layout.add_route(id, &found);
+        self.routed[id.index()] = Some(found);
+        let total = self.routed.len();
+        let done = self.routed.iter().filter(|r| r.is_some()).count();
+        if done > self.most_routed {
+            (self.most_routed, self.rip_ups_since_most) = (done, 0);
+        } else if self.rip_ups_since_most >= STALLED_ROUNDS * total {
+            self.may_rip_up = false;
+        }
+        events.publish(Event::ConnectionRouted { done, total });
     }
 }
 

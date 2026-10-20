@@ -80,10 +80,11 @@ impl Came {
 }
 
 /// The area a search for `connection` covers: the corridor global routing
-/// planned for it, or the box around its pads with room for detours.
+/// planned for it, or the box around its pads grown by `margin` for detours,
+/// no further than the board reaches, as no copper lies beyond it.
 pub(crate) fn window(
     design: &Design,
-    profile: &Profile,
+    margin: i32,
     connection: Connection,
     corridor: Option<(&Corridors, ConnectionId)>,
 ) -> Rect {
@@ -95,7 +96,22 @@ pub(crate) fn window(
     .including(design.pad(connection.to).position);
     match corridor.and_then(|(corridors, id)| corridors.bounds(id)) {
         Some(bounds) => bounds.union(pads),
-        None => pads.inflated(profile.detour_margin),
+        None => {
+            let board = design.outline.bounds().union(pads);
+            let grown = |v: i32, by: i32, limit: i32, outwards: fn(i32, i32) -> i32| {
+                outwards(v.saturating_add(by), limit)
+            };
+            Rect {
+                min: Point::new(
+                    grown(pads.min.x, -margin, board.min.x, i32::max),
+                    grown(pads.min.y, -margin, board.min.y, i32::max),
+                ),
+                max: Point::new(
+                    grown(pads.max.x, margin, board.max.x, i32::min),
+                    grown(pads.max.y, margin, board.max.y, i32::min),
+                ),
+            }
+        }
     }
 }
 
@@ -156,7 +172,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         corridor: Option<(&'a Corridors, ConnectionId)>,
     ) -> Self {
         let (from, to) = (design.pad(connection.from), design.pad(connection.to));
-        let window = window(design, profile, connection, corridor);
+        let window = window(design, profile.detour_margin, connection, corridor);
         let pitch = i64::from(profile.grid_pitch);
         Self {
             connection,

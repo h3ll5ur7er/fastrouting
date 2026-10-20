@@ -2,7 +2,7 @@
 id: TRX-55
 title: Widen the search window when no way is found
 type: improvement
-status: todo
+status: in-progress
 priority: high
 labels: [detailed-routing]
 estimate: 1
@@ -24,7 +24,7 @@ A search only covers the box around its two pads grown by the profile's `detour_
 
 A wide window for every search would make the long searches slower; only the searches that fail need it.
 
-- [ ] Failing test first: a connection whose only way runs round a wall longer than the margin routes
-- [ ] When a search finds no way in its window, search again in a window grown step by step (for example ×4) up to the board's outline, before reporting no way found or ripping up
-- [ ] The territory of a batch ([[TRX-27]]) covers the grown window, so batches stay apart
+- [x] Failing test first: a connection whose only way runs round a wall longer than the margin routes
+- [x] When a search finds no way in its window, search again in a window grown step by step (×4) up to the board's outline, before reporting no way found
+- [x] Batches stay apart without growing their territories: the wider searches run one at a time after their batch has committed ([[TRX-27]])
 - [ ] The boards above complete as in the table; the keyboard's time stays within a few per cent ([[Benchmarks]])
