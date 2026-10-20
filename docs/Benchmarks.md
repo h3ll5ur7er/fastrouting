@@ -60,6 +60,23 @@ Stack samples of Issue110-RelayModule showed nearly all of its time in checking 
 | Issue015-StackOverflow, complete | 46 s | **40 s** |
 | keyboard-tkl, complete | 1.8 s | **1.9 s** |
 
+## A wider window where no way was found (M5, TRX-55)
+
+A search covers the box around its pads grown by 5 mm; the corpus analysis ([[Corpus-analysis#search-window-too-small]]) found ways that run further round. A connection that finds no way now searches again, alone after its batch, in windows four times wider each, up to the whole board. Measured on this machine, every session as clean as before (the violations counted are the boards' own):
+
+| Board | Before | **After** |
+| --- | --- | --- |
+| Issue093-interf_u | 172 of 173 nets | **173 of 173**, 0.1 s |
+| Issue110-Pajalnaja_stancija | 59 of 64 nets | **63 of 64** (the last pad lies outside the board), 2.1 s |
+| Issue178-KeebMaker_Sofle_Choc | 175 of 176 nets | **176 of 176**, 14 s |
+| Issue217-8088sbc | 103 of 104 nets, 188 vias | **104 of 104, 159 vias**, 5.9 s instead of 7.6 s |
+| Issue230-CNH_Functional_Tester | 763 of 764 nets | **764 of 764**, 6.6 s |
+| Issue269-z10_module | 63 of 68 connections, 0.3 s | 65 of 68, 27 s |
+| Issue029-hw48na | 83 of 91 connections, 40 s | 87 of 91, **149 s** |
+| keyboard-tkl, Issue015, Issue034 | | the same routes in the same time |
+
+Issue029 pays for its four connections: 97 searches in wider windows found ways (57 s), 4 found none (9 s), and the connections they routed gave negotiation more to settle. Widening each connection only until it fails once changed nothing.
+
 ## Negotiation that goes round in circles (M2, TRX-48)
 
 On congested corpus boards the routed count rose, then swung back and forth: Issue039 between 135 and 151 of 204 connections for as long as it was let run, as connections took each other's ways in turn, each up to 20 times. Negotiation now ends once two rounds of rip-ups, as many as there are connections each, have routed no more connections than the best so far; the connections left search without ripping up others. Measured on this machine:
