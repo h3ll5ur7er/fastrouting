@@ -1,0 +1,29 @@
+{
+  "$schema": "https://go.kicad.org/api/schemas/v1",
+  "identifier": "com.github.h3ll5ur7er.traxide-spike",
+  "name": "traxide spike",
+  "description": "TRX-17 probe",
+  "runtime": { "type": "exec" },
+  "actions": [
+    {
+      "identifier": "probe",
+      "name": "Probe",
+      "description": "Record what KiCad passes to an exec plugin",
+      "show-button": true,
+      "scopes": ["pcb"],
+      "entrypoint": "probe.sh",
+      "icons-light": ["icon.png"],
+      "icons-dark": ["icon.png"]
+    },
+    {
+      "identifier": "route",
+      "name": "Route",
+      "description": "Add a track and a via in one commit",
+      "show-button": true,
+      "scopes": ["pcb"],
+      "entrypoint": "traxide-kicad-ipc-spike",
+      "icons-light": ["icon.png"],
+      "icons-dark": ["icon.png"]
+    }
+  ]
+}

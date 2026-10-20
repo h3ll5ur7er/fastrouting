@@ -32,6 +32,7 @@ crates/
     viewer/                  optional live viewer
     wasm/                    the web demo
 xtask/                       repository tasks: layer check, end-to-end test, later corpus and release
+spikes/                      throwaway prototypes of research tasks, outside the workspace and never released
 e2e/kicad/                   the KiCad half of the end-to-end test: board recipes, import, export
 fixtures/boards/             small DSN boards shared by the tests of several crates
 corpus/                      benchmark boards and baselines (Git LFS), with [[TRX-15]]

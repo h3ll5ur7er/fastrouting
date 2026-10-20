@@ -1,0 +1,14 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v1",
+  "name": "traxide spike",
+  "description": "TRX-17 probe of a native IPC plugin.",
+  "description_full": "TRX-17 probe of a native IPC plugin installed through PCM.",
+  "identifier": "com.github.h3ll5ur7er.traxide-spike",
+  "type": "plugin",
+  "author": { "name": "traxide contributors", "contact": { "web": "https://github.com/h3ll5ur7er/fastrouting" } },
+  "license": "MIT",
+  "resources": { "homepage": "https://github.com/h3ll5ur7er/fastrouting" },
+  "versions": [
+    { "version": "0.0.1", "status": "development", "kicad_version": "10.0", "platforms": ["linux"] }
+  ]
+}
