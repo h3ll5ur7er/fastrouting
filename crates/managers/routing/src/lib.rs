@@ -101,7 +101,12 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::Loading));
     let design = traxide_board_access::load_design(&job.input)?;
     events.publish(Event::StageStarted(Stage::CompilingRules));
-    let rules = traxide_rules::compile(&design, Purpose::Routing);
+    let rules = traxide_rules::compile(
+        &design,
+        Purpose::Routing {
+            grid_pitch: profile.grid_pitch,
+        },
+    );
     events.publish(Event::StageStarted(Stage::BuildingLayout));
     let mut layout = Layout::build(&design, &rules);
     events.publish(Event::StageStarted(Stage::Planning));

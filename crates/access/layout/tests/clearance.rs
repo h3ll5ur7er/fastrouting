@@ -34,7 +34,12 @@ fn track_of(net: NetId, along: Segment) -> Routes {
 }
 
 fn check(design: &Design, f: impl FnOnce(&mut Layout<'_>, NetId, NetId)) {
-    let rules = traxide_rules::compile(design, traxide_rules::Purpose::Routing);
+    let rules = traxide_rules::compile(
+        design,
+        traxide_rules::Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
     let mut layout = Layout::build(design, &rules);
     f(&mut layout, design.net_named("A"), design.net_named("B"));
 }
@@ -103,7 +108,12 @@ fn a_via_needs_room_on_every_layer_it_spans() {
         .smd("P1", Some("A"), at(5.0, 5.0), 1.0, 1)
         .smd("P2", Some("B"), at(18.0, 5.0), 1.0, 1)
         .build();
-    let rules = traxide_rules::compile(&design, traxide_rules::Purpose::Routing);
+    let rules = traxide_rules::compile(
+        &design,
+        traxide_rules::Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
     let mut layout = Layout::build(&design, &rules);
     let other = design.net_named("B");
     let via = |x: f64| Via {
@@ -141,7 +151,12 @@ fn keepouts_block_what_they_are_meant_to_block() {
         .smd("P1", Some("A"), at(5.0, 5.0), 1.0, 0)
         .keepout(zone, None, KeepoutScope::ViasOnly)
         .build();
-    let rules = traxide_rules::compile(&design, traxide_rules::Purpose::Routing);
+    let rules = traxide_rules::compile(
+        &design,
+        traxide_rules::Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
     let layout = Layout::build(&design, &rules);
     let a = design.net_named("A");
     assert!(layout.is_track_clear(a, TOP, segment(at(8.0, 5.0), at(12.0, 5.0)), mm(0.2)));
@@ -159,7 +174,12 @@ fn obstructions_name_the_routed_connections_in_the_way() {
         .smd("P2", Some("B"), at(18.0, 5.0), 1.0, 0)
         .smd("P3", Some("C"), at(18.0, 8.0), 1.0, 0)
         .build();
-    let rules = traxide_rules::compile(&design, traxide_rules::Purpose::Routing);
+    let rules = traxide_rules::compile(
+        &design,
+        traxide_rules::Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
     let mut layout = Layout::build(&design, &rules);
     let (a, b, c) = (
         design.net_named("A"),

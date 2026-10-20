@@ -315,7 +315,7 @@ impl<'a> DsnReader<'a> {
                     .find(|a| matches!(a.keyword(), Some("circle" | "rect" | "polygon" | "path")))
                     .ok_or_else(|| keepout.invalid("keepout without a shape"))?;
                 let mut layered = self.shape(shape)?;
-                if self.from_kicad() {
+                if self.is_from_kicad() {
                     layered.shape = without_kicad_7_0_2_excess(layered.shape);
                 }
                 keepouts.push((scope, layered));
@@ -537,14 +537,14 @@ impl<'a> DsnReader<'a> {
     /// so boards from KiCad keep at least that; others the board-wide clearance.
     fn edge_clearance(&self, clearance: i32) -> i32 {
         const KICAD_DEFAULT_EDGE_CLEARANCE: i32 = 500_000;
-        if self.from_kicad() {
+        if self.is_from_kicad() {
             clearance.max(KICAD_DEFAULT_EDGE_CLEARANCE)
         } else {
             clearance
         }
     }
 
-    fn from_kicad(&self) -> bool {
+    fn is_from_kicad(&self) -> bool {
         self.root
             .child("parser")
             .and_then(|parser| parser.child("host_cad"))

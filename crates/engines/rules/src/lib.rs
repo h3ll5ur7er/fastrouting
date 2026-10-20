@@ -6,9 +6,12 @@ use traxide_contracts::{ConstraintSet, Design};
 /// What the compiled rules are for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Purpose {
-    /// Clearances grow by the design's resolution: stored routes are rounded to
-    /// that grid, which can move copper towards its neighbours by up to one step.
-    Routing,
+    /// For routing on a grid of `grid_pitch`. Stored routes are rounded to the
+    /// design's resolution, which can move copper towards its neighbours by up
+    /// to a step: clearances grow by one, unless the grid is made of whole steps,
+    /// as on boards from KiCad. Then nothing moves, and copper may fit exactly
+    /// where the rules allow, as between the pins of a fine-pitch chip.
+    Routing { grid_pitch: i32 },
     /// The rules exactly as the design states them, as KiCad's DRC applies them.
     Verification,
 }
@@ -16,8 +19,12 @@ pub enum Purpose {
 pub fn compile(design: &Design, purpose: Purpose) -> ConstraintSet {
     let classes = &design.rules.classes;
     let margin = match purpose {
-        Purpose::Routing => design.resolution,
-        Purpose::Verification => 0,
+        Purpose::Routing { grid_pitch }
+            if design.resolution > 0 && grid_pitch % design.resolution != 0 =>
+        {
+            design.resolution
+        }
+        Purpose::Routing { .. } | Purpose::Verification => 0,
     };
     let clearance_between_classes = classes
         .iter()
@@ -92,7 +99,7 @@ mod tests {
 
     #[test]
     fn nets_of_two_classes_keep_the_larger_clearance() {
-        let rules = compile(&design(0), Purpose::Routing);
+        let rules = compile(&design(0), Purpose::Routing { grid_pitch: 100 });
         assert_eq!(rules.clearance(SIGNAL, POWER), 300);
         assert_eq!(rules.clearance(POWER, SIGNAL), 300);
         assert_eq!(rules.clearance(SIGNAL, SIGNAL), 200);
@@ -101,16 +108,23 @@ mod tests {
     #[test]
     fn copper_of_no_net_follows_the_default_class() {
         assert_eq!(
-            compile(&design(0), Purpose::Routing).clearance(None, SIGNAL),
+            compile(&design(0), Purpose::Routing { grid_pitch: 100 }).clearance(None, SIGNAL),
             200
         );
     }
 
     #[test]
-    fn clearances_include_the_rounding_of_stored_routes() {
-        let rules = compile(&design(100), Purpose::Routing);
+    fn clearances_include_the_rounding_of_stored_routes_off_the_resolution() {
+        let rules = compile(&design(100), Purpose::Routing { grid_pitch: 150 });
         assert_eq!(rules.clearance(SIGNAL, POWER), 400);
         assert_eq!(rules.edge_clearance(), 350);
+    }
+
+    #[test]
+    fn routes_on_a_grid_of_whole_resolution_steps_may_fit_exactly() {
+        let rules = compile(&design(100), Purpose::Routing { grid_pitch: 1_000 });
+        assert_eq!(rules.clearance(SIGNAL, POWER), 300);
+        assert_eq!(rules.edge_clearance(), 250);
     }
 
     #[test]
@@ -122,7 +136,7 @@ mod tests {
 
     #[test]
     fn widths_and_vias_follow_the_class_of_the_net() {
-        let rules = compile(&design(100), Purpose::Routing);
+        let rules = compile(&design(100), Purpose::Routing { grid_pitch: 100 });
         assert_eq!(rules.track_width(NetId(1)), 500);
         assert_eq!(rules.via_kinds(NetId(1)), [ViaKindId(1)]);
     }
@@ -130,7 +144,7 @@ mod tests {
     #[test]
     fn the_largest_clearance_bounds_every_query() {
         assert_eq!(
-            compile(&design(100), Purpose::Routing).largest_clearance(),
+            compile(&design(100), Purpose::Routing { grid_pitch: 150 }).largest_clearance(),
             400
         );
     }

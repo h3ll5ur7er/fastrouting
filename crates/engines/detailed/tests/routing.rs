@@ -55,7 +55,12 @@ fn route_on_threads(
     corridors: Option<&Corridors>,
     threads: usize,
 ) -> RoutingResult {
-    let rules = traxide_rules::compile(design, Purpose::Routing);
+    let rules = traxide_rules::compile(
+        design,
+        Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
     let mut layout = Layout::build(design, &rules);
     let connections = pairs
         .iter()

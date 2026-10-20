@@ -34,7 +34,12 @@ fn plan(design: &Design, pairs: &[(&str, &str)]) -> Plan {
 }
 
 fn corridors(design: &Design, pairs: &[(&str, &str)]) -> Corridors {
-    let rules = traxide_rules::compile(design, Purpose::Routing);
+    let rules = traxide_rules::compile(
+        design,
+        Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
     traxide_global::route(design, &plan(design, pairs), &rules, &profile())
 }
 

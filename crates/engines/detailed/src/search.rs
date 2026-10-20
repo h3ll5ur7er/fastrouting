@@ -583,7 +583,12 @@ mod tests {
             .smd("A1", Some("A"), at(6.0, 10.0), 0.5, 0)
             .smd("A2", Some("A"), at(25.0, 10.0), 0.5, 0)
             .build();
-        let rules = traxide_rules::compile(&design, Purpose::Routing);
+        let rules = traxide_rules::compile(
+            &design,
+            Purpose::Routing {
+                grid_pitch: 100_000,
+            },
+        );
         let layout = traxide_layout_access::Layout::build(&design, &rules);
         let profile = Profile {
             name: "bold".into(),
