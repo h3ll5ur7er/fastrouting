@@ -14,6 +14,7 @@ traxide-contracts.workspace = true
 
 
 [dev-dependencies]
+traxide-contracts = { workspace = true, features = ["testing"] }
 serde.workspace = true
 tempfile.workspace = true
 

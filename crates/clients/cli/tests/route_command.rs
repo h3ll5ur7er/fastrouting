@@ -127,3 +127,61 @@ fn check_reports_how_complete_a_board_is_and_exits_accordingly() {
     assert_eq!(report["incomplete_nets"], 0);
     assert_eq!(report["violations"], serde_json::json!({}));
 }
+
+/// The DRC report at `path`, which must parse and hold every field KiCad's
+/// schema requires of a report.
+fn drc_report(path: &Path) -> serde_json::Value {
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("written")).expect("JSON");
+    for key in [
+        "$schema",
+        "source",
+        "date",
+        "kicad_version",
+        "coordinate_units",
+    ] {
+        assert!(report[key].is_string(), "{key} in {report}");
+    }
+    for key in ["violations", "unconnected_items", "schematic_parity"] {
+        assert!(report[key].is_array(), "{key} in {report}");
+    }
+    report
+}
+
+#[test]
+fn check_writes_a_drc_report_in_kicads_format_with_drc() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let drc = folder.path().join("report.json");
+    let checked = traxide(&[
+        "check",
+        board("existing-violation.dsn").to_str().expect("utf-8"),
+        "--drc",
+        drc.to_str().expect("utf-8"),
+    ]);
+    assert_eq!(checked.status.code(), Some(3), "{checked:?}");
+    let report = drc_report(&drc);
+    assert_eq!(report["violations"][0]["type"], "clearance");
+    assert_eq!(
+        report["unconnected_items"].as_array().map(Vec::len),
+        Some(2)
+    );
+}
+
+#[test]
+fn route_writes_a_drc_report_of_the_stored_routes_with_drc() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let input = copy_to(folder.path(), "two-nets.dsn");
+    let drc = folder.path().join("two-nets.drc.json");
+    let routed = traxide(&[
+        "route",
+        input.to_str().expect("utf-8"),
+        "--quiet",
+        "--drc",
+        drc.to_str().expect("utf-8"),
+    ]);
+    assert!(routed.status.success(), "{routed:?}");
+    let report = drc_report(&drc);
+    assert_eq!(report["source"], "two-nets.ses");
+    assert_eq!(report["violations"], serde_json::json!([]));
+    assert_eq!(report["unconnected_items"], serde_json::json!([]));
+}

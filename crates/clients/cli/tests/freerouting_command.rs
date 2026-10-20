@@ -73,3 +73,31 @@ fn a_binary_named_freerouting_takes_freeroutings_arguments() {
     assert!(routed.status.success(), "{routed:?}");
     assert_complete_and_clean(&input, &session);
 }
+
+#[test]
+fn drc_writes_a_drc_report_in_kicads_format_without_a_warning() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let session = folder.path().join("routed.ses");
+    let drc = folder.path().join("routed.drc.json");
+    let routed = run(
+        Path::new(env!("CARGO_BIN_EXE_traxide")),
+        &[
+            "freerouting",
+            "-de",
+            board("two-nets.dsn").to_str().expect("utf-8"),
+            "-do",
+            session.to_str().expect("utf-8"),
+            "-drc",
+            drc.to_str().expect("utf-8"),
+        ],
+    );
+    assert!(routed.status.success(), "{routed:?}");
+    let stderr = String::from_utf8_lossy(&routed.stderr);
+    assert!(!stderr.contains("warning"), "{stderr}");
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(drc).expect("written")).expect("JSON");
+    assert_eq!(report["$schema"], "https://schemas.kicad.org/drc.v1.json");
+    assert_eq!(report["source"], "routed.ses");
+    assert_eq!(report["violations"], serde_json::json!([]));
+    assert_eq!(report["unconnected_items"], serde_json::json!([]));
+}

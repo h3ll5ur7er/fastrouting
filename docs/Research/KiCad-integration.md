@@ -66,3 +66,20 @@ Routes are written back as `segment` and `via` nodes before the board's closing 
 - DSN path: a SES file with wires and vias, imported by the user (or by Freerouting-style tools).
 - File path: new `segment`, `arc` and `via` nodes in `.kicad_pcb`, every other byte kept; refuse to write while the board file changed since it was read.
 - IPC path: one commit with all new items, so one undo removes the routing; then `RefillZones`.
+
+## DRC reports
+
+`traxide check BOARD [SESSION] --drc REPORT.json`, `traxide route … --drc REPORT.json` and Freerouting's `traxide freerouting … -drc REPORT.json` write the Verification Engine's verdict in the JSON format of `kicad-cli pcb drc --format json` (schema `https://schemas.kicad.org/drc.v1.json`), so tools that read KiCad's reports read traxide's ([[TRX-51]]). `check` reports the copper it checked; `route` the stored copper, the board's own included, as KiCad's DRC would see the routed board. Board Access writes it (`kicad/drc.rs`), as it writes KiCad's other formats.
+
+| traxide | KiCad `type` | KiCad `description` |
+| --- | --- | --- |
+| Clearance | `clearance` | `Clearance violation (clearance 0.2000 mm)` |
+| Edge | `copper_edge_clearance` | `Board edge clearance violation` |
+| Keepout | `items_not_allowed` | `Items not allowed` |
+| Unconnected | `unconnected_items`, in `unconnected_items` | `Missing connection between items` |
+
+- Items are described as KiCad does (`Pad R1-2 [GND] on F.Cu`, `Track [GND] on F.Cu, length 2.5400 mm`, `Via [GND] on F.Cu - B.Cu`; `<no net>` for none) at their position in millimetres: a pad's centre, a track's first point, a via's centre. Every entry is an `error`.
+- An unconnected net becomes one pair per pad apart from the net's first pad, which is what verification finds; KiCad pairs the nearest unconnected items, so the counts can differ when the pads apart are joined to each other.
+- `kicad_version` names traxide and its version (`traxide 0.1.0`) rather than pretending to be KiCad, which the schema's pattern for KiCad versions does not allow; `date` is UTC in RFC 3339.
+- Left out because a design does not carry it: the items' `uuid`, which the schema requires, and the actual distance KiCad adds to a clearance violation. Left out as optional: `included_severities` and `ignored_checks`.
+- On the routed `crossing`, `matrix-3x4` and `keyboard-tkl` boards, KiCad 9 and 10 and traxide report the same: no violations, no unconnected items, the same `source`, `$schema`, `coordinate_units` and `schematic_parity`.

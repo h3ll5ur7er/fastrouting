@@ -16,7 +16,9 @@ target/release/traxide route board.kicad_pcb
 target/release/traxide route board.dsn        # writes board.ses, on all cores
 target/release/traxide route --help           # profiles, threads, output
 target/release/traxide check board.dsn board.ses   # complete? rules broken?
-# In place of Freerouting: the same arguments
+# The same verdict as a DRC report in KiCad's JSON format (route takes --drc too)
+target/release/traxide check board.dsn board.ses --drc board.drc.json
+# In place of Freerouting: the same arguments, -drc report.json included
 target/release/traxide freerouting -de board.dsn -do board.ses
 # In KiCad: File → Import → Specctra Session
 ```

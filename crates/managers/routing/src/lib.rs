@@ -29,6 +29,9 @@ pub struct RouteJob {
     pub threads: Option<NonZeroUsize>,
     /// Net classes whose nets get no copper, such as those a plane will join.
     pub unrouted_net_classes: Vec<String>,
+    /// Where to write a DRC report of the stored copper, the board's own
+    /// included, in KiCad's JSON format, if anywhere.
+    pub drc_report: Option<PathBuf>,
 }
 
 /// What a finished route job achieved.
@@ -181,17 +184,26 @@ pub fn route(
         &traxide_rules::compile(&design, Purpose::Verification),
         &everything,
     );
-    let (violations, before_routing): (Vec<Violation>, Vec<Violation>) = full_verdict
-        .violations
-        .into_iter()
-        .partition(|v| involves_new_copper(v, &design.existing));
-    let verdict = Verdict { violations };
     events.publish(Event::StageStarted(Stage::Storing));
     let output = job
         .output
         .clone()
         .unwrap_or_else(|| traxide_board_access::default_routes_path(&job.input));
     traxide_board_access::store_routes(&output, &job.input, &design, &routes)?;
+    if let Some(drc_report) = &job.drc_report {
+        traxide_board_access::store_drc_report(
+            drc_report,
+            &output,
+            &design,
+            &everything,
+            &full_verdict,
+        )?;
+    }
+    let (violations, before_routing): (Vec<Violation>, Vec<Violation>) = full_verdict
+        .violations
+        .into_iter()
+        .partition(|v| involves_new_copper(v, &design.existing));
+    let verdict = Verdict { violations };
     let named = |c: &Connection| Unrouted {
         net: design.net(c.net).name.clone(),
         from: design.pad(c.from).name.clone(),

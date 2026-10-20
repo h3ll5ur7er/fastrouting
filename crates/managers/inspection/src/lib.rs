@@ -12,6 +12,9 @@ use traxide_rules::Purpose;
 pub struct CheckJob {
     pub board: PathBuf,
     pub session: Option<PathBuf>,
+    /// Where to write a DRC report of the check in KiCad's JSON format, if
+    /// anywhere.
+    pub drc_report: Option<PathBuf>,
 }
 
 /// What a check found: how complete the board is and which rules its copper
@@ -66,6 +69,10 @@ pub fn check(job: &CheckJob) -> Result<CheckReport, CheckError> {
     };
     let rules = traxide_rules::compile(&design, Purpose::Verification);
     let verdict = traxide_verification::verify(&design, &rules, &routes);
+    if let Some(drc_report) = &job.drc_report {
+        let judged = job.session.as_ref().unwrap_or(&job.board);
+        traxide_board_access::store_drc_report(drc_report, judged, &design, &routes, &verdict)?;
+    }
     let (unconnected, violations): (Vec<Violation>, Vec<Violation>) = verdict
         .violations
         .into_iter()

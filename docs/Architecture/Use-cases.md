@@ -113,6 +113,8 @@ sequenceDiagram
 
 Running the same Verification Engine on Freerouting's output and on ours is what makes the benchmark fair.
 
+`traxide check BOARD [SESSION]` prints the report, `--json` as JSON; `--drc REPORT.json` has the manager store the verdict through Board Access as a DRC report in KiCad's JSON format ([DRC reports](../Research/KiCad-integration.md#drc-reports)). `traxide route --drc` and Freerouting's `-drc` do the same for the stored routes, in the Routing Manager.
+
 ## UC6: Run the benchmark corpus
 
 ```mermaid

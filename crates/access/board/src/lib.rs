@@ -10,7 +10,8 @@ pub mod specctra;
 pub use error::BoardError;
 
 use std::path::{Path, PathBuf};
-use traxide_contracts::{Design, Routes};
+use std::time::SystemTime;
+use traxide_contracts::{Design, Routes, Verdict};
 
 pub fn load_design(path: &Path) -> Result<Design, BoardError> {
     match extension(path) {
@@ -75,6 +76,23 @@ pub fn store_routes(
         }
     };
     write(path, &text)
+}
+
+/// Stores `verdict`, found on `routes` of `design` in the file `source`, into
+/// `path` as a DRC report in the JSON format of `kicad-cli pcb drc`.
+pub fn store_drc_report(
+    path: &Path,
+    source: &Path,
+    design: &Design,
+    routes: &Routes,
+    verdict: &Verdict,
+) -> Result<(), BoardError> {
+    let source = source
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let report = kicad::drc::report(&source, SystemTime::now(), design, routes, verdict);
+    write(path, &format!("{report:#}\n"))
 }
 
 fn write(path: &Path, text: &str) -> Result<(), BoardError> {

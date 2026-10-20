@@ -24,6 +24,7 @@ traxide, called as Freerouting: route a Specctra DSN into a session (SES).
   -do BOARD.ses       where to write the session; next to the board by default
   -mt N               threads to route on
   -inc CLASS,CLASS    net classes to leave unrouted, such as those of planes
+  -drc REPORT.json    a DRC report of the routed board, in KiCad's JSON format
 
 Options that tune Freerouting's own algorithm (-mp, -us, -hr, -is, -im,
 --router.*) are ignored with a warning: traxide's profiles decide instead.
@@ -43,6 +44,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
     let mut output = None;
     let mut threads = None;
     let mut unrouted_net_classes = Vec::new();
+    let mut drc_report = None;
     let mut warnings = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -63,10 +65,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
                 value()?;
                 warnings.push("-dr: rules files are not read; the DSN's rules apply".into());
             }
-            "-drc" => {
-                value()?;
-                warnings.push("-drc: DRC reports are not written yet".into());
-            }
+            "-drc" => drc_report = Some(PathBuf::from(value()?)),
             "-im" => warnings.push("-im: ignored, traxide's profiles decide how it routes".into()),
             option if ALGORITHM_OPTIONS.contains(&option) => {
                 value()?;
@@ -95,6 +94,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
             profile_file: None,
             threads,
             unrouted_net_classes,
+            drc_report,
         },
         warnings,
     })
@@ -206,6 +206,13 @@ mod tests {
     fn net_classes_to_leave_unrouted_come_from_inc() {
         let (job, _) = route(&["-de", "b.dsn", "-inc", "GND, VCC"]);
         assert_eq!(job.unrouted_net_classes, ["GND", "VCC"]);
+    }
+
+    #[test]
+    fn drc_names_where_the_drc_report_goes() {
+        let (job, warnings) = route(&["-de", "b.dsn", "-drc", "out/b.json"]);
+        assert_eq!(job.drc_report, Some(PathBuf::from("out/b.json")));
+        assert_eq!(warnings, Vec::<String>::new());
     }
 
     #[test]

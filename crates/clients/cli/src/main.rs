@@ -46,6 +46,10 @@ enum Command {
         /// Print only the summary.
         #[arg(short, long)]
         quiet: bool,
+        /// Write a DRC report of the routed board, in the JSON format of
+        /// `kicad-cli pcb drc --format json`.
+        #[arg(long, value_name = "REPORT.json")]
+        drc: Option<PathBuf>,
     },
     /// Check a board: how many of its nets are complete and which rules its
     /// copper breaks, with the routes of a session if one is given.
@@ -57,6 +61,10 @@ enum Command {
         /// Print the report as JSON.
         #[arg(long)]
         json: bool,
+        /// Write a DRC report of the board, in the JSON format of
+        /// `kicad-cli pcb drc --format json`.
+        #[arg(long, value_name = "REPORT.json")]
+        drc: Option<PathBuf>,
     },
     /// Take Freerouting's arguments (-de board.dsn -do board.ses …), for tools
     /// that run Freerouting. A binary named `freerouting` does the same.
@@ -93,13 +101,23 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    let (input, output, profile, config, threads, quiet) = match cli.command {
+    let (input, output, profile, config, threads, quiet, drc) = match cli.command {
         Command::Freerouting { args } => return run_as_freerouting(&args),
         Command::Check {
             board,
             session,
             json,
-        } => return run_check(board, session, json),
+            drc,
+        } => {
+            return run_check(
+                CheckJob {
+                    board,
+                    session,
+                    drc_report: drc,
+                },
+                json,
+            );
+        }
         Command::Route {
             input,
             output,
@@ -107,7 +125,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
             config,
             threads,
             quiet,
-        } => (input, output, profile, config, threads, quiet),
+            drc,
+        } => (input, output, profile, config, threads, quiet, drc),
     };
     let job = RouteJob {
         input,
@@ -116,6 +135,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         profile_file: config,
         threads,
         unrouted_net_classes: Vec::new(),
+        drc_report: drc,
     };
     let progress = |event: Event| {
         if !quiet {
@@ -130,8 +150,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
 }
 
 /// Exits successfully only when every net is complete and no rule broken.
-fn run_check(board: PathBuf, session: Option<PathBuf>, json: bool) -> Result<ExitCode> {
-    let report = traxide_inspection::check(&CheckJob { board, session })?;
+fn run_check(job: CheckJob, json: bool) -> Result<ExitCode> {
+    let report = traxide_inspection::check(&job)?;
     let kinds = report.violations_by_kind();
     if json {
         let violations: serde_json::Map<String, serde_json::Value> = kinds

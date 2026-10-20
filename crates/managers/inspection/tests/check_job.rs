@@ -13,6 +13,7 @@ fn a_board_without_routes_has_every_net_unconnected() {
     let report = check(&CheckJob {
         board: fixture("two-nets.dsn"),
         session: None,
+        drc_report: None,
     })
     .expect("readable");
     assert_eq!((report.nets, report.incomplete_nets), (2, 2));
@@ -43,6 +44,7 @@ fn a_board_with_its_routes_is_complete_and_clean() {
     let report = check(&CheckJob {
         board: fixture("two-nets.dsn"),
         session: Some(session),
+        drc_report: None,
     })
     .expect("readable");
     assert_eq!(report.incomplete_nets, 0, "{report:?}");
@@ -55,7 +57,30 @@ fn copper_that_breaks_a_rule_is_reported_by_kind() {
     let report = check(&CheckJob {
         board: fixture("existing-violation.dsn"),
         session: None,
+        drc_report: None,
     })
     .expect("readable");
     assert_eq!(report.violations_by_kind(), [("clearance", 1)]);
+}
+
+#[test]
+fn the_check_writes_a_drc_report_in_kicads_format_when_asked() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let drc = folder.path().join("report.json");
+    check(&CheckJob {
+        board: fixture("existing-violation.dsn"),
+        session: None,
+        drc_report: Some(drc.clone()),
+    })
+    .expect("readable");
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(drc).expect("written")).expect("JSON");
+    assert_eq!(report["source"], "existing-violation.dsn");
+    assert_eq!(report["violations"][0]["type"], "clearance");
+    assert_eq!(report["violations"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        report["unconnected_items"].as_array().map(Vec::len),
+        Some(2),
+        "one pad of each net apart"
+    );
 }

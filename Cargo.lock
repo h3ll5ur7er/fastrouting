@@ -664,6 +664,7 @@ dependencies = [
 name = "traxide-inspection"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "tempfile",
  "thiserror",
  "traxide-board-access",
@@ -702,6 +703,7 @@ dependencies = [
 name = "traxide-routing"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "tempfile",
  "thiserror",
  "traxide-board-access",

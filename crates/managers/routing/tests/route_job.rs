@@ -19,6 +19,7 @@ fn job(input: &str, output: &std::path::Path) -> RouteJob {
         profile_file: None,
         threads: None,
         unrouted_net_classes: Vec::new(),
+        drc_report: None,
     }
 }
 
@@ -128,6 +129,41 @@ fn rules_the_board_broke_before_routing_are_not_counted_as_the_routers() {
             .all(|v| matches!(v, traxide_contracts::Violation::Unconnected { .. })),
         "{:?}",
         report.verdict
+    );
+}
+
+#[test]
+fn the_drc_report_judges_the_stored_copper_with_the_boards_own() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let output = folder.path().join("board.ses");
+    let drc = folder.path().join("board.drc.json");
+    let job = RouteJob {
+        drc_report: Some(drc.clone()),
+        ..job("existing-violation.dsn", &output)
+    };
+    let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
+    let unconnected_pads: usize = report
+        .verdict
+        .violations
+        .iter()
+        .map(|v| match v {
+            traxide_contracts::Violation::Unconnected { pads, .. } => pads.len(),
+            _ => 0,
+        })
+        .sum();
+    let drc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(drc).expect("written")).expect("JSON");
+    assert_eq!(drc["source"], "board.ses");
+    let types: Vec<&serde_json::Value> = drc["violations"]
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|v| &v["type"])
+        .collect();
+    assert_eq!(types, ["clearance"], "the board's own track over a pad");
+    assert_eq!(
+        drc["unconnected_items"].as_array().map(Vec::len),
+        Some(unconnected_pads)
     );
 }
 

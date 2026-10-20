@@ -33,7 +33,7 @@ Issue #289 records a board that took 4 h 46 min and 2.5 GB at about 11 % CPU. Th
 
 ### Interfaces worth matching
 
-- **CLI**: `-de board.dsn` in, `-do board.ses` out, `-mp` max passes, `-mt` optimiser threads, `-us greedy|global|hybrid`, `-inc` ignore net classes, `-drc` a KiCad-JSON DRC report, `--gui.enabled=false`. `traxide freerouting …`, or the binary named `freerouting`, accepts these ([[TRX-34]]): `-de`, `-do`, `-mt` and `-inc` work as in Freerouting; options that tune Freerouting's own algorithm are ignored with a warning; `-drc` reports are not written yet.
+- **CLI**: `-de board.dsn` in, `-do board.ses` out, `-mp` max passes, `-mt` optimiser threads, `-us greedy|global|hybrid`, `-inc` ignore net classes, `-drc` a KiCad-JSON DRC report, `--gui.enabled=false`. `traxide freerouting …`, or the binary named `freerouting`, accepts these ([[TRX-34]]): `-de`, `-do`, `-mt`, `-inc` and `-drc` work as in Freerouting, `-drc` with traxide's own verdict ([DRC reports](KiCad-integration.md#drc-reports), [[TRX-51]]); options that tune Freerouting's own algorithm are ignored with a warning.
 - **API server**: `--api_server.enabled=true` on `127.0.0.1:37864`. A later client could offer the same API.
 
 ## Other routers

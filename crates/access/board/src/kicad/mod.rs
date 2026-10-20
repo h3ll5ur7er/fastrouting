@@ -2,6 +2,7 @@
 //! (`.kicad_pro`), as KiCad 9 and 10 write them.
 
 mod board;
+pub(crate) mod drc;
 mod project;
 mod sexpr;
 mod write;

@@ -114,7 +114,7 @@ Resource access components hide **how resources are reached** and expose atomic,
 
 | Component | Verbs (examples) | Hides |
 | --- | --- | --- |
-| Board Access | `load_design`, `store_routes`, `lock_board` | V10: Specctra DSN/SES, `.kicad_pcb` with its project files, the KiCad IPC API (on KiCad 10 combined with rules read from the project files), later formats; their versions and quirks |
+| Board Access | `load_design`, `store_routes`, `store_drc_report`, `lock_board` | V10: Specctra DSN/SES, `.kicad_pcb` with its project files, the KiCad IPC API (on KiCad 10 combined with rules read from the project files), later formats; their versions and quirks |
 | Layout Access | `build_layout`, `obstacles_near`, `clearance_violations`, `begin`/`commit` a transaction, `rip_up`, `snapshot` | V11: the spatial index, the memory layout, optimistic concurrency between workers |
 | Compute Access | `expand_wavefronts`, `update_congestion`, `route_batch` on a cost grid | V12: GPU (wgpu over Vulkan, Metal, DirectX 12) or CPU (threads and SIMD), device choice, buffers, fallback |
 | Profile Access | `load_profile` | V13: built-in profiles, `traxide.toml`, flags, KiCad project settings |
