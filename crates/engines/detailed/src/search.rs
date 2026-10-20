@@ -35,6 +35,9 @@ pub(crate) struct Scratch {
     via_extra: Stamped<i64>,
     /// What the last stretch to the target's centre costs, by layer and node.
     finish: Stamped<i64>,
+    /// Whether nothing is within reach of any edge out of a node, by layer and
+    /// node: then no edge out of it needs a check of its own.
+    open_around: Stamped<bool>,
     /// Every state expanded, in order, for tests to look into a search.
     #[cfg(test)]
     expanded: Vec<u32>,
@@ -186,6 +189,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         scratch.edge_extra.reset(nodes * layers * DIRECTIONS.len());
         scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
+        scratch.open_around.reset(nodes * layers);
         for (state, cost) in target {
             scratch.finish.set(self.layer_node(state), cost);
         }
@@ -255,6 +259,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             if let Some(finish) = scratch.finish.get(self.layer_node(state)) {
                 relax(None, finish, None, scratch);
             }
+            let is_open_around = scratch
+                .open_around
+                .get_or_insert_with(self.layer_node(state), || self.is_open_around(state));
             for (direction, (dx, dy)) in DIRECTIONS.iter().enumerate() {
                 let turn = turn(state.heading, direction);
                 let next = (state.node.0 + dx, state.node.1 + dy);
@@ -262,12 +269,17 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 if turn > 2 || !self.grid.contains(next) || !self.in_corridor(next) {
                     continue;
                 }
-                let edge = (self.layer_node(state) * DIRECTIONS.len()) + direction;
-                let extra = scratch.edge_extra.get_or_insert_with(edge, || {
-                    let segment = Segment::new(self.grid.point(state.node), self.grid.point(next));
-                    self.track_extra(LayerId(state.layer), segment)
-                        .unwrap_or(BLOCKED)
-                });
+                let segment = Segment::new(self.grid.point(state.node), self.grid.point(next));
+                let extra = if is_open_around {
+                    self.negotiation
+                        .map_or(0, |n| n.history.of_track(LayerId(state.layer), segment))
+                } else {
+                    let edge = (self.layer_node(state) * DIRECTIONS.len()) + direction;
+                    scratch.edge_extra.get_or_insert_with(edge, || {
+                        self.track_extra(LayerId(state.layer), segment)
+                            .unwrap_or(BLOCKED)
+                    })
+                };
                 if extra != BLOCKED {
                     let length = if dx * dy == 0 {
                         i64::from(self.profile.grid_pitch)
@@ -376,6 +388,20 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     .sum()
             }
         }
+    }
+
+    /// Whether no copper, keepout or edge is within reach of a track along any
+    /// edge out of `state`'s node: one check of a disk that covers them all,
+    /// instead of eight. Most nodes of a search lie in open space.
+    fn is_open_around(&self, state: State) -> bool {
+        let here = self.grid.point(state.node);
+        let reach = i32::try_from(self.diagonal).unwrap_or(i32::MAX / 4);
+        self.layout.track_obstruction(
+            self.net,
+            LayerId(state.layer),
+            Segment::new(here, here),
+            self.width + 2 * reach,
+        ) == Obstruction::None
     }
 
     fn in_corridor(&self, node: Node) -> bool {

@@ -43,12 +43,14 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 October 2026: on the real boards of the corpus, the long searches expanded about 8 states per node and layer: the heading a node was entered with was part of the search state, and as a bend costs only 0.1 mm, all nine ways into a node cost nearly the same and were each expanded. A state is now a node on a layer; its heading is the direction of the cheapest way in found, which bend costs and the rule against acute turns follow. Every board stays clean in KiCad 10's DRC; track lengths are within 0.2 % of before.
 
-| Board | Before | After |
-| --- | ---: | ---: |
-| matrix-6x17 | 0.9 s | **0.35 s** |
-| keyboard-tkl | 3.3 s | **2.6 s** |
-| Issue015-StackOverflow (corpus) | 99 s | **72 s** |
-| Issue029-hw48na (corpus) | > 120 s | **103 s**, 83 of 91 |
+| Board | Before | One state per node | And one check around open nodes |
+| --- | ---: | ---: | ---: |
+| matrix-6x17 | 0.9 s | 0.35 s | **0.25 s** |
+| keyboard-tkl | 3.3 s | 2.6 s | **2.2 s** |
+| Issue015-StackOverflow (corpus) | 99 s | 72 s | **50 s** |
+| Issue029-hw48na (corpus) | > 120 s | 103 s, 83 of 91 | **72 s**, 83 of 91 |
+
+Then most nodes of a search lie in open space: one check of a disk around a node that covers its eight edges replaces eight checks when nothing is in reach, with the same routes.
 
 ## History costs (M2, TRX-50)
 
