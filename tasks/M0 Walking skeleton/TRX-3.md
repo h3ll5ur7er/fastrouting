@@ -2,7 +2,7 @@
 id: TRX-3
 title: Enforce the layer rules and run CI on all platforms
 type: chore
-status: review
+status: done
 priority: high
 labels: [infrastructure, ci]
 estimate: 1.5

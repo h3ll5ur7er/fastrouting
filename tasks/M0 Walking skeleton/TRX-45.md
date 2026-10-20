@@ -2,7 +2,7 @@
 id: TRX-45
 title: Test end to end through KiCad 10
 type: feature
-status: review
+status: done
 priority: high
 labels: [e2e, kicad, ci]
 estimate: 3
