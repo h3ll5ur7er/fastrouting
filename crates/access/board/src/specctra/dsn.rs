@@ -116,15 +116,25 @@ struct DsnReader<'a> {
 impl<'a> DsnReader<'a> {
     fn new(root: &'a Sexp) -> Result<Self, BoardError> {
         let structure = root.required_child("structure")?;
+        let planes: Vec<&str> = structure
+            .children("plane")
+            .flat_map(Sexp::args)
+            .filter(|shape| shape.keyword().is_some())
+            .filter_map(|shape| shape.args().first().and_then(Sexp::atom))
+            .collect();
+        let from_kicad = is_from_kicad(root);
         let mut layers = Vec::new();
         let mut layer_by_name = HashMap::new();
         for layer in structure.children("layer") {
             let name = layer.arg_atom(0, "layer name")?;
             let kind = layer.child("type").and_then(|t| t.atoms().next());
+            // KiCad writes `power` for a copper layer of that type, which it
+            // routes like any other unless a plane fills it.
+            let is_plane = kind == Some("power") && (!from_kicad || planes.contains(&name));
             layer_by_name.insert(name, LayerId::from_index(layers.len()));
             layers.push(Layer {
                 name: name.to_owned(),
-                routable: kind != Some("power"),
+                routable: !is_plane,
             });
         }
         if layers.is_empty() {
@@ -494,11 +504,7 @@ impl<'a> DsnReader<'a> {
     }
 
     fn is_from_kicad(&self) -> bool {
-        self.root
-            .child("parser")
-            .and_then(|parser| parser.child("host_cad"))
-            .and_then(|host| host.atoms().next())
-            .is_some_and(|host| host.contains("KiCad"))
+        is_from_kicad(self.root)
     }
 
     /// The width and the general clearance that the `(rule …)` lists of `owner`
@@ -664,6 +670,13 @@ impl ViaKinds {
         });
         Ok(ViaKindId::from_index(self.kinds.len() - 1))
     }
+}
+
+fn is_from_kicad(root: &Sexp) -> bool {
+    root.child("parser")
+        .and_then(|parser| parser.child("host_cad"))
+        .and_then(|host| host.atoms().next())
+        .is_some_and(|host| host.contains("KiCad"))
 }
 
 fn degrees(at: &Sexp, text: &str) -> Result<f64, BoardError> {

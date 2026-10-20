@@ -467,3 +467,46 @@ fn a_boundary_of_two_paths_is_a_panel_of_two_boards() {
     assert!(design.outline.contains(Point::new(mm(15.0), mm(40.0))));
     assert!(!design.outline.contains(Point::new(mm(15.0), mm(25.0))));
 }
+
+fn two_resistors_text() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/two-resistors.dsn"
+    ))
+    .expect("fixture exists")
+}
+
+/// The fixture with its bottom layer of type power, and `structure` added.
+fn with_power_bottom(text: &str, structure: &str) -> Design {
+    let at = text.find("(layer B.Cu").expect("bottom layer");
+    let typed = at + text[at..].find("(type signal)").expect("typed");
+    let text = format!(
+        "{}(type power){}",
+        &text[..typed],
+        &text[typed + "(type signal)".len()..]
+    )
+    .replacen("(boundary", &format!("{structure}\n    (boundary"), 1);
+    specctra::parse_dsn(&text).expect("valid")
+}
+
+#[test]
+fn a_power_layer_from_kicad_that_holds_no_plane_takes_tracks() {
+    // KiCad writes `power` for a copper layer of that type, on which it routes
+    // and checks tracks like on any other.
+    let design = with_power_bottom(&two_resistors_text(), "");
+    assert!(design.layers[layer(&design, "B.Cu").index()].routable);
+}
+
+#[test]
+fn a_power_layer_that_holds_a_plane_takes_no_tracks() {
+    let plane = "(plane GND (polygon B.Cu 0  30000 -20000  0 -20000  0 0  30000 0))";
+    let design = with_power_bottom(&two_resistors_text(), plane);
+    assert!(!design.layers[layer(&design, "B.Cu").index()].routable);
+}
+
+#[test]
+fn a_power_layer_from_another_tool_is_a_plane() {
+    let text = two_resistors_text().replace("KiCad's Pcbnew", "Some Other CAD");
+    let design = with_power_bottom(&text, "");
+    assert!(!design.layers[layer(&design, "B.Cu").index()].routable);
+}
