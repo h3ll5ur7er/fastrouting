@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use traxide_contracts::{Event, Stage, Violation};
 use traxide_events::CancelToken;
+use traxide_inspection::CheckJob;
 use traxide_routing::{RouteJob, RouteReport};
 
 /// A fast PCB autorouter.
@@ -42,6 +43,17 @@ enum Command {
         /// Print only the summary.
         #[arg(short, long)]
         quiet: bool,
+    },
+    /// Check a board: how many of its nets are complete and which rules its
+    /// copper breaks, with the routes of a session if one is given.
+    Check {
+        /// The board, as Specctra DSN.
+        board: PathBuf,
+        /// A session (SES) with routes for the board.
+        session: Option<PathBuf>,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Take Freerouting's arguments (-de board.dsn -do board.ses …), for tools
     /// that run Freerouting. A binary named `freerouting` does the same.
@@ -80,6 +92,11 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<ExitCode> {
     let (input, output, profile, config, threads, quiet) = match cli.command {
         Command::Freerouting { args } => return run_as_freerouting(&args),
+        Command::Check {
+            board,
+            session,
+            json,
+        } => return run_check(board, session, json),
         Command::Route {
             input,
             output,
@@ -108,6 +125,53 @@ fn run(cli: Cli) -> Result<ExitCode> {
         eprintln!();
     }
     Ok(summarise(&report, &output))
+}
+
+/// Exits successfully only when every net is complete and no rule broken.
+fn run_check(board: PathBuf, session: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    let report = traxide_inspection::check(&CheckJob { board, session })?;
+    let kinds = report.violations_by_kind();
+    if json {
+        let violations: serde_json::Map<String, serde_json::Value> = kinds
+            .iter()
+            .map(|(kind, count)| ((*kind).to_owned(), (*count).into()))
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "nets": report.nets,
+                "incomplete_nets": report.incomplete_nets,
+                "unconnected_pads": report.unconnected_pads,
+                "violations": violations,
+                "tracks": report.tracks,
+                "vias": report.vias,
+                "track_length_mm": report.track_length_mm,
+            })
+        );
+    } else {
+        println!(
+            "{} of {} nets complete, {} pads unconnected; {} tracks, {} vias, {:.0} mm of track.",
+            report.nets - report.incomplete_nets,
+            report.nets,
+            report.unconnected_pads,
+            report.tracks,
+            report.vias,
+            report.track_length_mm
+        );
+        if kinds.is_empty() {
+            println!("No rule broken.");
+        } else {
+            let counts: Vec<String> = kinds.iter().map(|(k, n)| format!("{n} {k}")).collect();
+            println!("Rules broken: {}.", counts.join(", "));
+        }
+    }
+    Ok(if !kinds.is_empty() {
+        ExitCode::from(BROKE_A_RULE)
+    } else if report.incomplete_nets > 0 {
+        ExitCode::from(INCOMPLETE)
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 /// Exits successfully whenever a session was written, even an incomplete one:

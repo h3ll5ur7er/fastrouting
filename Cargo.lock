@@ -610,10 +610,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "serde_json",
  "tempfile",
  "traxide-board-access",
  "traxide-contracts",
  "traxide-events",
+ "traxide-inspection",
  "traxide-routing",
  "traxide-rules",
  "traxide-verification",
@@ -656,6 +658,18 @@ dependencies = [
  "traxide-contracts",
  "traxide-rules",
  "traxide-scratch",
+]
+
+[[package]]
+name = "traxide-inspection"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror",
+ "traxide-board-access",
+ "traxide-contracts",
+ "traxide-rules",
+ "traxide-verification",
 ]
 
 [[package]]

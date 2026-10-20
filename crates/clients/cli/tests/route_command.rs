@@ -94,3 +94,27 @@ fn a_missing_board_fails_and_says_which() {
     assert_eq!(run.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&run.stderr).contains("no-such-board.dsn"));
 }
+
+#[test]
+fn check_reports_how_complete_a_board_is_and_exits_accordingly() {
+    let unrouted = traxide(&["check", board("two-nets.dsn").to_str().expect("utf-8")]);
+    let stdout = String::from_utf8_lossy(&unrouted.stdout);
+    assert_eq!(unrouted.status.code(), Some(2), "{stdout}");
+    assert!(stdout.contains("0 of 2 nets complete"), "{stdout}");
+
+    let folder = tempfile::tempdir().expect("temp dir");
+    let input = copy_to(folder.path(), "two-nets.dsn");
+    let routed = traxide(&["route", input.to_str().expect("utf-8"), "--quiet"]);
+    assert!(routed.status.success());
+    let session = input.with_extension("ses");
+    let checked = traxide(&[
+        "check",
+        input.to_str().expect("utf-8"),
+        session.to_str().expect("utf-8"),
+        "--json",
+    ]);
+    assert_eq!(checked.status.code(), Some(0));
+    let report: serde_json::Value = serde_json::from_slice(&checked.stdout).expect("a JSON report");
+    assert_eq!(report["incomplete_nets"], 0);
+    assert_eq!(report["violations"], serde_json::json!({}));
+}

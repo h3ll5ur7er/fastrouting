@@ -1,0 +1,21 @@
+[package]
+name = "traxide-inspection"
+description = "Inspection Manager: the use cases that check and compare boards."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+traxide-board-access.workspace = true
+traxide-contracts.workspace = true
+traxide-rules.workspace = true
+traxide-verification.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

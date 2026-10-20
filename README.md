@@ -13,6 +13,7 @@ cargo build --release
 # In KiCad: File → Export → Specctra DSN, then
 target/release/traxide route board.dsn        # writes board.ses, on all cores
 target/release/traxide route --help           # profiles, threads, output
+target/release/traxide check board.dsn board.ses   # complete? rules broken?
 # In place of Freerouting: the same arguments
 target/release/traxide freerouting -de board.dsn -do board.ses
 # In KiCad: File → Import → Specctra Session
