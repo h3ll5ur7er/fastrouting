@@ -18,6 +18,7 @@ fn job(input: &str, output: &std::path::Path) -> RouteJob {
         profile: "default".into(),
         profile_file: None,
         threads: None,
+        unrouted_net_classes: Vec::new(),
     }
 }
 
@@ -78,4 +79,31 @@ fn a_missing_board_is_an_error_that_names_it() {
     )
     .unwrap_err();
     assert!(error.to_string().contains("missing.dsn"), "{error}");
+}
+
+#[test]
+fn nets_of_the_net_classes_left_unrouted_get_no_copper() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let output = folder.path().join("board.ses");
+    let job = RouteJob {
+        unrouted_net_classes: vec!["Power".into()],
+        ..job("two-classes.dsn", &output)
+    };
+    let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
+    assert_eq!((report.connections, report.unrouted.len()), (1, 0));
+    assert_eq!(report.tracks, 1, "only Across, straight across");
+}
+
+#[test]
+fn an_unknown_net_class_to_leave_unrouted_is_an_error_naming_the_known_ones() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let job = RouteJob {
+        unrouted_net_classes: vec!["Pwr".into()],
+        ..job("two-classes.dsn", &folder.path().join("board.ses"))
+    };
+    let error = route(&job, &Silent, &CancelToken::new()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "no net class named Pwr; there are default, kicad_default, Power"
+    );
 }

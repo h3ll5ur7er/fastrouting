@@ -1,10 +1,12 @@
 //! The `traxide` command line.
 
+mod freerouting;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::io::Write;
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use traxide_contracts::{Event, Stage, Violation};
 use traxide_events::CancelToken;
@@ -41,6 +43,13 @@ enum Command {
         #[arg(short, long)]
         quiet: bool,
     },
+    /// Take Freerouting's arguments (-de board.dsn -do board.ses …), for tools
+    /// that run Freerouting. A binary named `freerouting` does the same.
+    #[command(disable_help_flag = true)]
+    Freerouting {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
+        args: Vec<String>,
+    },
 }
 
 /// Exit codes beyond success: scripts tell an incomplete board from a failure.
@@ -49,7 +58,17 @@ const INCOMPLETE: u8 = 2;
 const BROKE_A_RULE: u8 = 3;
 
 fn main() -> ExitCode {
-    match run(Cli::parse()) {
+    let args: Vec<String> = std::env::args().collect();
+    let called_as_freerouting = args
+        .first()
+        .and_then(|program| Path::new(program).file_stem())
+        .is_some_and(|name| name == "freerouting");
+    let outcome = if called_as_freerouting {
+        run_as_freerouting(&args[1..])
+    } else {
+        run(Cli::parse_from(args))
+    };
+    match outcome {
         Ok(code) => code,
         Err(error) => {
             eprintln!("error: {error:#}");
@@ -59,14 +78,17 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    let Command::Route {
-        input,
-        output,
-        profile,
-        config,
-        threads,
-        quiet,
-    } = cli.command;
+    let (input, output, profile, config, threads, quiet) = match cli.command {
+        Command::Freerouting { args } => return run_as_freerouting(&args),
+        Command::Route {
+            input,
+            output,
+            profile,
+            config,
+            threads,
+            quiet,
+        } => (input, output, profile, config, threads, quiet),
+    };
     let output = output.unwrap_or_else(|| input.with_extension("ses"));
     let job = RouteJob {
         input,
@@ -74,6 +96,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         profile,
         profile_file: config,
         threads,
+        unrouted_net_classes: Vec::new(),
     };
     let progress = |event: Event| {
         if !quiet {
@@ -85,6 +108,24 @@ fn run(cli: Cli) -> Result<ExitCode> {
         eprintln!();
     }
     Ok(summarise(&report, &output))
+}
+
+/// Exits successfully whenever a session was written, even an incomplete one:
+/// tools that run Freerouting import the session after a successful exit.
+fn run_as_freerouting(args: &[String]) -> Result<ExitCode> {
+    let (job, warnings) = match freerouting::parse(args)? {
+        freerouting::Invocation::Help => {
+            println!("{}", freerouting::HELP);
+            return Ok(ExitCode::SUCCESS);
+        }
+        freerouting::Invocation::Route { job, warnings } => (job, warnings),
+    };
+    for warning in warnings {
+        eprintln!("warning: {warning}");
+    }
+    let report = traxide_routing::route(&job, &|_: Event| {}, &CancelToken::new())?;
+    summarise(&report, &job.output);
+    Ok(ExitCode::SUCCESS)
 }
 
 fn show(event: &Event) {

@@ -1,0 +1,41 @@
+(pcb two-classes.dsn
+  (parser (string_quote ") (space_in_quoted_tokens on) (host_cad "KiCad's Pcbnew") (host_version "10.0.7"))
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal) (property (index 0)))
+    (layer B.Cu (type signal) (property (index 1)))
+    (boundary (path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000))
+    (via "Via[0-1]_600:300_um")
+    (rule (width 200) (clearance 200))
+  )
+  (placement
+    (component "test:R"
+      (place R1 5000 -10000 front 0)
+      (place R2 25000 -10000 front 0)
+      (place R3 15000 -4000 front 90)
+      (place R4 15000 -16000 front 90)
+    )
+  )
+  (library
+    (image "test:R"
+      (pin Rect[T]Pad_1000x1200_um 1 -1000 0)
+      (pin Rect[T]Pad_1000x1200_um 2 1000 0)
+    )
+    (padstack Rect[T]Pad_1000x1200_um (shape (rect F.Cu -500 -600 500 600)) (attach off))
+    (padstack "Via[0-1]_600:300_um" (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off))
+  )
+  (network
+    (net Across (pins R1-2 R2-1))
+    (net Down (pins R3-1 R4-2))
+    (class kicad_default "" Across
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 200) (clearance 200))
+    )
+    (class Power Down
+      (circuit (use_via "Via[0-1]_600:300_um"))
+      (rule (width 300) (clearance 200))
+    )
+  )
+  (wiring)
+)

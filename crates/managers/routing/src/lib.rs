@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
-use traxide_contracts::{Connection, Event, RoutingResult, Stage, Verdict};
+use traxide_contracts::{Connection, Design, Event, NetClassId, RoutingResult, Stage, Verdict};
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Publisher};
 use traxide_layout_access::Layout;
@@ -14,7 +14,7 @@ use traxide_profile_access::ProfileError;
 use traxide_rules::Purpose;
 
 /// Route the board in `input` and store the routes in `output`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteJob {
     pub input: PathBuf,
     pub output: PathBuf,
@@ -22,6 +22,8 @@ pub struct RouteJob {
     pub profile_file: Option<PathBuf>,
     /// How many threads to route on; as many as the machine has by default.
     pub threads: Option<NonZeroUsize>,
+    /// Net classes whose nets get no copper, such as those a plane will join.
+    pub unrouted_net_classes: Vec<String>,
 }
 
 /// What a finished route job achieved.
@@ -45,6 +47,25 @@ pub enum RouteError {
     Board(#[from] BoardError),
     #[error(transparent)]
     Profile(#[from] ProfileError),
+    #[error("no net class named {name}; there are {}", known.join(", "))]
+    UnknownNetClass { name: String, known: Vec<String> },
+}
+
+fn net_classes_named(design: &Design, names: &[String]) -> Result<Vec<NetClassId>, RouteError> {
+    let classes = &design.rules.classes;
+    names
+        .iter()
+        .map(|name| {
+            classes
+                .iter()
+                .position(|class| &class.name == name)
+                .map(NetClassId::from_index)
+                .ok_or_else(|| RouteError::UnknownNetClass {
+                    name: name.clone(),
+                    known: classes.iter().map(|c| c.name.clone()).collect(),
+                })
+        })
+        .collect()
 }
 
 /// Routes every connection of the board in `job`, storing what fits.
@@ -62,7 +83,10 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::BuildingLayout));
     let mut layout = Layout::build(&design, &rules);
     events.publish(Event::StageStarted(Stage::Planning));
-    let plan = traxide_planning::plan(&design);
+    let mut plan = traxide_planning::plan(&design);
+    let skipped = net_classes_named(&design, &job.unrouted_net_classes)?;
+    plan.connections
+        .retain(|c| !skipped.contains(&design.net(c.net).class));
     let corridors = profile.global_routing.then(|| {
         events.publish(Event::StageStarted(Stage::GlobalRouting));
         traxide_global::route(&design, &plan, &rules, &profile)
