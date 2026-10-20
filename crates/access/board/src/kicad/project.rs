@@ -130,7 +130,7 @@ impl Project {
 
 /// Whether `text` matches `pattern`, where `*` stands for any text and `?` for
 /// any one character.
-fn matches_wildcards(pattern: &str, text: &str) -> bool {
+pub(crate) fn matches_wildcards(pattern: &str, text: &str) -> bool {
     let (pattern, text): (Vec<char>, Vec<char>) =
         (pattern.chars().collect(), text.chars().collect());
     // The pattern position after the last `*`, and the text position it matched up to.

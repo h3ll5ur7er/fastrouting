@@ -93,6 +93,7 @@ Three levels, all run by `cargo test` except where noted:
   - By default KiCad runs in the official Docker image `kicad/kicad:10.0`; `TRAXIDE_KICAD_IMAGE=kicad/kicad:9.0` tests KiCad 9. CI runs both.
   - `cargo xtask e2e --local` uses an installed KiCad instead: `TRAXIDE_KICAD_PYTHON` names a Python that can `import pcbnew` (on macOS the one inside `KiCad.app`), `TRAXIDE_KICAD_CLI` the `kicad-cli`.
   - Name recipes to run only those: `cargo xtask e2e crossing matrix-6x17`. The default set stays fast; bigger boards are benchmarks ([[Benchmarks]]).
+  - A recipe with `custom_rules` saves them as `RECIPE.kicad_dru` and is routed only from its `.kicad_pcb`: DSN, and so the KiCad plugin, cannot carry custom rules. Building the static traxide for the plugin needs `rustup target add x86_64-unknown-linux-musl`.
   - KiCad 7 and 8 are not supported: they are not what people route with, and KiCad 7 cannot import sessions from a script.
 - **Ground truth** from KiCad: `e2e/kicad/fixtures.py` exports boards together with KiCad's own placement of every pad; `crates/access/board/tests/kicad_ground_truth.rs` holds the DSN reader to it.
 - **Test designs** in code: `traxide-contracts` with the `testing` feature offers `DesignBuilder`, so engine tests build boards in a few lines.

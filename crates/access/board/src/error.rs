@@ -18,6 +18,8 @@ pub enum BoardError {
     Invalid { line: usize, message: String },
     #[error("{path} changed since it was read; route it again")]
     Changed { path: PathBuf },
+    #[error("the board's custom rules, line {line}: {message}")]
+    CustomRules { line: usize, message: String },
     #[error("the board's project: {0}")]
     Project(String),
 }

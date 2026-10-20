@@ -474,6 +474,8 @@ impl<'a> DsnReader<'a> {
                 classes,
                 default_class: NetClassId(0),
                 edge_clearance: self.edge_clearance(clearance),
+                hole_clearance: 0,
+                custom: vec![],
             },
             class_of_net,
         })
@@ -658,6 +660,7 @@ impl ViaKinds {
         self.kinds.push(ViaKind {
             name: text.to_owned(),
             copper,
+            drill: None,
         });
         Ok(ViaKindId::from_index(self.kinds.len() - 1))
     }

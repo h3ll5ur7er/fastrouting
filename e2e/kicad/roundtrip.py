@@ -1,7 +1,8 @@
 """The KiCad half of traxide's end-to-end test, run with KiCad's own Python.
 
   python3 roundtrip.py export RECIPE FOLDER
-      builds the recipe's board, saves FOLDER/RECIPE.kicad_pcb and exports
+      builds the recipe's board, saves FOLDER/RECIPE.kicad_pcb with its custom
+      rules in FOLDER/RECIPE.kicad_dru, if it has any, and exports
       FOLDER/RECIPE.dsn, as a user would with File → Export → Specctra DSN.
 
   python3 roundtrip.py import BOARD.kicad_pcb SESSION.ses ROUTED.kicad_pcb
@@ -41,6 +42,10 @@ def export(recipe: str, folder: Path) -> None:
     board = pcbnew.LoadBoard(str(board_file))
     RECIPES[recipe].apply_rules(board)
     pcbnew.SaveBoard(str(board_file), board)
+    custom_rules = board_file.with_suffix(".kicad_dru")
+    custom_rules.unlink(missing_ok=True)
+    if RECIPES[recipe].custom_rules is not None:
+        custom_rules.write_text(RECIPES[recipe].custom_rules)
     if not pcbnew.ExportSpecctraDSN(board, str(folder / f"{recipe}.dsn")):
         raise SystemExit(f"KiCad could not export {recipe} as DSN")
 
@@ -50,8 +55,11 @@ def import_session(board_file: Path, session: Path, routed: Path) -> None:
     if not pcbnew.ImportSpecctraSES(board, str(session)):
         raise SystemExit(f"KiCad could not import {session}")
     pcbnew.SaveBoard(str(routed), board)
-    # Saving wrote a project with KiCad's default rules; the board's own are in its project.
+    # Saving wrote a project with KiCad's default rules; the board's own are in
+    # its project and its custom rules.
     shutil.copy(board_file.with_suffix(".kicad_pro"), routed.with_suffix(".kicad_pro"))
+    if board_file.with_suffix(".kicad_dru").is_file():
+        shutil.copy(board_file.with_suffix(".kicad_dru"), routed.with_suffix(".kicad_dru"))
     print_stats(board)
 
 

@@ -48,7 +48,35 @@ The `kicad` module of Board Access reads `.kicad_pcb` as KiCad 9 (nets by number
 - **Outline**: the drawings on Edge.Cuts, joined end to end; loops inside the outline are cutouts, kept out like keepouts. Copper zones are left out, as KiCad refills them; rule areas that forbid tracks or vias are keepouts.
 - **Copper of no net** keeps other copper away, as keepouts.
 
-Routes are written back as `segment` and `via` nodes before the board's closing parenthesis; every other byte stays. Board Access reads the board again first and refuses to write if it no longer gives the same design. By default `traxide route BOARD.kicad_pcb` writes `BOARD.routed.kicad_pcb` and copies the project beside it, so that KiCad opens the routed board with its rules.
+Routes are written back as `segment` and `via` nodes before the board's closing parenthesis; every other byte stays. Board Access reads the board again first and refuses to write if it no longer gives the same design. By default `traxide route BOARD.kicad_pcb` writes `BOARD.routed.kicad_pcb` and copies the project and the custom rules beside it, so that KiCad opens the routed board with its rules.
+
+### Custom rules
+
+Board Access reads `BOARD.kicad_dru` beside the board into `DesignRules.custom` ([[TRX-32]]); the Rules Engine compiles them into the `ConstraintSet`. KiCad's documentation could not be reached while this was built, so what KiCad 10.0 does was observed: small boards with hand-written rules, judged by `kicad-cli pcb drc`.
+
+What KiCad's DRC does, and so what traxide follows:
+
+- **The last rule that applies wins**, and it overrides the net classes and even the board's minimums (Board Setup → Constraints): a rule may lower a clearance below both.
+- **Two-item constraints try the condition both ways round**: `A.NetClass == 'HV'` gives the clearance between HV and anything, either way. For one-item constraints (widths, edge clearance) `A` is the item.
+- **`==` matches wildcards (`*`, `?`) and ignores case**, for `NetClass` and `NetName` alike. Copper of no net has the class `Default` and the name `''`.
+- **Limits**: clearances check only `min`; a matching rule without one still wins, but checks the class's value. Widths and via sizes check `min` and `max`; `opt` is never checked, but it is the width traxide routes with.
+- **Lengths** need a unit: `mm`, `mil` or `in`, with or without a space, quoted or not; `"0.5mm + 0.5mm"` is evaluated. A length without a unit, `um`, `nm`, a missing `(version 1)` or a syntax error makes KiCad ignore the whole file, without a word in the DRC report. traxide refuses such a file with its line instead (expressions too, which it does not evaluate), so that the designer sees what KiCad silently drops.
+- Lines starting with `#` are comments; `(severity ignore)` makes the DRC check nothing under that rule, so traxide leaves such a rule out (whatever applies instead keeps at least as much distance).
+- `(layer outer)`, `(layer inner)` and `(layer "In1.Cu")` limit a rule to copper on those layers.
+
+What traxide compiles:
+
+| Constraint | Routing follows it as |
+| --- | --- |
+| `clearance` | the clearance between the two nets, per pair of *groups*: nets of one class that the rules' `NetName` tests treat alike, so a rule naming a net reaches only that net |
+| `track_width` | the width of each net: the winning rule's `opt`, else the class's, within its `min` and `max` |
+| `via_diameter`, `hole_size` | which of its class's vias a net may use; traxide makes no via of a new size, so a net whose vias a rule forbids routes on one layer or not at all |
+| `hole_clearance` | other copper keeps the clearance from a via's copper, so from its hole by the via's ring as well; where `hole_clearance` exceeds clearance plus ring, the clearance between the nets grows. Holes without copper keep the project's hole clearance as keepouts |
+| `edge_clearance` | one clearance for the whole board: the largest any net's rules ask |
+
+**What traxide cannot tell never breaks KiCad's DRC.** A test it cannot evaluate (`A.Type == 'Pad'`, `A.inDiffPair('*')`, `A.intersectsArea(…)`, `A.Layer == …`, other properties and functions, an unparseable condition) is *unknown*, and so is a layer clause that covers only some of the board's copper layers, or names no copper layer of the board. The logic is three-valued: `&&`, `||` and `!` keep what can be told, so `A.inDiffPair('*') && A.NetClass == 'HV'` is false for every other class. For each pair of groups the Rules Engine walks the rules from last to first: the first that surely applies gives the value, and every rule after it that may apply can only tighten it (raise a minimum, lower a maximum, forbid a via). A rule that might lower a clearance is therefore ignored, and one that might raise it applies wherever it might.
+
+Not followed: the other constraints (`disallow`, `physical_clearance`, `annular_width`, `diff_pair_gap`, lengths and skew, courtyard and silkscreen); per-layer values (a rule on some layers applies to all of them when it tightens); the clearance from plated pad holes; nets with several classes, whose first class traxide takes. Specctra DSN carries no custom rules, so boards that have them are routed from their own file: the end-to-end recipe `isolation` asks for 3 mm between an HV net and two signals that must cross it, a wider track for one net by name, a wider edge clearance for HV and a pad-to-pad rule traxide cannot evaluate. Routed from its `.kicad_pcb` it is clean in KiCad's DRC; routed with its rules file removed and judged with it, KiCad finds 13 violations.
 
 ## What is read
 

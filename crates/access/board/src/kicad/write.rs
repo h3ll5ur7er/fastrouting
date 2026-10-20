@@ -161,7 +161,7 @@ mod tests {
             (net 0 "") (net 1 "GND")
             (gr_rect (start 0 0) (end 10 10) (layer "Edge.Cuts"))
             (segment (start 1 1) (end 2 1) (width 0.2) (layer "F.Cu") (net 1)))"#;
-        let board = read(text, None).expect("valid");
+        let board = read(text, None, None).expect("valid");
         let routes = Routes {
             tracks: vec![Track {
                 net: NetId::from_index(0),
@@ -187,7 +187,7 @@ mod tests {
             "{written}"
         );
         assert_eq!(
-            read(&written, None)
+            read(&written, None, None)
                 .expect("valid")
                 .design
                 .existing

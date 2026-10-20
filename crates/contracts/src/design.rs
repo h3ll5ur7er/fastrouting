@@ -79,6 +79,8 @@ pub struct LayerShape {
 pub struct ViaKind {
     pub name: String,
     pub copper: Vec<LayerShape>,
+    /// The diameter of its hole, where the board's format states it.
+    pub drill: Option<i32>,
 }
 
 impl ViaKind {
@@ -110,6 +112,12 @@ pub struct DesignRules {
     /// The class of copper that belongs to no net, such as a mounting hole's pad.
     pub default_class: NetClassId,
     pub edge_clearance: i32,
+    /// How far copper of other nets stays from a via's hole.
+    pub hole_clearance: i32,
+    /// Rules for particular copper beyond those of its class, in the order the
+    /// board states them: where several apply, the last one counts, and it
+    /// overrides the class's and the board's values.
+    pub custom: Vec<CustomRule>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,4 +127,66 @@ pub struct NetClass {
     pub clearance: i32,
     /// In order of preference.
     pub via_kinds: Vec<ViaKindId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomRule {
+    pub name: String,
+    pub condition: Condition,
+    pub constraint: Constraint,
+    pub limits: Limits,
+}
+
+/// What a custom rule constrains. Between two items (clearances) the rule's
+/// condition is tried both ways round; for one item, its item is [`Item::A`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Constraint {
+    /// Between copper of two nets.
+    Clearance,
+    TrackWidth,
+    ViaDiameter,
+    /// The drill of a via.
+    HoleSize,
+    /// Between copper and the board's edge.
+    EdgeClearance,
+    /// Between a via's hole and copper of another net.
+    HoleClearance,
+}
+
+/// Nanometres; `None` where the rule leaves a limit out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Limits {
+    pub min: Option<i32>,
+    pub opt: Option<i32>,
+    pub max: Option<i32>,
+}
+
+/// When a custom rule applies, as far as the board's reader could tell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Condition {
+    Always,
+    /// The constrained copper lies on one of these layers.
+    OnLayers(Vec<LayerId>),
+    NetClassIn {
+        item: Item,
+        classes: Vec<NetClassId>,
+    },
+    /// `None` stands for copper of no net.
+    NetIn {
+        item: Item,
+        nets: Vec<Option<NetId>>,
+    },
+    Not(Box<Condition>),
+    All(Vec<Condition>),
+    Any(Vec<Condition>),
+    /// A test the reader cannot express, which may hold or not.
+    Unknown,
+}
+
+/// The two items a rule compares: the constrained one and, for clearances, the
+/// other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Item {
+    A,
+    B,
 }
