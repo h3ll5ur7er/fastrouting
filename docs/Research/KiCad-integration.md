@@ -30,6 +30,13 @@ KiCad's `plugin.json` (API v1) allows `runtime.type` **`"exec"`**: the plugin is
 - Konnect, a Rust KiCad plugin, already ships this way. An open kicad-python issue reports toolbar icons of PCM-installed IPC plugins not showing; test it ([[TRX-17]]).
 - macOS: notarise the binary; whether PCM's download sets the quarantine attribute needs testing.
 
+## Rules the DSN leaves out
+
+KiCad's DSN export carries widths, clearances, net classes and vias, but not everything KiCad's DRC checks:
+
+- **Copper to board edge.** KiCad applies its board setup, 0.5 mm by default. traxide keeps at least 0.5 mm on boards whose DSN names KiCad as `host_cad`, until it reads the real value from `.kicad_pro` ([[TRX-30]]).
+- **Custom rules** (`.kicad_dru`): not exported at all; also [[TRX-30]].
+
 ## What is read
 
 | Item | DSN | `.kicad_pcb` + project | IPC (KiCad 10) |

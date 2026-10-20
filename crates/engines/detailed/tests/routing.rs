@@ -17,6 +17,7 @@ fn profile() -> Profile {
         detour_margin: 5_000_000,
         rip_up_cost: 5_000_000,
         max_rip_ups: 10,
+        heuristic_weight: 1.0,
     }
 }
 

@@ -386,10 +386,28 @@ impl<'a> DsnReader<'a> {
             design: DesignRules {
                 classes,
                 default_class: NetClassId(0),
-                edge_clearance: clearance,
+                edge_clearance: self.edge_clearance(clearance),
             },
             class_of_net,
         })
+    }
+
+    /// DSN cannot state how far copper must stay from the board edge. KiCad's DRC
+    /// applies its board setup, which is 0.5 mm unless the designer changed it,
+    /// so boards from KiCad keep at least that; others the board-wide clearance.
+    fn edge_clearance(&self, clearance: i32) -> i32 {
+        const KICAD_DEFAULT_EDGE_CLEARANCE: i32 = 500_000;
+        let from_kicad = self
+            .root
+            .child("parser")
+            .and_then(|parser| parser.child("host_cad"))
+            .and_then(|host| host.atoms().next())
+            .is_some_and(|host| host.contains("KiCad"));
+        if from_kicad {
+            clearance.max(KICAD_DEFAULT_EDGE_CLEARANCE)
+        } else {
+            clearance
+        }
     }
 
     /// The width and the general clearance of a `(rule …)`; clearances limited to

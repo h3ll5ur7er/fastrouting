@@ -24,5 +24,6 @@ Freerouting does the job, but it has needed a Java runtime until its native buil
 | [Architecture](Architecture.md) | The iDesign decomposition: [volatilities](Architecture/Volatilities.md), components, [use cases](Architecture/Use-cases.md), [contracts](Architecture/Contracts.md), the [routing pipeline](Architecture/Routing-pipeline.md), [parallelism and GPU](Architecture/Parallelism-and-GPU.md) |
 | [Project plan](Project-plan.md) | Milestones, the dependency network of the tasks and the critical path |
 | [Development](Development.md) | Repository layout, layer rules, craftsmanship, building, testing and benchmarking |
+| [Profiles](Profiles.md) | Trading speed against quality: the built-in profile and `traxide.toml` |
 | [Benchmarks](Benchmarks.md) | What traxide achieves on the test boards, milestone by milestone |
 | [Glossary](Glossary.md) | The routing and design terms used here |

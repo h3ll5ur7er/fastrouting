@@ -29,6 +29,11 @@ pub enum ProfileError {
         profile: String,
         field: &'static str,
     },
+    #[error("profile {profile}: {field} must be at least 1")]
+    BelowOne {
+        profile: String,
+        field: &'static str,
+    },
 }
 
 /// The profile called `name`. Profiles in `file` override fields of the built-in
@@ -74,6 +79,7 @@ struct Fields {
     detour_margin: Option<f64>,
     rip_up_cost: Option<f64>,
     max_rip_ups: Option<u32>,
+    heuristic_weight: Option<f64>,
 }
 
 impl Fields {
@@ -85,6 +91,7 @@ impl Fields {
             detour_margin: other.detour_margin.or(self.detour_margin),
             rip_up_cost: other.rip_up_cost.or(self.rip_up_cost),
             max_rip_ups: other.max_rip_ups.or(self.max_rip_ups),
+            heuristic_weight: other.heuristic_weight.or(self.heuristic_weight),
         }
     }
 
@@ -112,6 +119,15 @@ impl Fields {
             rip_up_cost: positive_nm(self.rip_up_cost, "rip_up_cost")?,
             // Zero is allowed: it turns rip-up off.
             max_rip_ups: self.max_rip_ups.unwrap_or(0),
+            heuristic_weight: match self.heuristic_weight.unwrap_or(1.0) {
+                weight if weight >= 1.0 && weight.is_finite() => weight,
+                _ => {
+                    return Err(ProfileError::BelowOne {
+                        profile: name.into(),
+                        field: "heuristic_weight",
+                    });
+                }
+            },
         })
     }
 }
@@ -142,6 +158,15 @@ mod tests {
         let profile = load_profile("default", None).expect("built in");
         assert_eq!(profile.grid_pitch, 100_000);
         assert_eq!(profile.via_cost, 2_000_000);
+    }
+
+    #[test]
+    fn a_search_cannot_be_weighted_below_the_cheapest_path() {
+        let file = file_with("[profiles.default]\nheuristic_weight = 0.9\n");
+        assert!(matches!(
+            load_profile("default", Some(&file)),
+            Err(ProfileError::BelowOne { .. })
+        ));
     }
 
     #[test]

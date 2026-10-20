@@ -199,3 +199,22 @@ fn pins_of_unknown_components_are_reported() {
     let error = specctra::parse_dsn(&text).unwrap_err();
     assert!(error.to_string().contains("R9-1"), "{error}");
 }
+
+#[test]
+fn boards_from_kicad_keep_kicads_default_distance_from_the_edge() {
+    // DSN cannot say how far copper must stay from the board edge; KiCad's DRC
+    // applies its board setup, 0.5 mm unless the designer changed it.
+    assert_eq!(two_resistors().rules.edge_clearance, mm(0.5));
+}
+
+#[test]
+fn boards_from_other_tools_keep_the_board_wide_clearance_from_the_edge() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/two-resistors.dsn"
+    ))
+    .expect("fixture exists")
+    .replace("KiCad's Pcbnew", "Some Other CAD");
+    let design = specctra::parse_dsn(&text).expect("valid");
+    assert_eq!(design.rules.edge_clearance, 200_100);
+}

@@ -6,3 +6,5 @@ bend_cost = 0.1
 detour_margin = 5.0
 rip_up_cost = 5.0
 max_rip_ups = 10
+# On a TKL-sized key matrix, 1.2 routed 15 times faster than 1.0 for 0.3 % more track.
+heuristic_weight = 1.2

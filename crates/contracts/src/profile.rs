@@ -1,5 +1,5 @@
 /// How to trade routing speed against quality.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Profile {
     pub name: String,
     /// Spacing of the routing grid.
@@ -17,4 +17,7 @@ pub struct Profile {
     /// How often one connection may be ripped up before it stays unrouted, so
     /// that two connections cannot take each other's place forever.
     pub max_rip_ups: u32,
+    /// How strongly a search heads for its target: 1 finds the cheapest path;
+    /// more finds a path within that factor of the cheapest, much faster.
+    pub heuristic_weight: f64,
 }

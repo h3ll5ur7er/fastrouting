@@ -76,6 +76,8 @@ pub(crate) struct Search<'a, L> {
     /// How often each connection has been ripped up; `None` when routed copper
     /// may not be crossed at all.
     rip_ups: Option<&'a [u32]>,
+    /// The profile's heuristic weight in thousandths, so ranking stays in integers.
+    weight_per_mille: i64,
 }
 
 impl<'a, L: LayoutAccess> Search<'a, L> {
@@ -109,6 +111,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 .distance(Point::new(profile.grid_pitch, profile.grid_pitch))
                 .max(pitch),
             rip_ups,
+            weight_per_mille: (profile.heuristic_weight * 1000.0).round() as i64,
         }
     }
 
@@ -142,7 +145,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     }
                     .pack(),
                 );
-                open.push(Reverse((cost + self.estimate(state), cost, slot)));
+                open.push(Reverse((cost + self.ranked_estimate(state), cost, slot)));
             }
         }
         while let Some(Reverse((_, cost, slot))) = open.pop() {
@@ -168,7 +171,11 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                         if total < scratch.best.get(next_slot as usize).unwrap_or(i64::MAX) {
                             scratch.best.set(next_slot as usize, total);
                             scratch.came.set(next_slot as usize, came.pack());
-                            open.push(Reverse((total + self.estimate(next), total, next_slot)));
+                            open.push(Reverse((
+                                total + self.ranked_estimate(next),
+                                total,
+                                next_slot,
+                            )));
                         }
                     }
                     None if total < best_target => {
@@ -369,16 +376,28 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         states
     }
 
-    /// Never more than what is left to pay: the straight distance to the target,
-    /// and a via if the target has no copper on this layer.
+    /// What is left to pay, as if nothing were in the way: the octilinear distance
+    /// to the target and a via if the target has no copper on this layer. Paths
+    /// on the grid are octilinear, so this is far tighter than the straight
+    /// distance; only the short any-angle stub into the pad can cost less.
     fn estimate(&self, state: State) -> i64 {
-        let distance = self.grid.point(state.node).distance(self.to.position);
+        let here = self.grid.point(state.node);
+        let dx = i64::from(here.x.abs_diff(self.to.position.x));
+        let dy = i64::from(here.y.abs_diff(self.to.position.y));
+        let (long, short) = (dx.max(dy), dx.min(dy));
+        let octilinear = long - short + short * self.diagonal / i64::from(self.profile.grid_pitch);
         let via = if self.to.is_on(LayerId(state.layer)) {
             0
         } else {
             self.profile.via_cost
         };
-        distance + via
+        octilinear + via
+    }
+
+    /// The estimate as the search ranks states: weighted by the profile, so the
+    /// search heads for the target more boldly than the cheapest path requires.
+    fn ranked_estimate(&self, state: State) -> i64 {
+        self.estimate(state) * self.weight_per_mille / 1000
     }
 
     fn steps(&self, last: u32, scratch: &Scratch) -> Vec<Step> {

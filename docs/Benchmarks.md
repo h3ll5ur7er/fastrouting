@@ -13,6 +13,28 @@ time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 
 The machine: a 4-core cloud container (x86-64), one thread used.
 
+## Octilinear estimate and weighted search (M1)
+
+October 2026: the search estimates the remaining cost by octilinear instead of straight distance, and ranks states by that estimate weighted with the profile's `heuristic_weight` ([[Profiles]]).
+
+Of matrix-6x17's 307 searches, 288 took under a millisecond; all the time went to 19 long column-to-header connections of 50–145 mm, each searching up to 15 million states. Measured on that board:
+
+| Search | Time | Track length | Vias |
+| --- | --- | --- | --- |
+| Straight-distance estimate (before) | 33 s | 5942.6 mm | 35 |
+| Octilinear estimate | 16.3 s | 5944.0 mm | 35 |
+| Octilinear, weight 1.2 (the default) | **2.2 s** | 5962.6 mm (+0.3 %) | **19** |
+| Octilinear, weight 1.5 | 0.74 s | 5977.6 mm (+0.6 %) | 52 |
+
+| Board | Connections | Routed | Vias | Time | KiCad DRC |
+| --- | --- | --- | --- | --- | --- |
+| placements | 7 | 7 | 0 | < 0.01 s | clean |
+| crossing | 2 | 2 | 2 | 0.07 s | clean |
+| matrix-3x4 | 36 | 36 | 4 | 0.35 s | clean |
+| matrix-6x17 | 306 | **306** | 24 | **2.7 s** | clean |
+
+KiCad's DRC also caught a rule the DSN does not carry: KiCad keeps copper 0.5 mm from the board edge by default. Boards from KiCad now keep at least that distance (see [[Research/KiCad-integration]]).
+
 ## Rip-up and reroute (M1, TRX-23)
 
 October 2026, the same search, plus negotiated rip-up and reroute and octilinear shortcuts ([[TRX-47]]).
