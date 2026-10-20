@@ -1,0 +1,6 @@
+# Lengths and costs in millimetres; a cost is the length of track worth avoiding it.
+[profiles.default]
+grid_pitch = 0.1
+via_cost = 2.0
+bend_cost = 0.1
+detour_margin = 5.0

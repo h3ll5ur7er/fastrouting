@@ -12,5 +12,6 @@ pub enum Stage {
     BuildingLayout,
     Planning,
     Routing,
+    Verifying,
     Storing,
 }

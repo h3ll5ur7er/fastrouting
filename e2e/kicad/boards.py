@@ -108,4 +108,47 @@ def placements() -> pcbnew.BOARD:
     return builder.board
 
 
-RECIPES = {"placements": placements}
+def crossing() -> pcbnew.BOARD:
+    """Two nets whose straight lines cross: one must change layers."""
+    builder = BoardBuilder(30, 30)
+    pad = lambda net: [Smd("1", 0, 0, 1.2, 1.2, net)]
+    builder.footprint("TP1", 5, 15, pad("ACROSS"))
+    builder.footprint("TP2", 25, 15, pad("ACROSS"))
+    builder.footprint("TP3", 15, 5, pad("DOWN"))
+    builder.footprint("TP4", 15, 25, pad("DOWN"))
+    return builder.board
+
+
+KEY_PITCH = 19.05
+
+
+def key_matrix(rows: int, columns: int, copper_layers: int = 2) -> pcbnew.BOARD:
+    """A keyboard's switch matrix: an MX switch and a diode per key, rows and
+    columns wired to a header along the top edge, as on a hand-wired NKRO board."""
+    header_pins = rows + columns
+    width = max(columns * KEY_PITCH, header_pins * 2.54 + 10)
+    builder = BoardBuilder(width, rows * KEY_PITCH + 12, copper_layers)
+    header = [Tht(str(i + 1), i * 2.54, 0, 1.7, 1.0, net) for i, net in
+              enumerate([f"ROW{r}" for r in range(rows)] + [f"COL{c}" for c in range(columns)])]
+    builder.footprint("J1", (width - (header_pins - 1) * 2.54) / 2, 4, header)
+    for r in range(rows):
+        for c in range(columns):
+            x, y = KEY_PITCH * (c + 0.5), 12 + KEY_PITCH * (r + 0.5)
+            key = f"K{r}_{c}"
+            builder.footprint(f"SW{r * columns + c + 1}", x, y, [
+                Tht("1", -3.81, -2.54, 2.2, 1.5, f"COL{c}"),
+                Tht("2", 2.54, -5.08, 2.2, 1.5, key),
+            ])
+            builder.footprint(f"D{r * columns + c + 1}", x + 4.5, y + 3, [
+                Smd("1", -1.65, 0, 0.9, 1.2, f"ROW{r}"),
+                Smd("2", 1.65, 0, 0.9, 1.2, key),
+            ], rotation=90, back=True)
+    return builder.board
+
+
+RECIPES = {
+    "placements": placements,
+    "crossing": crossing,
+    "matrix-3x4": lambda: key_matrix(3, 4),
+    "matrix-6x17": lambda: key_matrix(6, 17),
+}

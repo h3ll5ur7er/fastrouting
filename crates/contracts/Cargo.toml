@@ -10,5 +10,9 @@ repository.workspace = true
 [dependencies]
 traxide-geometry.workspace = true
 
+[features]
+# Builders for tests of other crates; never enabled in a release build.
+testing = []
+
 [lints]
 workspace = true

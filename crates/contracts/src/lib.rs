@@ -12,6 +12,9 @@ mod layout;
 mod plan;
 mod profile;
 mod routes;
+#[cfg(feature = "testing")]
+pub mod testing;
+mod verdict;
 
 pub use constraints::ConstraintSet;
 pub use design::{
@@ -24,3 +27,4 @@ pub use plan::{Connection, Plan};
 pub use profile::Profile;
 pub use routes::{Routes, RoutingResult, Track, Via};
 pub use traxide_geometry as geometry;
+pub use verdict::{CopperItem, Verdict, Violation};
