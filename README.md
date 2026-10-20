@@ -2,14 +2,15 @@
 
 *trace* + *oxide*: a fast, dependency-free PCB autorouter for KiCad and every tool that speaks Specctra DSN: a modern alternative to Freerouting, written in Rust, using every CPU core and, when present, the GPU.
 
-> traxide is a walking skeleton: it routes boards end to end and KiCad 10's DRC finds the results clean, but it is not yet fast or complete on large boards. See the [benchmarks](docs/Benchmarks.md).
+> traxide is young: it routes a 4-layer keyboard with an RP2350 completely in seconds, and KiCad 10's DRC finds the result clean, while Freerouting takes minutes and leaves violations. It reads DSN and writes SES only so far, and has met few boards yet. See the [benchmarks](docs/Benchmarks.md).
 
 ## Try it
 
 ```bash
 cargo build --release
 # In KiCad: File → Export → Specctra DSN, then
-target/release/traxide route board.dsn        # writes board.ses
+target/release/traxide route board.dsn        # writes board.ses, on all cores
+target/release/traxide route --help           # profiles, threads, output
 # In KiCad: File → Import → Specctra Session
 ```
 

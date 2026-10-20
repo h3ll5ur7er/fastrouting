@@ -3,6 +3,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use traxide_contracts::{Event, Stage, Violation};
@@ -32,6 +33,10 @@ enum Command {
         /// A traxide.toml with profiles of your own.
         #[arg(long)]
         config: Option<PathBuf>,
+        /// How many threads to route on; all cores by default. The routes are the
+        /// same on any number of them.
+        #[arg(short = 'j', long)]
+        threads: Option<NonZeroUsize>,
         /// Print only the summary.
         #[arg(short, long)]
         quiet: bool,
@@ -59,6 +64,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         output,
         profile,
         config,
+        threads,
         quiet,
     } = cli.command;
     let output = output.unwrap_or_else(|| input.with_extension("ses"));
@@ -67,6 +73,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         output: output.clone(),
         profile,
         profile_file: config,
+        threads,
     };
     let progress = |event: Event| {
         if !quiet {

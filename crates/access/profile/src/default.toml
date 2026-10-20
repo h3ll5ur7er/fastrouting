@@ -10,3 +10,5 @@ max_rip_ups = 10
 heuristic_weight = 1.2
 # Off: on the keyboard and the key matrices, corridors made detailed routing slower (docs/Benchmarks.md).
 global_routing = false
+# Connections searched side by side, then committed in order. Fixed, so results don't depend on the number of threads.
+batch_size = 16

@@ -39,3 +39,14 @@ jobs:
         run: |
           jar=$(ls freerouting/*.jar | head -n 1)
           cargo xtask bench --freerouting "java -jar $jar" --timeout 3600 matrix-6x17 keyboard-tkl
+      # The sessions, KiCad's DRC reports and the routed boards, to look into what the table counts.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: |
+            target/bench/**/*.ses
+            target/bench/**/*.json
+            target/bench/**/*.kicad_pcb
+            target/bench/**/*.kicad_pro
+          if-no-files-found: ignore

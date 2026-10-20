@@ -1,33 +1,40 @@
 //! Detailed Routing Engine: the algorithm that turns connections into exact,
 //! rule-correct copper (volatility V7 of docs/Architecture/Volatilities.md).
 //!
-//! For now an A* search on an octilinear grid across all routable layers, one
-//! connection at a time, with rip-up and reroute: a connection that finds its
-//! way blocked by routed copper may take that copper's place, and the
-//! connections it displaces are routed again later.
+//! For now an A* search on an octilinear grid across all routable layers, in
+//! batches of connections far enough apart to be searched side by side, with
+//! rip-up and reroute: a connection that finds its way blocked by routed
+//! copper may take that copper's place, and the connections it displaces are
+//! routed again later.
 
 mod grid;
 mod path;
 mod search;
 
+use std::cmp::Reverse;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use traxide_contracts::geometry::Rect;
 use traxide_contracts::{
     Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, Obstruction,
     Plan, Profile, Routes, RoutingResult,
 };
 use traxide_events::{CancelToken, Publisher};
 
+/// How many connections a batch looks through for each connection it may hold.
+const SCANNED_PER_BATCH_SLOT: usize = 4;
+
 pub struct Router<'a> {
-    design: &'a Design,
-    rules: &'a ConstraintSet,
-    profile: &'a Profile,
-    scratch: search::Scratch,
+    finder: Finder<'a>,
+    /// One per thread: each search needs its own memory.
+    scratches: Vec<search::Scratch>,
 }
 
 impl std::fmt::Debug for Router<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Router")
-            .field("profile", &self.profile.name)
+            .field("profile", &self.finder.profile.name)
+            .field("threads", &self.scratches.len())
             .finish_non_exhaustive()
     }
 }
@@ -35,21 +42,33 @@ impl std::fmt::Debug for Router<'_> {
 impl<'a> Router<'a> {
     pub fn new(design: &'a Design, rules: &'a ConstraintSet, profile: &'a Profile) -> Self {
         Self {
-            design,
-            rules,
-            profile,
-            scratch: search::Scratch::default(),
+            finder: Finder {
+                design,
+                rules,
+                profile,
+            },
+            scratches: vec![search::Scratch::default()],
         }
     }
 
+    /// Searches the connections of a batch on up to `threads` threads. The
+    /// routes are the same on any number of them.
+    pub fn with_threads(mut self, threads: usize) -> Self {
+        self.scratches
+            .resize_with(threads.max(1), search::Scratch::default);
+        self
+    }
+
     /// Routes the connections of `plan` in order, adding their copper to `layout`.
+    /// Connections that cannot touch each other's copper are searched side by
+    /// side in batches and committed in order (see `next_batch`).
     /// A connection is ripped up at most the profile's `max_rip_ups` times; those
     /// that find no way within that are reported as unrouted.
     pub fn route_plan(
         &mut self,
         plan: &Plan,
         corridors: Option<&Corridors>,
-        layout: &mut impl LayoutAccess,
+        layout: &mut (impl LayoutAccess + Sync),
         cancel: &CancelToken,
         events: &impl Publisher<Event>,
     ) -> RoutingResult {
@@ -58,35 +77,41 @@ impl<'a> Router<'a> {
         let mut rip_ups = vec![0_u32; total];
         let mut queue: VecDeque<ConnectionId> = (0..total).map(ConnectionId::from_index).collect();
         let mut unrouted = Vec::new();
-        let may_rip_up = self.profile.max_rip_ups > 0;
-        while let Some(id) = queue.pop_front() {
+        let may_rip_up = self.finder.profile.max_rip_ups > 0;
+        while !queue.is_empty() {
             if cancel.is_cancelled() {
-                unrouted.push(id);
                 unrouted.extend(queue.drain(..));
                 break;
             }
-            let connection = plan.connections[id.index()];
-            match self.find(
-                id,
-                connection,
+            let batch = self.next_batch(&mut queue, plan, corridors);
+            let found = self.find_all(
+                &batch,
+                plan,
                 corridors,
                 layout,
                 may_rip_up.then_some(&rip_ups[..]),
-            ) {
-                Some(found) => {
-                    for displaced in routed_obstructions(layout, &found) {
-                        layout.remove_route(displaced);
-                        routed[displaced.index()] = None;
-                        rip_ups[displaced.index()] += 1;
-                        queue.push_back(displaced);
-                    }
-                    layout.add_route(id, &found);
-                    routed[id.index()] = Some(found);
+            );
+            for (id, found) in batch.iter().copied().zip(found) {
+                let Some(found) = found else {
+                    unrouted.push(id);
+                    continue;
+                };
+                let displaced = routed_obstructions(layout, &found);
+                debug_assert!(
+                    displaced.iter().all(|d| !batch.contains(d)),
+                    "connections of one batch keep out of each other's territory"
+                );
+                for displaced in displaced {
+                    layout.remove_route(displaced);
+                    routed[displaced.index()] = None;
+                    rip_ups[displaced.index()] += 1;
+                    queue.push_back(displaced);
                 }
-                None => unrouted.push(id),
+                layout.add_route(id, &found);
+                routed[id.index()] = Some(found);
+                let done = routed.iter().filter(|r| r.is_some()).count();
+                events.publish(Event::ConnectionRouted { done, total });
             }
-            let done = routed.iter().filter(|r| r.is_some()).count();
-            events.publish(Event::ConnectionRouted { done, total });
         }
         unrouted.sort_unstable();
         let mut routes = Routes::default();
@@ -102,10 +127,156 @@ impl<'a> Router<'a> {
         }
     }
 
+    /// Takes up to the profile's `batch_size` connections from the front of
+    /// `queue`, in order, whose territories overlap neither each other nor that
+    /// of any connection they skip: so no connection of a batch can meet the
+    /// copper of another, nor overtake one it could meet. Batches depend on the
+    /// queue alone, never on the number of threads.
+    fn next_batch(
+        &self,
+        queue: &mut VecDeque<ConnectionId>,
+        plan: &Plan,
+        corridors: Option<&Corridors>,
+    ) -> Vec<ConnectionId> {
+        let batch_size = self.finder.profile.batch_size as usize;
+        // Bounds the cost of looking for room on boards with many connections.
+        let scan_depth = batch_size * SCANNED_PER_BATCH_SLOT;
+        let mut claimed: Vec<Rect> = Vec::new();
+        let mut batch = Vec::new();
+        let mut position = 0;
+        while let Some(&id) = queue.get(position) {
+            if batch.len() == batch_size || claimed.len() == scan_depth {
+                break;
+            }
+            let territory = self
+                .finder
+                .territory(id, plan.connections[id.index()], corridors);
+            let is_free = claimed.iter().all(|c| !c.intersects(territory));
+            claimed.push(territory);
+            if is_free {
+                batch.extend(queue.remove(position));
+            } else {
+                position += 1;
+            }
+        }
+        batch
+    }
+
+    /// The route each connection of `batch` finds in `layout`, in batch order.
+    fn find_all(
+        &mut self,
+        batch: &[ConnectionId],
+        plan: &Plan,
+        corridors: Option<&Corridors>,
+        layout: &(impl LayoutAccess + Sync),
+        rip_ups: Option<&[u32]>,
+    ) -> Vec<Option<Routes>> {
+        let finder = self.finder;
+        let find = |scratch: &mut search::Scratch, id: ConnectionId| {
+            let connection = plan.connections[id.index()];
+            finder.find(scratch, id, connection, corridors, layout, rip_ups)
+        };
+        let workers = self.scratches.len().min(batch.len());
+        if workers <= 1 {
+            let scratch = &mut self.scratches[0];
+            return batch.iter().map(|&id| find(scratch, id)).collect();
+        }
+        // The largest search runs on the first scratch, which batches of one
+        // connection have grown already, so the other scratches only grow as
+        // large as the smaller searches they get: filling fresh memory for
+        // every thread cost more than the threads saved.
+        let mut order: Vec<usize> = (0..batch.len()).collect();
+        order.sort_by_key(|&item| {
+            let id = batch[item];
+            Reverse(
+                finder
+                    .territory(id, plan.connections[id.index()], corridors)
+                    .area(),
+            )
+        });
+        let next = AtomicUsize::new(1);
+        let work = |scratch: &mut search::Scratch, mut position: usize| {
+            let mut done = Vec::new();
+            while let Some(&item) = order.get(position) {
+                done.push((item, find(scratch, batch[item])));
+                position = next.fetch_add(1, Ordering::Relaxed);
+            }
+            done
+        };
+        let (first, others) = self.scratches[..workers]
+            .split_first_mut()
+            .unwrap_or_else(|| unreachable!("at least two workers"));
+        let mut found: Vec<Option<Routes>> = vec![None; batch.len()];
+        std::thread::scope(|scope| {
+            let helpers: Vec<_> = others
+                .iter_mut()
+                .map(|scratch| {
+                    let (next, work) = (&next, &work);
+                    scope.spawn(move || work(scratch, next.fetch_add(1, Ordering::Relaxed)))
+                })
+                .collect();
+            let mine = work(first, 0);
+            // A helper only panics on a bug in the search; pass it on.
+            let theirs = helpers.into_iter().flat_map(|helper| {
+                helper
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            });
+            for (item, routes) in mine.into_iter().chain(theirs) {
+                found[item] = routes;
+            }
+        });
+        found
+    }
+}
+
+/// What a search needs besides its memory; shared by all threads.
+#[derive(Clone, Copy)]
+struct Finder<'a> {
+    design: &'a Design,
+    rules: &'a ConstraintSet,
+    profile: &'a Profile,
+}
+
+impl Finder<'_> {
+    /// Where the connection's copper may go, grown by the clearance other copper
+    /// keeps from it: two connections with apart territories cannot meet.
+    fn territory(
+        &self,
+        id: ConnectionId,
+        connection: Connection,
+        corridors: Option<&Corridors>,
+    ) -> Rect {
+        let anywhere = search::window(self.design, self.profile, connection, None);
+        let window = match corridors.filter(|c| c.bounds(id).is_some()) {
+            Some(corridors) => anywhere.union(search::window(
+                self.design,
+                self.profile,
+                connection,
+                Some((corridors, id)),
+            )),
+            None => anywhere,
+        };
+        let via_radius = self
+            .rules
+            .via_kinds(connection.net)
+            .iter()
+            .flat_map(|kind| &self.design.via_kinds[kind.index()].copper)
+            .map(|copper| {
+                let bounds = copper.shape.bounds();
+                (bounds.max.x - bounds.min.x).max(bounds.max.y - bounds.min.y) / 2 + 1
+            })
+            .max()
+            .unwrap_or(0);
+        let copper_reach = via_radius.max(self.rules.track_width(connection.net) / 2 + 1);
+        window.inflated(copper_reach + self.rules.largest_clearance())
+    }
+
     /// A route inside the connection's corridor; when the corridor turns out to
     /// be blocked, as global routing only estimates room, anywhere in reach.
     fn find(
-        &mut self,
+        &self,
+        scratch: &mut search::Scratch,
         id: ConnectionId,
         connection: Connection,
         corridors: Option<&Corridors>,
@@ -114,12 +285,13 @@ impl<'a> Router<'a> {
     ) -> Option<Routes> {
         let in_corridor = corridors
             .filter(|c| c.bounds(id).is_some())
-            .and_then(|c| self.search(connection, layout, rip_ups, Some((c, id))));
-        in_corridor.or_else(|| self.search(connection, layout, rip_ups, None))
+            .and_then(|c| self.search(scratch, connection, layout, rip_ups, Some((c, id))));
+        in_corridor.or_else(|| self.search(scratch, connection, layout, rip_ups, None))
     }
 
     fn search(
-        &mut self,
+        &self,
+        scratch: &mut search::Scratch,
         connection: Connection,
         layout: &impl LayoutAccess,
         rip_ups: Option<&[u32]>,
@@ -134,7 +306,7 @@ impl<'a> Router<'a> {
             rip_ups,
             corridor,
         );
-        let steps = search.run(&mut self.scratch)?;
+        let steps = search.run(scratch)?;
         Some(path::to_routes(
             &steps,
             connection.net,

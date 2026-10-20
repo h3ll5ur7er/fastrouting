@@ -81,6 +81,7 @@ struct Fields {
     max_rip_ups: Option<u32>,
     heuristic_weight: Option<f64>,
     global_routing: Option<bool>,
+    batch_size: Option<u32>,
 }
 
 impl Fields {
@@ -94,6 +95,7 @@ impl Fields {
             max_rip_ups: other.max_rip_ups.or(self.max_rip_ups),
             heuristic_weight: other.heuristic_weight.or(self.heuristic_weight),
             global_routing: other.global_routing.or(self.global_routing),
+            batch_size: other.batch_size.or(self.batch_size),
         }
     }
 
@@ -131,6 +133,15 @@ impl Fields {
                 }
             },
             global_routing: self.global_routing.unwrap_or(false),
+            batch_size: match self.batch_size.unwrap_or(1) {
+                0 => {
+                    return Err(ProfileError::BelowOne {
+                        profile: name.into(),
+                        field: "batch_size",
+                    });
+                }
+                size => size,
+            },
         })
     }
 }
@@ -169,6 +180,18 @@ mod tests {
         assert!(matches!(
             load_profile("default", Some(&file)),
             Err(ProfileError::BelowOne { .. })
+        ));
+    }
+
+    #[test]
+    fn a_batch_holds_at_least_one_connection() {
+        let file = file_with("[profiles.default]\nbatch_size = 0\n");
+        assert!(matches!(
+            load_profile("default", Some(&file)),
+            Err(ProfileError::BelowOne {
+                field: "batch_size",
+                ..
+            })
         ));
     }
 

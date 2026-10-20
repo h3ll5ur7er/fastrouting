@@ -62,6 +62,26 @@ impl Came {
     }
 }
 
+/// The area a search for `connection` covers: the corridor global routing
+/// planned for it, or the box around its pads with room for detours.
+pub(crate) fn window(
+    design: &Design,
+    profile: &Profile,
+    connection: Connection,
+    corridor: Option<(&Corridors, ConnectionId)>,
+) -> Rect {
+    let from = design.pad(connection.from).position;
+    let pads = Rect {
+        min: from,
+        max: from,
+    }
+    .including(design.pad(connection.to).position);
+    match corridor.and_then(|(corridors, id)| corridors.bounds(id)) {
+        Some(bounds) => bounds.union(pads),
+        None => pads.inflated(profile.detour_margin),
+    }
+}
+
 pub(crate) struct Search<'a, L> {
     design: &'a Design,
     profile: &'a Profile,
@@ -93,15 +113,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         corridor: Option<(&'a Corridors, ConnectionId)>,
     ) -> Self {
         let (from, to) = (design.pad(connection.from), design.pad(connection.to));
-        let pads = Rect {
-            min: from.position,
-            max: from.position,
-        }
-        .including(to.position);
-        let window = match corridor.and_then(|(corridors, id)| corridors.bounds(id)) {
-            Some(bounds) => bounds.union(pads),
-            None => pads.inflated(profile.detour_margin),
-        };
+        let window = window(design, profile, connection, corridor);
         let pitch = i64::from(profile.grid_pitch);
         Self {
             design,

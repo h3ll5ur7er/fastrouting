@@ -20,6 +20,7 @@ fn profile() -> Profile {
         max_rip_ups: 10,
         heuristic_weight: 1.0,
         global_routing: false,
+        batch_size: 1,
     }
 }
 
@@ -43,6 +44,16 @@ fn route_in(
     pairs: &[(&str, &str)],
     corridors: Option<&Corridors>,
 ) -> RoutingResult {
+    route_on_threads(design, profile, pairs, corridors, 1)
+}
+
+fn route_on_threads(
+    design: &Design,
+    profile: &Profile,
+    pairs: &[(&str, &str)],
+    corridors: Option<&Corridors>,
+    threads: usize,
+) -> RoutingResult {
     let rules = traxide_rules::compile(design, Purpose::Routing);
     let mut layout = Layout::build(design, &rules);
     let connections = pairs
@@ -51,7 +62,9 @@ fn route_in(
         .collect();
     let plan = Plan { connections };
     let cancel = CancelToken::new();
-    Router::new(design, &rules, profile).route_plan(&plan, corridors, &mut layout, &cancel, &Silent)
+    Router::new(design, &rules, profile)
+        .with_threads(threads)
+        .route_plan(&plan, corridors, &mut layout, &cancel, &Silent)
 }
 
 /// A corridor of 1 mm cells on a board 20 cells wide, made of the given cells.
@@ -165,6 +178,81 @@ fn later_connections_keep_clear_of_earlier_ones() {
         "the crossing needs the other layer"
     );
     assert_legal(&design, &result.routes);
+}
+
+#[test]
+fn connections_that_may_cross_are_searched_one_after_the_other() {
+    let design = DesignBuilder::new(20.0, 20.0)
+        .smd("A1", Some("A"), at(2.0, 10.0), 1.0, 0)
+        .smd("A2", Some("A"), at(18.0, 10.0), 1.0, 0)
+        .smd("B1", Some("B"), at(10.0, 2.0), 1.0, 0)
+        .smd("B2", Some("B"), at(10.0, 18.0), 1.0, 0)
+        .build();
+    let in_one_batch = Profile {
+        batch_size: 2,
+        ..profile()
+    };
+    let result = route_on_threads(
+        &design,
+        &in_one_batch,
+        &[("A1", "A2"), ("B1", "B2")],
+        None,
+        2,
+    );
+    assert!(result.unrouted.is_empty());
+    assert!(
+        !result.routes.vias.is_empty(),
+        "the crossing needs the other layer"
+    );
+    assert_legal(&design, &result.routes);
+}
+
+/// Twelve two-pin nets with their pads scattered over a 2 mm lattice, so that
+/// many of them cross and collide.
+fn scattered_nets() -> (Design, Vec<(String, String)>) {
+    let mut builder = DesignBuilder::new(22.0, 22.0);
+    let mut sites: Vec<(i32, i32)> = (0..10).flat_map(|x| (0..10).map(move |y| (x, y))).collect();
+    let mut seed = 7_u64;
+    let mut pairs = Vec::new();
+    for net in 0..12 {
+        let mut ends = Vec::new();
+        for end in 1..=2 {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            let (x, y) = sites.swap_remove((seed >> 33) as usize % sites.len());
+            let name = format!("N{net}.{end}");
+            builder = builder.smd(
+                &name,
+                Some(&format!("N{net}")),
+                at(2.0 + 2.0 * f64::from(x), 2.0 + 2.0 * f64::from(y)),
+                0.8,
+                0,
+            );
+            ends.push(name);
+        }
+        pairs.push((ends[0].clone(), ends[1].clone()));
+    }
+    (builder.build(), pairs)
+}
+
+#[test]
+fn the_routes_do_not_depend_on_the_number_of_threads() {
+    let (design, pairs) = scattered_nets();
+    let pairs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let batched = Profile {
+        batch_size: 8,
+        heuristic_weight: 1.2,
+        ..profile()
+    };
+    let on_one = route_on_threads(&design, &batched, &pairs, None, 1);
+    assert!(on_one.unrouted.is_empty());
+    assert_legal(&design, &on_one.routes);
+    for threads in [2, 4] {
+        let on_more = route_on_threads(&design, &batched, &pairs, None, threads);
+        assert_eq!(on_more.routes, on_one.routes, "on {threads} threads");
+    }
 }
 
 #[test]

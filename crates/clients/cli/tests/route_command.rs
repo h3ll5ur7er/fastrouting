@@ -47,6 +47,32 @@ fn routes_a_board_and_writes_a_session_next_to_it() {
 }
 
 #[test]
+fn writes_the_same_session_on_any_number_of_threads() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    // Exported by KiCad 10 from the matrix-3x4 recipe of e2e/kicad/boards.py.
+    let input = copy_to(folder.path(), "matrix-3x4.dsn");
+    let session_on = |threads: &str| {
+        // The same file name each time, as a session names itself after its file.
+        let output = folder.path().join(threads).join("routed.ses");
+        std::fs::create_dir(output.parent().expect("in a folder")).expect("new folder");
+        let run = traxide(&[
+            "route",
+            input.to_str().expect("utf-8"),
+            "-o",
+            output.to_str().expect("utf-8"),
+            "--threads",
+            threads,
+            "--quiet",
+        ]);
+        assert!(run.status.success(), "{run:?}");
+        std::fs::read(output).expect("written")
+    };
+    let on_one = session_on("1");
+    assert_eq!(session_on("4"), on_one);
+    assert_eq!(session_on("16"), on_one);
+}
+
+#[test]
 fn an_unknown_profile_fails_with_the_known_ones() {
     let folder = tempfile::tempdir().expect("temp dir");
     let input = copy_to(folder.path(), "two-nets.dsn");

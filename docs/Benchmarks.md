@@ -1,6 +1,6 @@
 # Benchmarks
 
-Measurements of traxide on the end-to-end boards, by hand until the benchmark of [[TRX-22]] records them in CI. Every routed board below was imported into KiCad 10.0.7 and passed its DRC with no violations.
+Measurements of traxide on the end-to-end boards, newest first; the comparison with Freerouting runs in CI, the rest by hand until the benchmark gate of [[TRX-22]]. Every board traxide routed below was imported into KiCad 10.0.7 and passed its DRC with no violations.
 
 [TOC]
 
@@ -15,16 +15,35 @@ The machine: a 4-core cloud container (x86-64), one thread used.
 
 ## traxide against Freerouting 2.5.0
 
-October 2026, `cargo xtask bench` in the Benchmark workflow on a GitHub Actions runner (ubuntu-latest, 4 vCPUs): both routers get the same DSN exported by KiCad 10, KiCad 10 imports each session, and KiCad's own DRC judges both. Freerouting ran with its defaults (`-de board.dsn -do board.ses --gui.enabled=false`); traxide with its default profile.
+October 2026, `cargo xtask bench` in the Benchmark workflow on a GitHub Actions runner (ubuntu-latest, 4 vCPUs): both routers get the same DSN exported by KiCad 10, KiCad 10 imports each session, and KiCad's own DRC judges both. Freerouting ran with its defaults (`-de board.dsn -do board.ses --gui.enabled=false`); traxide with its default profile. Two runs on different days' runners:
 
 | Board | Router | Time | Unconnected | Violations | Tracks | Vias | Track length |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| matrix-6x17 | **traxide** | **1.4 s** | 0 | **0** | 547 | **23** | **5947 mm** |
-| matrix-6x17 | Freerouting | 54.4 s | 0 | 30 | 852 | 40 | 6605 mm |
-| keyboard-tkl | **traxide** | **9.8 s** | 0 | **0** | 1552 | **108** | **8304 mm** |
-| keyboard-tkl | Freerouting | 266.2 s | 0 | 199 | 1645 | 225 | 8548 mm |
+| matrix-6x17 | **traxide** | **1.4 s / 1.0 s** | 0 | **0** | 547 | **23** | **5947 mm** |
+| matrix-6x17 | Freerouting | 54.4 s / 90.0 s | 0 | 30 / 18 | 852 / 831 | 40 / 36 | 6605 / 6662 mm |
+| keyboard-tkl | **traxide** | **9.8 s / 7.2 s** | 0 | **0** | 1552 / 1550 | **108** | **8304 mm** |
+| keyboard-tkl | Freerouting | 266.2 s / 480.9 s | 0 | 199 / 199 | 1645 / 1577 | 225 / 230 | 8548 / 8574 mm |
 
-traxide is 27–39 times faster, with half the vias and less track, and its boards are the ones KiCad finds clean. Part of Freerouting's violations come from rules a DSN does not carry, such as KiCad's copper-to-edge clearance, which traxide assumes for boards from KiCad ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]); the benchmark now lists violations by kind, so the next run will say how many.
+traxide is 39–90 times faster on the matrix and 27–67 times on the keyboard, with about half the vias and less track, and its boards are the ones KiCad finds clean. traxide's routes are the same in every run; Freerouting's differ from run to run.
+
+**What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
+
+## Parallel batches (M2, TRX-27)
+
+October 2026: detailed routing searches batches of connections side by side, connections whose territories (search window plus copper reach plus clearance) are apart, and commits them in queue order ([[Architecture/Parallelism-and-GPU#batches]]). Measured in the 4-core cloud container, three runs each, median, default profile (`batch_size = 16`):
+
+| Threads | keyboard-tkl | matrix-6x17 |
+| ---: | ---: | ---: |
+| 1 | 13.7 s | 1.65 s |
+| 2 | 13.6 s | 1.64 s |
+| 4 | 13.4 s | 1.61 s |
+
+The sessions were byte-identical in all nine runs of each board, and identical to routing one connection at a time. That correctness is the gain: **no speed-up** on these boards, for two reasons found by tracing every batch:
+
+- **The time is in the long connections.** On the keyboard, 89 of 125 batches held a single connection, and those took 10.8 s of the 12.2 s of searching: connections from the MCU or the header across the board, whose windows overlap everything. The connections that did run side by side took under a second together. One connection alone, searched twice after rip-ups, costs 4 s: it pops 4.4 million of its window's 17.7 million states.
+- **Memory.** The search arrays covered each window densely, over a gigabyte for the longest searches, and every thread needed its own. Filling fresh memory for each thread made four threads 15–30 % *slower* than one. The arrays are now tiled, and a search maps only the tiles it writes: peak memory fell from 1.15 GB to 293 MB on one thread (2.2 GB to 365 MB on four), and extra threads cost nothing. On one thread, the tiles cost a few per cent of search speed.
+
+Batches will matter on boards with many short connections spread out; on keyboards, cheaper long searches come first ([[TRX-48]]). A first attempt that searched the next 8–32 connections speculatively, regardless of overlap, and searched colliding ones again, was 2–4 times *slower*: the long connections all converge on the MCU and kept colliding.
 
 ## Global routing corridors: measured, and off (M2, TRX-26)
 

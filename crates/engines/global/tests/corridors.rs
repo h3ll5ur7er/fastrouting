@@ -14,6 +14,7 @@ fn profile() -> Profile {
         max_rip_ups: 10,
         heuristic_weight: 1.0,
         global_routing: true,
+        batch_size: 1,
     }
 }
 

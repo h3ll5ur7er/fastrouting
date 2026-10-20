@@ -17,6 +17,7 @@ fn job(input: &str, output: &std::path::Path) -> RouteJob {
         output: output.into(),
         profile: "default".into(),
         profile_file: None,
+        threads: None,
     }
 }
 

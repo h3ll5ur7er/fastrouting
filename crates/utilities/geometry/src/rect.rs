@@ -45,6 +45,11 @@ impl Rect {
             && other.min.y <= self.max.y
     }
 
+    /// In square nanometres, which overflow `i32` above 46 µm square.
+    pub fn area(self) -> i64 {
+        i64::from(self.max.x - self.min.x) * i64::from(self.max.y - self.min.y)
+    }
+
     pub fn contains_rect(self, other: Self) -> bool {
         self.contains(other.min) && self.contains(other.max)
     }
@@ -63,6 +68,14 @@ mod tests {
             min: Point::new(x1, y1),
             max: Point::new(x2, y2),
         }
+    }
+
+    #[test]
+    fn the_area_of_a_board_sized_rectangle_fits() {
+        assert_eq!(
+            rect(0, 0, 400_000_000, 300_000_000).area(),
+            120_000_000_000_000_000
+        );
     }
 
     #[test]

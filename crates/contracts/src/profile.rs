@@ -23,4 +23,9 @@ pub struct Profile {
     /// Whether global routing first plans a corridor for every connection, to
     /// which detailed routing then keeps.
     pub global_routing: bool,
+    /// At most how many connections, far enough apart not to meet, are searched
+    /// side by side before they are committed in order. Unlike the number of
+    /// threads, it can change the result, as it changes the order in which
+    /// rip-ups queue connections again.
+    pub batch_size: u32,
 }

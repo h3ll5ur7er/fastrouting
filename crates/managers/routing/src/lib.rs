@@ -2,6 +2,7 @@
 //! docs/Architecture/Volatilities.md). It decides which stages run in which
 //! order; the engines and resource access do the work.
 
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
@@ -19,6 +20,8 @@ pub struct RouteJob {
     pub output: PathBuf,
     pub profile: String,
     pub profile_file: Option<PathBuf>,
+    /// How many threads to route on; as many as the machine has by default.
+    pub threads: Option<NonZeroUsize>,
 }
 
 /// What a finished route job achieved.
@@ -66,7 +69,11 @@ pub fn route(
     });
     events.publish(Event::StageStarted(Stage::Routing));
     let total = plan.connections.len();
-    let mut router = Router::new(&design, &rules, &profile);
+    let threads = job
+        .threads
+        .or_else(|| std::thread::available_parallelism().ok())
+        .map_or(1, NonZeroUsize::get);
+    let mut router = Router::new(&design, &rules, &profile).with_threads(threads);
     let RoutingResult { routes, unrouted } =
         router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
     events.publish(Event::StageStarted(Stage::Verifying));
