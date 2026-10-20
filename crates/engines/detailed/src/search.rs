@@ -38,6 +38,11 @@ pub(crate) struct Scratch {
     /// Whether nothing is within reach of any edge out of a node, by layer and
     /// node: then no edge out of it needs a check of its own.
     open_around: Stamped<bool>,
+    /// Where on its pad the way through a start state begins, by state.
+    start_anchor: Stamped<Point>,
+    /// Where on its pad the way through a node into the target ends, by layer
+    /// and node.
+    finish_anchor: Stamped<Point>,
     /// Every state expanded, in order, for tests to look into a search.
     #[cfg(test)]
     expanded: Vec<u32>,
@@ -92,6 +97,15 @@ pub(crate) fn window(
         Some(bounds) => bounds.union(pads),
         None => pads.inflated(profile.detour_margin),
     }
+}
+
+/// A way onto a pad from a grid node: what reaching the node from the pad
+/// costs, and the point of the pad's copper where it begins.
+#[derive(Debug, Clone, Copy)]
+struct Way {
+    state: State,
+    cost: i64,
+    anchor: Point,
 }
 
 /// Why a search found no route.
@@ -194,12 +208,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             .ok_or(NoRoute::NotFound)
     }
 
-    fn search(
-        self,
-        start: Vec<(State, i64)>,
-        target: Vec<(State, i64)>,
-        scratch: &mut Scratch,
-    ) -> Option<Vec<Step>> {
+    fn search(self, start: Vec<Way>, target: Vec<Way>, scratch: &mut Scratch) -> Option<Vec<Step>> {
         let layers = self.design.layers.len();
         let nodes = self.grid.node_count();
         scratch.best.reset(nodes * layers);
@@ -208,17 +217,34 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
         scratch.open_around.reset(nodes * layers);
-        for (state, cost) in target {
-            scratch.finish.set(self.layer_node(state), cost);
+        scratch.start_anchor.reset(nodes * layers);
+        scratch.finish_anchor.reset(nodes * layers);
+        for Way {
+            state,
+            cost,
+            anchor,
+        } in target
+        {
+            let layer_node = self.layer_node(state);
+            if cost < scratch.finish.get(layer_node).unwrap_or(i64::MAX) {
+                scratch.finish.set(layer_node, cost);
+                scratch.finish_anchor.set(layer_node, anchor);
+            }
         }
 
         let mut best_target = i64::MAX;
         let mut target_came = None;
         let mut open = BinaryHeap::new();
-        for (state, cost) in start {
+        for Way {
+            state,
+            cost,
+            anchor,
+        } in start
+        {
             let slot = self.slot(state);
             if cost < scratch.best.get(slot as usize).unwrap_or(i64::MAX) {
                 scratch.best.set(slot as usize, cost);
+                scratch.start_anchor.set(slot as usize, anchor);
                 scratch.came.set(
                     slot as usize,
                     Came {
@@ -500,8 +526,11 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
 
     /// The grid states a track from the pad's centre can reach in a straight line,
     /// and what that track costs.
-    fn access(&self, pad: &Pad) -> Vec<(State, i64)> {
-        let mut states = Vec::new();
+    /// The ways from grid nodes onto `pad`: straight to its centre, the pin's
+    /// position, where that is clear, else to the nearest point of its copper,
+    /// as the centre of an edge connector's pad may lie off the board.
+    fn access(&self, pad: &Pad) -> Vec<Way> {
+        let mut ways = Vec::new();
         for copper in pad
             .copper
             .iter()
@@ -514,18 +543,24 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 .filter(|&n| self.in_corridor(n))
             {
                 let point = self.grid.point(node);
-                let segment = Segment::new(pad.position, point);
-                if let Some(extra) = self.track_extra(copper.layer, segment) {
-                    let state = State {
-                        node,
-                        layer: copper.layer.0,
-                        heading: UNSET,
-                    };
-                    states.push((state, pad.position.distance(point) + extra));
-                }
+                let state = State {
+                    node,
+                    layer: copper.layer.0,
+                    heading: UNSET,
+                };
+                let nearest = copper.shape.nearest_point(point);
+                let way = [pad.position, nearest].into_iter().find_map(|anchor| {
+                    let extra = self.track_extra(copper.layer, Segment::new(anchor, point))?;
+                    Some(Way {
+                        state,
+                        cost: anchor.distance(point) + extra,
+                        anchor,
+                    })
+                });
+                ways.extend(way);
             }
         }
-        states
+        ways
     }
 
     /// What is left to pay, as if nothing were in the way: the octilinear distance
@@ -553,14 +588,19 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     }
 
     fn steps(&self, last: u32, scratch: &Scratch) -> Vec<Step> {
-        let last_layer = LayerId(self.state(last).layer);
+        let last_state = self.state(last);
         let mut reversed = vec![Step {
-            at: self.to.position,
-            layer: last_layer,
+            at: scratch
+                .finish_anchor
+                .get(self.layer_node(last_state))
+                .unwrap_or(self.to.position),
+            layer: LayerId(last_state.layer),
             via: None,
         }];
+        let mut first = last;
         let mut current = Some(last);
         while let Some(slot) = current {
+            first = slot;
             let state = self.state(slot);
             let came = Came::unpack(
                 scratch
@@ -577,7 +617,10 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
         let first_layer = reversed.last().map_or(LayerId(0), |s| s.layer);
         reversed.push(Step {
-            at: self.from.position,
+            at: scratch
+                .start_anchor
+                .get(first as usize)
+                .unwrap_or(self.from.position),
             layer: first_layer,
             via: None,
         });

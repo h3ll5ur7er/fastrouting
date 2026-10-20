@@ -20,6 +20,25 @@ impl Segment {
         .including(self.b)
     }
 
+    /// The point of the segment nearest to `p`.
+    pub fn closest_point(self, p: Point) -> Point {
+        let (dx, dy) = (
+            i128::from(self.b.x - self.a.x),
+            i128::from(self.b.y - self.a.y),
+        );
+        let squared_length = dx * dx + dy * dy;
+        if squared_length == 0 {
+            return self.a;
+        }
+        let along = (i128::from(p.x - self.a.x) * dx + i128::from(p.y - self.a.y) * dy)
+            .clamp(0, squared_length);
+        let at = |start: i32, step: i128| {
+            let offset = (2 * step * along + squared_length).div_euclid(2 * squared_length);
+            i32::try_from(i128::from(start) + offset).unwrap_or(start)
+        };
+        Point::new(at(self.a.x, dx), at(self.a.y, dy))
+    }
+
     pub fn length(self) -> i64 {
         self.a.distance(self.b)
     }
@@ -73,6 +92,14 @@ fn orientation(a: Point, b: Point, c: Point) -> i128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_closest_point_lies_on_the_segment() {
+        let s = Segment::new(Point::new(0, 0), Point::new(10, 0));
+        assert_eq!(s.closest_point(Point::new(4, 7)), Point::new(4, 0));
+        assert_eq!(s.closest_point(Point::new(-5, 3)), Point::new(0, 0));
+        assert_eq!(s.closest_point(Point::new(15, -3)), Point::new(10, 0));
+    }
     use proptest::prelude::*;
 
     fn seg(x1: i32, y1: i32, x2: i32, y2: i32) -> Segment {

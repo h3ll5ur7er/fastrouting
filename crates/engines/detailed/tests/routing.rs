@@ -1,5 +1,5 @@
 use traxide_contracts::geometry::{Point, Polygon, Rect, Shape};
-use traxide_contracts::testing::{DesignBuilder, at};
+use traxide_contracts::testing::{DesignBuilder, at, mm};
 use traxide_contracts::{
     Connection, ConnectionId, Corridors, Design, KeepoutScope, LayerId, Plan, Profile, Routes,
     RoutingResult, Violation,
@@ -471,4 +471,21 @@ fn a_pad_with_no_way_out_is_named() {
     let result = route(&design, &[("A1", "A2")]);
     assert_eq!(result.unrouted, [connection(&design, "A1", "A2")]);
     assert_eq!(result.hemmed_in, [design.pad_named("A1")]);
+}
+
+#[test]
+fn a_pad_over_the_board_edge_is_left_from_its_copper_on_the_board() {
+    // A1's centre lies on the board's left edge, as an edge connector's might.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .smd("A1", Some("A"), at(0.0, 5.0), 1.0, 0)
+        .smd("A2", Some("A"), at(15.0, 5.0), 1.0, 0)
+        .build();
+    let result = route(&design, &[("A1", "A2")]);
+    assert_eq!(result.unrouted, []);
+    assert_legal(&design, &result.routes);
+    let start = result.routes.tracks[0].path[0];
+    assert!(
+        start.x > 0 && start.x <= mm(0.5),
+        "starts on A1's copper: {start:?}"
+    );
 }

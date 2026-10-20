@@ -80,6 +80,31 @@ impl Shape {
             })
     }
 
+    /// The point of the shape nearest to `p`: `p` itself when the shape covers
+    /// it, else a point on its rim, rounded inwards.
+    pub fn nearest_point(&self, p: Point) -> Point {
+        match self {
+            Self::Capsule { segment, radius } => {
+                let centre = segment.closest_point(p);
+                let distance = centre.distance(p);
+                if distance <= i64::from(*radius) {
+                    return p;
+                }
+                let toward = |from: i32, to: i32| {
+                    let step = i64::from(to - from) * i64::from(*radius) / distance;
+                    from + i32::try_from(step).unwrap_or(0)
+                };
+                Point::new(toward(centre.x, p.x), toward(centre.y, p.y))
+            }
+            Self::Polygon(polygon) if polygon.contains(p) => p,
+            Self::Polygon(polygon) => polygon
+                .edges()
+                .map(|edge| edge.closest_point(p))
+                .min_by_key(|q| q.squared_distance(p))
+                .unwrap_or(p),
+        }
+    }
+
     pub fn map(&self, f: impl Fn(Point) -> Point) -> Self {
         match self {
             Self::Capsule { segment, radius } => Self::Capsule {
@@ -94,6 +119,23 @@ impl Shape {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_nearest_point_of_a_disc_is_on_its_rim_towards_the_point() {
+        let disc = Shape::circle(Point::new(0, 0), 20);
+        assert_eq!(disc.nearest_point(Point::new(30, 0)), Point::new(10, 0));
+        assert_eq!(disc.nearest_point(Point::new(3, 4)), Point::new(3, 4));
+    }
+
+    #[test]
+    fn the_nearest_point_of_a_polygon_is_on_its_nearest_edge() {
+        let square = Shape::Polygon(Polygon::rectangle(Rect {
+            min: Point::new(0, 0),
+            max: Point::new(10, 10),
+        }));
+        assert_eq!(square.nearest_point(Point::new(15, 5)), Point::new(10, 5));
+        assert_eq!(square.nearest_point(Point::new(5, 5)), Point::new(5, 5));
+    }
 
     fn square(x: i32, y: i32, size: i32) -> Shape {
         Shape::Polygon(Polygon::rectangle(Rect {
