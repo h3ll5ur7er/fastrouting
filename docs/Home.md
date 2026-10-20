@@ -26,4 +26,5 @@ Freerouting does the job, but it has needed a Java runtime until its native buil
 | [Development](Development.md) | Repository layout, layer rules, craftsmanship, building, testing and benchmarking |
 | [Profiles](Profiles.md) | Trading speed against quality: the built-in profile and `traxide.toml` |
 | [Benchmarks](Benchmarks.md) | What traxide achieves on the test boards, milestone by milestone |
+| [Corpus analysis](Corpus-analysis.md) | Why traxide leaves real boards incomplete, by cause, and which boards cannot be completed legally |
 | [Glossary](Glossary.md) | The routing and design terms used here |
