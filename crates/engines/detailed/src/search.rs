@@ -16,6 +16,12 @@ const HEADINGS: usize = 9;
 const TARGET: u32 = u32::MAX;
 /// The cost of an edge or via that may not be taken at all.
 const BLOCKED: i64 = -1;
+/// The best cost of a state once it is expanded: no way to it is cheaper, so it
+/// is never expanded again. With a weighted estimate a state is often reached
+/// by a worse way first; expanding it again for every better way cost six
+/// times the work on long searches, and the path stays within the weight of
+/// the cheapest without it.
+const CLOSED: i64 = i64::MIN;
 
 /// Search memory kept between connections, so each search costs no allocation.
 #[derive(Debug, Default)]
@@ -29,6 +35,9 @@ pub(crate) struct Scratch {
     via_extra: Stamped<i64>,
     /// What the last stretch to the target's centre costs, by layer and node.
     finish: Stamped<i64>,
+    /// Every state expanded, in order, for tests to look into a search.
+    #[cfg(test)]
+    expanded: Vec<u32>,
 }
 
 /// A state of the search: a node, a layer and the heading it was entered with.
@@ -198,6 +207,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             if cost > scratch.best.get(slot as usize).unwrap_or(i64::MAX) {
                 continue;
             }
+            scratch.best.set(slot as usize, CLOSED);
+            #[cfg(test)]
+            scratch.expanded.push(slot);
             let state = self.state(slot);
             let mut relax = |next: Option<State>,
                              step_cost: i64,
@@ -506,4 +518,82 @@ fn turn(heading: u8, direction: usize) -> u8 {
     }
     let difference = (i16::from(heading) - direction as i16).rem_euclid(8) as u8;
     difference.min(8 - difference)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use traxide_contracts::geometry::{Polygon, Shape};
+    use traxide_contracts::testing::{DesignBuilder, at};
+    use traxide_contracts::{KeepoutScope, Plan};
+    use traxide_rules::Purpose;
+
+    fn wall(min: Point, max: Point) -> Shape {
+        Shape::Polygon(Polygon::rectangle(Rect { min, max }))
+    }
+
+    #[test]
+    fn a_weighted_search_expands_no_state_twice() {
+        // The start sits in a cup that opens away from the target: a search
+        // heading boldly for the target fills the cup, reaching many states
+        // first by a worse way round.
+        let design = DesignBuilder::new(30.0, 20.0)
+            .layers(1)
+            .without_vias()
+            .keepout(
+                wall(at(8.0, 5.0), at(9.0, 15.0)),
+                None,
+                KeepoutScope::Everything,
+            )
+            .keepout(
+                wall(at(3.0, 5.0), at(9.0, 6.0)),
+                None,
+                KeepoutScope::Everything,
+            )
+            .keepout(
+                wall(at(3.0, 14.0), at(9.0, 15.0)),
+                None,
+                KeepoutScope::Everything,
+            )
+            .smd("A1", Some("A"), at(6.0, 10.0), 0.5, 0)
+            .smd("A2", Some("A"), at(25.0, 10.0), 0.5, 0)
+            .build();
+        let rules = traxide_rules::compile(&design, Purpose::Routing);
+        let layout = traxide_layout_access::Layout::build(&design, &rules);
+        let profile = Profile {
+            name: "bold".into(),
+            grid_pitch: 100_000,
+            via_cost: 2_000_000,
+            bend_cost: 100_000,
+            detour_margin: 10_000_000,
+            rip_up_cost: 5_000_000,
+            max_rip_ups: 0,
+            heuristic_weight: 2.0,
+            global_routing: false,
+            batch_size: 1,
+        };
+        let plan = Plan {
+            connections: vec![Connection {
+                net: design.net_named("A"),
+                from: design.pad_named("A1"),
+                to: design.pad_named("A2"),
+            }],
+        };
+        let mut scratch = Scratch::default();
+        let search = Search::new(
+            &design,
+            &rules,
+            &profile,
+            plan.connections[0],
+            &layout,
+            None,
+            None,
+        );
+        assert!(search.run(&mut scratch).is_some());
+
+        let mut distinct = scratch.expanded.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(scratch.expanded.len(), distinct.len());
+    }
 }

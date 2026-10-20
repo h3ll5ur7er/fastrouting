@@ -28,6 +28,18 @@ traxide is 39–90 times faster on the matrix and 27–67 times on the keyboard,
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Each state expanded once (M2, TRX-49)
+
+October 2026: a weighted search reaches many states first by a worse way round, and expanded them again for every better way: the keyboard's longest search expanded 3.7 million times, but only 590 000 distinct states. Now each state is expanded once, which keeps the path within the weight of the cheapest. Measured in the 4-core container, every board clean in KiCad 10's DRC with nothing unconnected:
+
+| Board | Time before | Time after | Vias | Track length |
+| --- | ---: | ---: | ---: | ---: |
+| matrix-3x4 | 0.08 s | 0.08 s | 4 → 4 | 637 mm |
+| matrix-6x17 | 1.65 s | **0.78 s** | 23 → **19** | 5947 → 5943 mm |
+| keyboard-tkl | 13.7 s | **12.6 s** | 108 → 109 | 8304 → 8334 mm |
+
+Each search of the keyboard's longest connection is now three times faster (0.77 s instead of 2.2 s), but the long connections out of the MCU now take turns ripping each other up, 5 to 8 searches each, for the QFN's escape room: planning their escape ([[TRX-24]]) comes next.
+
 ## Parallel batches (M2, TRX-27)
 
 October 2026: detailed routing searches batches of connections side by side, connections whose territories (search window plus copper reach plus clearance) are apart, and commits them in queue order ([[Architecture/Parallelism-and-GPU#batches]]). Measured in the 4-core cloud container, three runs each, median, default profile (`batch_size = 16`):
