@@ -2,7 +2,7 @@
 id: TRX-4
 title: Define the data and service contracts
 type: feature
-status: todo
+status: in-progress
 priority: high
 labels: [contracts]
 estimate: 3

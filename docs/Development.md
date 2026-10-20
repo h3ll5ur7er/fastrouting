@@ -45,9 +45,11 @@ The call rules of the [Architecture](Architecture.md#rules-between-components) a
 
 - clients → managers, contracts, utilities
 - managers → engines, access, contracts, utilities
-- engines → `traxide-layout-access`, `traxide-compute-access`, contracts, utilities (never another engine)
+- engines → contracts, utilities. An engine uses Layout Access and Compute Access only through their **traits** in `traxide-contracts`; the manager hands it the implementation (dependency inversion), so an engine crate never depends on an access crate
 - access → contracts, utilities, third-party crates for their resource (never another access crate)
-- utilities → contracts at most; contracts → geometry only
+- utilities → other utilities at most; contracts → geometry only
+
+Crates appear when the task that needs them starts, not before (YAGNI): the layout above is the destination, not a scaffold.
 
 CI runs the check on every pull request, next to `cargo fmt --check`, `cargo clippy -- -D warnings` and the tests.
 
@@ -60,13 +62,31 @@ cargo run -p traxide-cli -- route board.dsn -o board.ses
 
 Release builds use `lto = "fat"`, `codegen-units = 1` and `panic = "abort"`. The GPU backend is a default feature (`gpu`); `--no-default-features` builds a CPU-only binary.
 
+## Craftsmanship
+
+How code is written here, in order of importance:
+
+1. **Test first.** Red, green, refactor. A behaviour is specified by a failing test before it is built, and a bug by a failing test before it is fixed. Tests are named after the behaviour they pin down (`routes_around_a_pad_of_another_net`), not after the function they call.
+2. **Names instead of comments.** A well-chosen name for a file, type, function or variable replaces a paragraph. Extract a function or a variable when a name would explain what a comment otherwise would.
+3. **Comments say why, never what.** The code says what it does. A comment earns its place by explaining a reason the code cannot show: a constraint, a trade-off, a quirk of KiCad, a reference to a paper. Doc comments on public items state the contract (units, invariants, errors), not the implementation.
+4. **KISS and YAGNI.** The simplest thing that passes the tests and fits the architecture. No speculative generics, options or crates; extension points exist where [[Architecture/Volatilities]] says change is expected, and nowhere else.
+5. **DRY for knowledge, WET for code until the third time.** Every rule, unit conversion and format quirk has one home. Similar-looking code is merged on the third occurrence, once the shared concept is clear. Tests may repeat themselves when that keeps each test readable on its own.
+6. **SOLID, the Rust way.** One responsibility per module and type; traits only at component boundaries and volatilities (open/closed); small traits a client can implement fully (interface segregation); engines depend on access traits, not implementations (dependency inversion).
+7. **Make illegal states unrepresentable.** Newtypes for ids and units (`Nm`, `NetId`), enums instead of flags, constructors that validate. A value that exists is valid.
+8. **Errors are values.** Libraries return `Result` with `thiserror` types that say what went wrong and where (file, line, item); the client reports them with `anyhow`. `unwrap` and `expect` only where an invariant guarantees success, and `expect` says which.
+9. **Deterministic always.** No iteration over hash maps in results, no time or address dependence; ties break on ids.
+
 ## Testing
 
+Three levels, all run by `cargo test` except where noted:
+
 - **Unit tests** next to the code. Engines are pure and take contracts, so most tests build a small `Design` in code.
+- **End-to-end tests** in `tests/` of the CLI crate: run the `traxide` binary on DSN files and check the SES it writes — every connection routed, no clearance violation.
+- **Real-world tests** through KiCad (`cargo xtask e2e`, needs KiCad with its Python module): generate boards in KiCad, export DSN, route with `traxide`, import the SES back into KiCad and require KiCad's own DRC to report no violations and no unconnected items. KiCad, not our code, is the judge.
 - **Property tests** (`proptest`) for geometry and for Layout Access: random shapes, random concurrent transactions.
 - **Golden tests** for Board Access: parse, write, parse again, compare; and fixed DSN files with expected SES output.
 - **Determinism tests**: route the same board with 1, 4 and all threads, CPU and GPU, and require identical routes.
-- **Verification**: every routing test ends with the Verification Engine; a violation fails the test.
+- **Verification**: every routing test ends with a clearance check (the Verification Engine once it exists); a violation fails the test.
 
 ## Benchmarking
 

@@ -11,9 +11,9 @@ layer: engine
 
 The first detailed router: sequential, one connection at a time, enough for an end-to-end route.
 
-- [ ] Two-pin decomposition by MST inside the engine for now (moves to Planning in [[TRX-24]])
+- [ ] Routes the connections of a `Plan` in order
 - [ ] A* on an octilinear graph over a fine grid with via edges between layers; costs from the profile (length, via, bend)
 - [ ] Exact clearance check against Layout Access before committing
 - [ ] Unrouted connections reported, not dropped
 
-**Depends on:** [[TRX-11]]
+**Depends on:** [[TRX-11]], [[TRX-46]]

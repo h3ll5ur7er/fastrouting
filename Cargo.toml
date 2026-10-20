@@ -1,0 +1,45 @@
+[workspace]
+resolver = "3"
+members = ["crates/contracts", "crates/utilities/*", "crates/access/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/h3ll5ur7er/fastrouting"
+
+[workspace.dependencies]
+traxide-contracts = { path = "crates/contracts" }
+traxide-geometry = { path = "crates/utilities/geometry" }
+traxide-events = { path = "crates/utilities/events" }
+traxide-board-access = { path = "crates/access/board" }
+traxide-layout-access = { path = "crates/access/layout" }
+traxide-profile-access = { path = "crates/access/profile" }
+traxide-rules = { path = "crates/engines/rules" }
+traxide-planning = { path = "crates/engines/planning" }
+traxide-detailed = { path = "crates/engines/detailed" }
+traxide-verification = { path = "crates/engines/verification" }
+traxide-routing = { path = "crates/managers/routing" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+proptest = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "0.9"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

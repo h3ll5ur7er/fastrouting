@@ -11,3 +11,13 @@ This project plans its work as Genbeya tasks and documents itself in a Genbeya w
 - The `genbeya` skill (`.agents/skills/genbeya/SKILL.md`) describes the file formats and the workflow in detail.
 
 <!-- genbeya:end -->
+
+## Writing code
+
+Read [[Development]] before writing code: the repository layout, the layer rules (`cargo xtask layers`), the craftsmanship rules and the clean-room rules. In short:
+
+- Test first: a failing test for every behaviour and every bug, named after the behaviour.
+- Names instead of comments; a comment explains why, never what.
+- KISS and YAGNI: build only what the current task needs; extension points only where the [[Architecture/Volatilities]] page expects change.
+- Never read or copy GPL code (Freerouting, KiCad's router); traxide is `MIT OR Apache-2.0`.
+- Before committing: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo xtask layers`.
