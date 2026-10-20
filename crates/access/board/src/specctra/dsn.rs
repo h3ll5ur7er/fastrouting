@@ -25,6 +25,22 @@ pub fn parse_dsn(text: &str) -> Result<Design, BoardError> {
     DsnReader::new(&root)?.read()
 }
 
+/// KiCad 7.0.2 wrote the keepout around a footprint's hole 500 mm too wide, so
+/// that it covered the whole board (fixed by 7.0.4). No footprint has a hole
+/// half a metre wide: a keepout circle that wide gets its size back.
+fn without_kicad_7_0_2_excess(shape: Shape) -> Shape {
+    const EXCESS_RADIUS: i32 = 250_000_000;
+    match shape {
+        Shape::Capsule { segment, radius } if segment.a == segment.b && radius > EXCESS_RADIUS => {
+            Shape::Capsule {
+                segment,
+                radius: radius - EXCESS_RADIUS,
+            }
+        }
+        other => other,
+    }
+}
+
 /// The points of a closed shape without repeats: a point written twice in a
 /// row, or the first point written again to close the shape.
 fn distinct(mut points: Vec<Point>) -> Vec<Point> {
@@ -298,7 +314,11 @@ impl<'a> DsnReader<'a> {
                     .iter()
                     .find(|a| matches!(a.keyword(), Some("circle" | "rect" | "polygon" | "path")))
                     .ok_or_else(|| keepout.invalid("keepout without a shape"))?;
-                keepouts.push((scope, self.shape(shape)?));
+                let mut layered = self.shape(shape)?;
+                if self.from_kicad() {
+                    layered.shape = without_kicad_7_0_2_excess(layered.shape);
+                }
+                keepouts.push((scope, layered));
             }
         }
         Ok(keepouts)
@@ -517,17 +537,19 @@ impl<'a> DsnReader<'a> {
     /// so boards from KiCad keep at least that; others the board-wide clearance.
     fn edge_clearance(&self, clearance: i32) -> i32 {
         const KICAD_DEFAULT_EDGE_CLEARANCE: i32 = 500_000;
-        let from_kicad = self
-            .root
-            .child("parser")
-            .and_then(|parser| parser.child("host_cad"))
-            .and_then(|host| host.atoms().next())
-            .is_some_and(|host| host.contains("KiCad"));
-        if from_kicad {
+        if self.from_kicad() {
             clearance.max(KICAD_DEFAULT_EDGE_CLEARANCE)
         } else {
             clearance
         }
+    }
+
+    fn from_kicad(&self) -> bool {
+        self.root
+            .child("parser")
+            .and_then(|parser| parser.child("host_cad"))
+            .and_then(|host| host.atoms().next())
+            .is_some_and(|host| host.contains("KiCad"))
     }
 
     /// The width and the general clearance that the `(rule …)` lists of `owner`

@@ -428,3 +428,26 @@ fn a_polygon_whose_points_coincide_is_a_dot() {
         Shape::Capsule { radius: 0, .. }
     ));
 }
+
+#[test]
+fn keepouts_of_holes_kicad_7_0_2_wrote_half_a_metre_too_wide_get_their_size_back() {
+    let board = edited_board("two-nets.dsn", |bytes| {
+        replaced(
+            bytes,
+            b"(pin Rect[T]Pad_1000x1200_um 1 -1000 0)",
+            b"(keepout \"\" (circle F.Cu 501100))\n      (pin Rect[T]Pad_1000x1200_um 1 -1000 0)",
+        )
+    });
+    let design = load_design(&board).expect("readable");
+    assert!(
+        design.keepouts.iter().all(|k| matches!(
+            k.shape,
+            Shape::Capsule {
+                radius: 550_000,
+                ..
+            }
+        )),
+        "{:?}",
+        design.keepouts
+    );
+}
