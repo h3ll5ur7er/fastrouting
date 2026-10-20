@@ -2,7 +2,7 @@
 id: TRX-32
 title: Compile KiCad net classes and custom rules in the Rules Engine
 type: feature
-status: in-progress
+status: review
 priority: high
 labels: [rules, kicad]
 estimate: 4
