@@ -27,7 +27,7 @@ Both clean by `traxide check`; traxide routes the power nets with tracks, as it 
 - traxide routes projects with `--time-limit` at three quarters of `--timeout` (90 s of 120 s in CI): unlimited it takes 189 s on 4 cores, and a board stopped at the limit gives the gate nothing to compare. Its result then moves by a few nets between runs (236 and 239 of 241 locally), within the gate's 2 %.
 - Judged by `traxide check`, not KiCad's DRC, like the rest of the corpus: KiCad's DRC would mark TokenBoard as breaking rules ([[TRX-65]]) and the gate fails on any broken rule.
 
-Measured on commit 22f4462, 4 cores, 120 s limit (the baseline): traxide 90.8 s, 236 of 241 nets, 0 rules broken; Freerouting stopped at 120 s; the board as committed 238 of 241 nets, 0 rules broken. Details in [[Benchmarks#a-real-kicad-project-tokenboard-trx-64]].
+Measured on commit 22f4462, 4 cores, 120 s limit (the baseline): traxide 90.8 s, 236 of 241 nets, 0 rules broken; Freerouting stopped at 120 s; the board as committed 238 of 241 nets, 0 rules broken. Details in [[Benchmarks#a-real-kicad-project-tokenboard-trx-64]]. The planes work ([[TRX-58]]) changes these numbers: the main session measured traxide at 236 of 241 nets with 5 pads unconnected in 154 s, and the author's board at 240 of 241 nets with 27 pads unconnected, as plane joins count. The baseline is raised once both are merged.
 
 - [x] Corpus entries that name a KiCad project by URL at a fixed commit: the board with its `.kicad_pro` and `.kicad_dru` downloaded beside it, as for DSN never committed here
 - [x] A routed board is stripped of its unlocked tracks, arcs and vias before routing (zones and locked copper stay), and the board as committed is judged as the baseline it is ("routed by its author")

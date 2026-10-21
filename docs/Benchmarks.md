@@ -35,6 +35,8 @@ traxide routes the power nets with tracks, as it cannot join pads through zones 
 
 **KiCad's DRC disagrees with `traxide check`.** With the zones refilled (`kicad-cli pcb drc --refill-zones`), KiCad 10 finds 199 `copper_edge_clearance` violations on traxide's board: GND tracks 0.136 mm from the cutouts the LED footprints draw on Edge.Cuts, where the board's custom rule asks for 0.2 mm ([[TRX-65]]). Without refilling, it also counts the old zone fills against the new tracks. The board as committed passes with no violation.
 
+These numbers predate the planes of [[TRX-58]], which joins pads through zones and planes: with it, traxide routes 236 of 241 nets with 5 pads unconnected in 154 s, and `traxide check` counts the author's board at 240 of 241 nets with 27 pads unconnected.
+
 ## traxide against Freerouting 2.5.0
 
 October 2026, `cargo xtask bench` in the Benchmark workflow on a GitHub Actions runner (ubuntu-latest, 4 vCPUs): both routers get the same DSN exported by KiCad 10, KiCad 10 imports each session, and KiCad's own DRC judges both. Freerouting ran with its defaults (`-de board.dsn -do board.ses --gui.enabled=false`); traxide with its default profile. Two runs on different days' runners:
