@@ -1,6 +1,6 @@
 # Benchmarks
 
-Measurements of traxide on the end-to-end boards, newest first; the comparison with Freerouting runs in CI, the rest by hand until the benchmark gate of [[TRX-22]]. Every board traxide routed below was imported into KiCad 10.0.7 and passed its DRC with no violations.
+Measurements of traxide on the end-to-end boards, newest first; the comparison with Freerouting runs in CI, the rest by hand; the gate of [[TRX-22]] fails the Benchmark workflow when a corpus board regresses against `corpus/baseline.json`. Every board traxide routed below was imported into KiCad 10.0.7 and passed its DRC with no violations.
 
 [TOC]
 
@@ -9,6 +9,7 @@ Measurements of traxide on the end-to-end boards, newest first; the comparison w
 ```bash
 cargo xtask corpus --timeout 60   # 76 real boards from Freerouting's bug reports, downloaded at run time
 cargo xtask corpus --freerouting "java -jar freerouting.jar" --shard 1/6   # the same, against Freerouting; CI runs 6 shards
+cargo xtask gate target/corpus/results-*.json   # against corpus/baseline.json: fails on a regression, lists improvements
 cargo xtask e2e placements crossing matrix-3x4 matrix-6x17   # builds, routes and checks the recipes
 time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 ```

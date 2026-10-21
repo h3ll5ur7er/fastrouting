@@ -84,3 +84,34 @@ jobs:
           name: corpus-sessions-${{ matrix.shard }}
           path: target/corpus/routed/
           if-no-files-found: ignore
+      # traxide's results, for the gate below.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corpus-results-${{ matrix.shard }}
+          path: target/corpus/results-*.json
+
+  gate:
+    name: Corpus gate, against corpus/baseline.json
+    needs: corpus
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: corpus-results-*
+          path: results
+          merge-multiple: true
+      # Fails on a regression; a shard that failed leaves its boards missing, which fails too.
+      - name: Compare with the baseline
+        run: cargo xtask gate --merged target/corpus-results.json results/*.json
+      # All shards' results in one file: copied to corpus/baseline.json, it raises the baseline.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: corpus-results
+          path: target/corpus-results.json
+          if-no-files-found: ignore
