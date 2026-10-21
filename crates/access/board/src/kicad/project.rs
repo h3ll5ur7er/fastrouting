@@ -11,6 +11,8 @@ pub(crate) struct Project {
     pub edge_clearance: i32,
     /// How far copper of other nets stays from a hole.
     pub hole_clearance: i32,
+    min_clearance: i32,
+    min_track_width: i32,
     assignments: HashMap<String, String>,
     patterns: Vec<(String, String)>,
 }
@@ -22,6 +24,23 @@ pub(crate) struct ClassRules {
     pub clearance: i32,
     pub via_diameter: i32,
     pub via_drill: i32,
+}
+
+/// The class of a net as a running KiCad states it, with the class's values
+/// where KiCad states them.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LiveClass {
+    pub net: String,
+    pub class: String,
+    pub values: Option<ClassValues>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ClassValues {
+    pub track_width: i32,
+    pub clearance: i32,
+    /// The via's diameter and drill.
+    pub via: Option<(i32, i32)>,
 }
 
 /// What KiCad uses where the project says nothing, as a new project has it.
@@ -108,9 +127,40 @@ impl Project {
                 DEFAULT_EDGE_CLEARANCE,
             )),
             hole_clearance: nanometres(minimum("min_hole_clearance", DEFAULT_HOLE_CLEARANCE)),
+            min_clearance,
+            min_track_width,
             assignments,
             patterns,
         })
+    }
+
+    /// Takes the classes of nets, and the values of those classes, from
+    /// `live`, as the running KiCad states them, over what the project file
+    /// says; the board's minimums still raise them.
+    pub fn follow(&mut self, live: &[LiveClass]) {
+        self.assignments.clear();
+        self.patterns.clear();
+        for LiveClass { net, class, values } in live {
+            let index = match self.classes.iter().position(|c| &c.name == class) {
+                Some(index) => index,
+                None => {
+                    self.classes.push(ClassRules {
+                        name: class.clone(),
+                        ..self.classes[0].clone()
+                    });
+                    self.classes.len() - 1
+                }
+            };
+            if let Some(values) = values {
+                let rules = &mut self.classes[index];
+                rules.track_width = values.track_width.max(self.min_track_width);
+                rules.clearance = values.clearance.max(self.min_clearance);
+                if let Some((diameter, drill)) = values.via {
+                    (rules.via_diameter, rules.via_drill) = (diameter, drill);
+                }
+            }
+            self.assignments.insert(net.clone(), class.clone());
+        }
     }
 
     /// The index of the class of `net`: assigned by name, else by the first
@@ -217,6 +267,63 @@ mod tests {
         assert_eq!(project.class_of("+3V3"), 1);
         assert_eq!(project.class_of("+3V"), 0);
         assert_eq!(project.class_of("SDA"), 0);
+    }
+
+    #[test]
+    fn a_running_kicad_overrides_the_classes_of_the_project_file() {
+        let mut project = Project::read(Some(PROJECT)).expect("valid");
+        project.follow(&[
+            LiveClass {
+                net: "SDA".into(),
+                class: "Power".into(),
+                values: Some(ClassValues {
+                    track_width: 400_000,
+                    clearance: 100_000,
+                    via: Some((900_000, 450_000)),
+                }),
+            },
+            LiveClass {
+                net: "VBUS".into(),
+                class: "Default".into(),
+                values: None,
+            },
+            LiveClass {
+                net: "HV1".into(),
+                class: "HV".into(),
+                values: None,
+            },
+        ]);
+        let power = &project.classes[1];
+        assert_eq!(
+            (
+                power.track_width,
+                power.clearance,
+                power.via_diameter,
+                power.via_drill
+            ),
+            (400_000, 300_000, 900_000, 450_000),
+            "raised to the board's minimum clearance"
+        );
+        assert_eq!(project.class_of("SDA"), 1);
+        assert_eq!(
+            project.class_of("VBUS"),
+            0,
+            "assigned by KiCad, not by the file"
+        );
+        assert_eq!(
+            project.class_of("+3V3"),
+            0,
+            "KiCad has resolved the patterns"
+        );
+        assert_eq!(project.class_of("HV1"), 2);
+        assert_eq!(
+            project.classes[2],
+            ClassRules {
+                name: "HV".into(),
+                ..project.classes[0].clone()
+            },
+            "a class the file does not know starts from the default class"
+        );
     }
 
     #[test]

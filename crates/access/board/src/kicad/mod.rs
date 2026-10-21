@@ -1,8 +1,10 @@
 //! KiCad's own files: the board (`.kicad_pcb`), the rules of its project
-//! (`.kicad_pro`) and its custom rules (`.kicad_dru`), as KiCad 9 and 10 write them.
+//! (`.kicad_pro`) and its custom rules (`.kicad_dru`), as KiCad 9 and 10 write
+//! them; and a running KiCad, through its IPC API.
 
 mod board;
 pub(crate) mod drc;
+pub(crate) mod ipc;
 mod project;
 mod rules;
 mod sexpr;

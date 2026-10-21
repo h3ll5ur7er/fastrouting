@@ -38,12 +38,26 @@ What [[TRX-17]] verified against KiCad 10.0.7 (the `kicad/kicad:10.0` image) wit
 | Tracks, arcs, vias with locked state | `GetItems` with `KOT_PCB_TRACE`, `KOT_PCB_ARC`, `KOT_PCB_VIA` | Tracks, vias |
 | Zones and keepouts | `GetItems` with `KOT_PCB_ZONE`; rule areas are `ZT_RULE_AREA` | No |
 | Outline | `GetItems` with `KOT_PCB_SHAPE` on `Edge.Cuts` | No |
+| The whole board as the text of its file | `SaveDocumentToString` | Yes ([[TRX-31]]) |
 | Write routes | `BeginCommit`, `CreateItems`, `EndCommit` | Yes |
-| Refill zones | `RefillZones` | No |
+| Refill zones | `RefillZones` | Yes ([[TRX-31]]): inside an open commit it fills around the board as it was before the commit; after `EndCommit` it fills correctly but is an undo step of its own |
+| Save the board | `SaveDocument` | Yes ([[TRX-31]]) |
 
 - **Design rules are not served by 10.0**: its `BoardDesignRules` message is empty and has no command; `GetBoardDesignRules` and `GetCustomDesignRules` exist on master (KiCad 11). Net-class values do come over IPC, so on KiCad 10 the `kicad-ipc` adapter reads from the project files (`KIPRJMOD`) only what net classes do not carry: the board minimums of `.kicad_pro` (`min_clearance`, copper to edge, hole clearance) and the custom rules of `.kicad_dru`. Board Access hides this mix; nothing above it knows.
 - **Writing**: items created between `BeginCommit` and `EndCommit` (`CMA_COMMIT`) appear together and form **one undo step named by the commit's message** (*Edit → Undo traxide: route*). Verified: a track and a through via in one commit, removed by one undo. `CMA_DROP` discards a commit. A via needs its padstack (drill, copper size on each layer), a track its width, layer and net by name.
 - `RunAction` runs an editor action by name; KiCad calls it a prototyping aid, not an API. The spike uses `common.Interactive.undo` only to play the user's Ctrl+Z.
+
+### The `kicad-ipc` adapter
+
+What [[TRX-31]] built in Board Access (`kicad/ipc/`), verified against KiCad 10.0.7 by `cargo xtask e2e`. Clients name the board open in KiCad by the path `kicad://current` (`RUNNING_KICAD`), so a `RouteJob` needs no other field; `traxide route --kicad` is the same.
+
+- **Reading**: KiCad hands over the open board as the text of its file (`SaveDocumentToString`, the editor's state, saved or not), and the board-file reader reads it, so the design is the one the board file gives: same shapes, same approximations, already checked against KiCad's DRC. The items one by one (`GetItems`, `GetPadShapeAsPolygon`) would need a second reader of every item and padstack kind, and KiCad's pad polygons may lie inside the true copper, where the file reader's shapes are never smaller.
+- **Rules**: each net's class and the class's width, clearance and via come from `GetNetClassForNets`, as the editor holds them, over the project file's; the board's minimums (raising them) and the custom rules come from the project's `.kicad_pro` and `.kicad_dru` in `KIPRJMOD`, else in the project folder `GetOpenDocuments` names. A net of several classes gets an implicit class from KiCad; traxide takes its first constituent, as it does from the project file.
+- **Storing**: Board Access reads the board again and refuses to store if it is no longer the design that was routed (`kicad://current changed since it was read; route it again`). Then one commit: `BeginCommit`, `CreateItems` with a track per straight piece and the vias, `EndCommit` with the message `traxide: route`; if KiCad refuses any item, the commit is dropped (`CMA_DROP`) and nothing changes. No routes, no commit.
+- **Zones are not refilled**, so that one undo always takes the routes back. Measured on `matrix-3x4` with a zone of one net over the back: `RefillZones` inside the open commit filled the zone around the pads only, and KiCad's DRC found 49 clearance violations between the fill and the new tracks (none after `kicad-cli pcb drc --refill-zones`); after `EndCommit` the fill would be right, but the designer's first undo would take back the fill instead of the routes. KiCad refills before its DRC (by default) and on *B*. If refilling matters more than one undo, refill after the commit on boards with copper zones only.
+- **Connecting**: `KICAD_API_SOCKET` (an `ipc://` address or a path), else `kicad/api.sock` in the temporary folder; `KICAD_API_TOKEN` in every request. `AS_BUSY` and `AS_NOT_READY` are retried for 10 s, then traxide asks to close KiCad's open dialog; a refused token means the KiCad that started traxide has closed. Without a socket, the error says how to enable the API.
+- **Windows**: NNG serves `ipc://NAME` as the named pipe `\\.\pipe\NAME`; the client opens it as a file. Written, linted, untested; a pipe opened as a file cannot time out.
+- **Tests without KiCad**: framing, the envelope and retries against an in-process REP peer; reading and storing against a fake KiCad that serves a fixture board, held to the board-file reader.
 
 ### Client: hand-written, not `kicad-ipc-rs`
 
@@ -158,7 +172,7 @@ Not followed: the other constraints (`disallow`, `physical_clearance`, `annular_
 | Item | DSN | `.kicad_pcb` + project | IPC (KiCad 10) |
 | --- | --- | --- | --- |
 | Outline, stackup, layers | Yes | Yes | Yes |
-| Pads with exact shapes | Approximated | Yes | Yes (`GetPadShapeAsPolygon`) |
+| Pads with exact shapes | Approximated | Yes | As from the board file (KiCad hands over its text) |
 | Nets, net classes, widths, clearances | Mostly | Yes (`.kicad_pro`) | Nets and net classes yes; board minimums from `.kicad_pro` |
 | Custom rules (`.kicad_dru`) | No | Yes | From files |
 | Keepouts, zones | Partly | Yes | Yes |
@@ -168,7 +182,7 @@ Not followed: the other constraints (`disallow`, `physical_clearance`, `annular_
 
 - DSN path: a SES file with wires and vias, imported by the user (or by Freerouting-style tools).
 - File path: new `segment`, `arc` and `via` nodes in `.kicad_pcb`, every other byte kept; refuse to write while the board file changed since it was read.
-- IPC path: one commit with all new items, so one undo removes the routing; then `RefillZones`.
+- IPC path: one commit with all new items, so one undo removes the routing; zones stay as they were until the designer refills them.
 
 ## DRC reports
 

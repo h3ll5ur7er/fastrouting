@@ -6,6 +6,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
+pub use traxide_board_access::RUNNING_KICAD;
 use traxide_contracts::{
     Connection, CopperItem, Design, Event, NetClassId, PadId, Routes, RoutingResult, Stage,
     Verdict, Violation,
@@ -19,9 +20,10 @@ use traxide_rules::Purpose;
 /// Route the board in `input` and store the routes in `output`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteJob {
+    /// A board file, or [`RUNNING_KICAD`] for the board open in KiCad.
     pub input: PathBuf,
     /// Beside the input by default: a session for a Specctra design, a copy of
-    /// a KiCad board.
+    /// a KiCad board; back into KiCad for the board open in it.
     pub output: Option<PathBuf>,
     pub profile: String,
     pub profile_file: Option<PathBuf>,

@@ -2,7 +2,7 @@
 id: TRX-31
 title: Talk to a running KiCad through the IPC API in Board Access
 type: feature
-status: todo
+status: review
 priority: high
 labels: [board-access, kicad]
 estimate: 5
@@ -11,13 +11,16 @@ layer: access
 
 The `kicad-ipc` adapter, built on what [[TRX-17]] proved ([[Research/KiCad-integration#the-ipc-api]], prototype in `spikes/kicad-ipc/`).
 
-- [ ] Client in Board Access: NNG REQ over a Unix socket, a Windows named pipe on Windows; `prost` messages defined from field numbers, no `.proto` text copied
-- [ ] Socket from `KICAD_API_SOCKET` (an `ipc://` address) else the default `api.sock` in the temporary directory; token from `KICAD_API_TOKEN`; retry on `AS_BUSY` and `AS_NOT_READY` with a time limit
-- [ ] Read the board: enabled layers and stackup, outline (`Edge.Cuts` shapes), footprints and pads with `GetPadShapeAsPolygon` per copper layer, nets, net classes (`GetNetClassForNets`), tracks, arcs and vias with their locked state, zones and rule areas as keepouts
-- [ ] Rules: net classes over IPC; board minimums from `.kicad_pro` and custom rules from `.kicad_dru` in the project folder (`KIPRJMOD`, else the project path of `GetOpenDocuments`), reusing the `kicad` module; `GetBoardDesignRules` and `GetCustomDesignRules` on KiCad 11
-- [ ] Hold the result to the board-file reader on the same boards: same design from IPC as from `.kicad_pcb`
-- [ ] Store routes as one commit (`BeginCommit`, `CreateItems`, `EndCommit` with a message such as "traxide: route"), so one undo removes them; drop the commit when creating fails; then `RefillZones`
-- [ ] Clear error when the API is unreachable, with the steps to enable it (*Preferences → Preferences… → Plugins → Enable KiCad API*, then restart the PCB editor)
-- [ ] `cargo xtask e2e` drives the IPC path through KiCad 10 in Docker under `xvfb-run` (as `spikes/kicad-ipc/run-headless.sh` does) and judges the result with KiCad's DRC
+- [x] Client in Board Access: NNG REQ over a Unix socket, a Windows named pipe on Windows; `prost` messages defined from field numbers, no `.proto` text copied. The named pipe is written and linted for Windows, not tested on it
+- [x] Socket from `KICAD_API_SOCKET` (an `ipc://` address) else the default `api.sock` in the temporary directory; token from `KICAD_API_TOKEN`; retry on `AS_BUSY` and `AS_NOT_READY` with a time limit (10 s)
+- [x] Read the board: layers and stackup, outline, footprints and pads, nets, net classes, tracks, arcs and vias, zones and rule areas as keepouts. Not item by item with `GetPadShapeAsPolygon` as planned: KiCad hands over the whole board as the text of its file (`SaveDocumentToString`), which the board-file reader reads, so the design is the board file's by construction ([[Research/KiCad-integration#the-kicad-ipc-adapter]])
+- [x] Rules: net classes over IPC (`GetNetClassForNets`); board minimums from `.kicad_pro` and custom rules from `.kicad_dru` in the project folder (`KIPRJMOD`, else the project path of `GetOpenDocuments`), reusing the `kicad` module
+- [ ] `GetBoardDesignRules` and `GetCustomDesignRules` on KiCad 11: left until KiCad 11 is released
+- [x] Hold the result to the board-file reader on the same boards: same design from IPC as from `.kicad_pcb`, against a fake KiCad in the unit tests and against KiCad 10.0.7 in `cargo xtask e2e`
+- [x] Store routes as one commit (`BeginCommit`, `CreateItems`, `EndCommit` with the message "traxide: route"), so one undo removes them; drop the commit when creating fails; refuse if the board changed since it was read
+- [ ] `RefillZones`: not done, so that one undo keeps removing the routes. Inside the commit KiCad fills around the board as it was before it (49 DRC violations on a test board); after the commit the fill is an undo step of its own. Maintainer to decide ([[Research/KiCad-integration#the-kicad-ipc-adapter]])
+- [x] Clear error when the API is unreachable, with the steps to enable it (*Preferences → Preferences… → Plugins → Enable KiCad API*, then restart the PCB editor)
+- [x] `cargo xtask e2e` drives the IPC path through KiCad 10 in Docker under `xvfb-run` and judges the result with KiCad's DRC: every default recipe, `isolation` with its custom rules included, reads the same design over IPC as from its file, routes clean with `traxide route --kicad`, is saved by KiCad, and is gone after one undo
+- [x] Clients name the board open in KiCad `kicad://current`; `traxide route --kicad` routes it (and `traxide check kicad://current` checks it)
 
 **Depends on:** [[TRX-30]], [[TRX-17]]

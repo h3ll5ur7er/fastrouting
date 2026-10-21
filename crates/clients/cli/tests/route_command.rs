@@ -185,3 +185,29 @@ fn route_writes_a_drc_report_of_the_stored_routes_with_drc() {
     assert_eq!(report["violations"], serde_json::json!([]));
     assert_eq!(report["unconnected_items"], serde_json::json!([]));
 }
+
+#[test]
+fn routing_the_board_open_in_kicad_explains_how_to_enable_kicads_api_when_it_is_off() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let run = Command::new(env!("CARGO_BIN_EXE_traxide"))
+        .args(["route", "--kicad"])
+        .env("KICAD_API_SOCKET", folder.path().join("api.sock"))
+        .output()
+        .expect("the binary runs");
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert_eq!(run.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("cannot reach KiCad"), "{stderr}");
+    assert!(
+        stderr.contains("Preferences → Preferences… → Plugins → Enable KiCad API"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_route_names_its_board_or_the_one_open_in_kicad() {
+    let run = traxide(&["route"]);
+    assert_eq!(run.status.code(), Some(2), "clap's usage error");
+    let board = board("two-nets.dsn");
+    let both = traxide(&["route", "--kicad", board.to_str().expect("utf-8")]);
+    assert_eq!(both.status.code(), Some(2), "clap's usage error");
+}

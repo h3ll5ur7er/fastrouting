@@ -63,7 +63,7 @@ The manager decides the stages and their order from the profile: a *fast* profil
 
 ## UC2: Route the board open in KiCad
 
-Identical to UC1 except for the client and for what Board Access talks to: the IPC API of the running KiCad instead of files. Board Access reads the board, the net classes and the custom rules from KiCad, and writes all tracks and vias in one commit, so a single undo removes them.
+Identical to UC1 except for the client and for what Board Access talks to: the IPC API of the running KiCad instead of files. The job names the board `kicad://current`. Board Access reads the board and the net classes from KiCad (on KiCad 10 the board's minimums and custom rules from the project's files), and writes all tracks and vias in one commit, so a single undo removes them ([[Research/KiCad-integration#the-kicad-ipc-adapter]]).
 
 ```mermaid
 sequenceDiagram

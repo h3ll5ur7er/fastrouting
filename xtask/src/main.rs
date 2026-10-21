@@ -3,6 +3,7 @@ mod corpus;
 mod e2e;
 mod kicad;
 mod layers;
+mod running_kicad;
 
 use anyhow::{Result, bail};
 

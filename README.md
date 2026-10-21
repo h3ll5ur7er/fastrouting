@@ -25,6 +25,8 @@ target/release/traxide freerouting -de board.dsn -do board.ses
 
 ### From inside KiCad
 
+With KiCad 10's API enabled (*Preferences → Preferences… → Plugins → Enable KiCad API*, then restart the PCB editor), `traxide route --kicad` routes the board open in the PCB editor and adds the routes to it as one step: *Edit → Undo traxide: route* takes them all back. The rules come from KiCad's net classes and the project's files.
+
 [`kicad-plugin/`](kicad-plugin) is an action plugin for KiCad 9 and 10: *Tools → External Plugins → Route with traxide* exports the open board, routes it and imports the result in one step. The **Binaries** workflow packages it with traxide for each platform (`traxide-kicad-packages`): install the one for yours with *Plugin and Content Manager → Install from File*. Or copy the folder `kicad-plugin/plugins` into KiCad's plugin folder (*Tools → External Plugins → Open Plugin Directory*) as `traxide`, and put the traxide binary into its `bin` folder, on the `PATH`, or name it in the `TRAXIDE` environment variable. A native plugin without Python follows for KiCad 10 and later.
 
 A copy of the binary named `freerouting` (`freerouting.exe` on Windows) takes Freerouting's arguments too, for tools that run Freerouting.
