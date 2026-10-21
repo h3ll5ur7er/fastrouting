@@ -49,6 +49,6 @@ Tried next, after [[TRX-60]]: rounds, then rip-up and reroute for the leftovers 
 | Issue283 (200) | 182, 93 s, 396 vias | **188**, 84 s, 305 vias |
 | Issue029 (91) | **87**, 167 s | 86, 203 s |
 
-Rejected for the same reason as the others: the keyboard and Issue034 lose the one connection whose route the rounds took out last, which no longer fits between locked routes; on Issue039 the leftovers churn. Every rounds variant so far loses exactly that one connection on those two boards, so the next thing to look at is which connection it is and where its overlap sits, before another way of finishing.
+Rejected for the same reason as the others: the keyboard and Issue034 lose the one connection whose route the rounds took out last, which no longer fits between locked routes; on Issue039 the leftovers churn. Every rounds variant so far loses exactly that one connection on those two boards, and both times it ends at a fine-pitch pin: COL15 from SW16-1 to U1-12, a pin of the keyboard's RP2350 (QFN), and /M or /N from U4 to U5 on Issue034. Rounds and escaping fine-pitch pins first may well need each other: with the pins escaped before negotiation, nothing is left to take out at a pin.
 
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.
