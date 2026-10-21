@@ -83,6 +83,19 @@ Issue029 stops at 120 s here either way (with no limit, 87 of 91 in 177 s with f
 
 In CI (commit 0640dce): traxide completes 50 boards, 17 incomplete, 6 stopped, 3 failed, 1379 s in all instead of 1415 s, and still breaks no rule; Freerouting 2.5.0 completes 18, breaks rules on 18, stops on 31, in 4867 s. Against 7768025: both Mars-64 boards route 70 of 94 nets instead of 69, in 24 s and 18 s instead of 69 s and 43 s; Issue039 44 of 74 instead of 41, in 33 s instead of 51 s; bm01 83 of 99 instead of 79, in 36 s instead of 55 s; caniot 79 of 94 instead of 80; Issue029 157 of 163 instead of 159. KiCad's DRC finds the keyboard (0.7 s) and the matrix (0.2 s) clean.
 
+## The largest clearance worked out once (M2, TRX-48)
+
+Every copper query of the layout looked up the largest clearance between any two net classes, to know how far around a track or via to look, by scanning the whole class-by-class table. Issue289's boards have 242 net classes, so each query scanned 58,564 entries; sampled with gdb while Issue289-VGA routed, 38 of 40 stacks were in that scan, and single searches took up to 2 s. The table is fixed once the rules are compiled, so its largest entry is now kept beside it. The same routes everywhere; on this machine, 300 s at most:
+
+| Board | Before | **After** |
+| --- | --- | --- |
+| Issue289-Autorouter_PCB_FHT-8086 (665) | stopped at 300 s | **540, 81 s** |
+| Issue289-Autorouter_PCB_FHT-VGA (747) | stopped at 300 s | **567, 175 s** |
+| keyboard-tkl (315), median of five | 0.79 s | 0.75 s |
+| Issue039, Mars-64, bm01, Issue219, Issue208, Issue113 | | the same within a few per cent |
+
+Issue066 and Issue103-Board-Unrouted still take more than 300 s.
+
 ## A time limit (M5, TRX-56)
 
 `traxide route --time-limit SECONDS` ends negotiation once the limit has passed, as when it stalls: what is still queued routes once more without ripping anything up, each connection in its own window only, without the wider windows of [[TRX-55]] or the check whether the board cuts it off. With 90 s, on this machine, the boards that stop at the corpus's 120 s and those near it (connections routed, time):
@@ -99,7 +112,7 @@ In CI (commit 0640dce): traxide completes 50 boards, 17 incomplete, 6 stopped, 3
 | Issue145-smoothieboard (792) | 782, 127 s | 776, 91 s |
 | Issue219-LogicBoard_smt (991) | 991, 124 s | 945, 103 s |
 
-Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone still takes 100–130 s: 365 of its connections are committed within 20 s, but only 34 more by 100 s, as single searches there take 0.5–2 s each, most of them failing ones that flood their whole window. The limit cannot bound such a board short of leaving the rest unrouted outright; faster failing searches would ([[TRX-48]]). The corpus runs without a limit, so its numbers stay comparable with the earlier ones.
+Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone took 100–130 s: 365 of its connections were committed within 20 s, but only 34 more by 100 s, as single searches there took 0.5–2 s each. Sampled with gdb, the time went to working out the largest clearance on every copper query, below. The corpus runs without a limit, so its numbers stay comparable with the earlier ones.
 
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
