@@ -1,0 +1,18 @@
+[package]
+name = "traxide-verification"
+description = "Verification Engine: an independent design rule check of routed copper."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+traxide-contracts.workspace = true
+
+[dev-dependencies]
+traxide-contracts = { workspace = true, features = ["testing"] }
+traxide-rules.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+---
+id: TRX-29
+title: Accelerate global routing on the GPU
+type: improvement
+status: backlog
+priority: medium
+labels: [gpu, global-routing]
+estimate: 5
+layer: engine
+---
+
+- [ ] Global Routing uses Compute Access for pattern routing, congestion updates and batch wavefronts
+- [ ] `auto` threshold set from benchmark measurements
+- [ ] Corpus results identical on CPU and GPU
+
+**Depends on:** [[TRX-26]], [[TRX-28]]

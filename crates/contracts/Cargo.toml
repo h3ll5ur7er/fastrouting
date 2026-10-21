@@ -1,0 +1,18 @@
+[package]
+name = "traxide-contracts"
+description = "The data and service contracts every traxide component agrees on."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+traxide-geometry.workspace = true
+
+[features]
+# Builders for tests of other crates; never enabled in a release build.
+testing = []
+
+[lints]
+workspace = true

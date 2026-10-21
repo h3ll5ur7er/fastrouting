@@ -1,0 +1,18 @@
+# traxide is MIT OR Apache-2.0 and must stay usable where copyleft is banned:
+# only permissive licences may enter the binary (docs/Development.md, clean-room rules).
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"

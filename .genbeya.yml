@@ -1,0 +1,24 @@
+name: traxide
+wikiRoot: docs
+wikiHome: Home.md
+taskRoot: tasks
+taskPrefix: TRX
+statuses:
+  - backlog
+  - todo
+  - in-progress
+  - review
+  - done
+types:
+  - feature
+  - improvement
+  - bug
+  - chore
+  - research
+  - docs
+fields:
+  - name: estimate    # ideal days of one developer, for the project plan
+    type: number
+  - name: layer       # the iDesign layer of the component the task builds
+    type: choice
+    options: [client, manager, engine, access, resource, utility, contract, infrastructure]

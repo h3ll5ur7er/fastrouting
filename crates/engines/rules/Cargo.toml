@@ -1,0 +1,14 @@
+[package]
+name = "traxide-rules"
+description = "Rules Engine: compiles a design's rules into constraint tables that routers query in O(1)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+traxide-contracts.workspace = true
+
+[lints]
+workspace = true

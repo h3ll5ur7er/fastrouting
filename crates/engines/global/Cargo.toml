@@ -1,0 +1,19 @@
+[package]
+name = "traxide-global"
+description = "Global Routing Engine: plans a corridor for every connection on a coarse grid, negotiating congestion."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+traxide-contracts.workspace = true
+traxide-scratch.workspace = true
+
+[dev-dependencies]
+traxide-contracts = { workspace = true, features = ["testing"] }
+traxide-rules.workspace = true
+
+[lints]
+workspace = true

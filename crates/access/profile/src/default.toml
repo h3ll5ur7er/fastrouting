@@ -1,0 +1,17 @@
+# Lengths and costs in millimetres; a cost is the length of track worth avoiding it.
+[profiles.default]
+grid_pitch = 0.1
+via_cost = 2.0
+bend_cost = 0.1
+detour_margin = 5.0
+rip_up_cost = 5.0
+# 10 left one connection of the keyboard unrouted when its parts were planned in another order.
+max_rip_ups = 20
+# The cost of a via: from 1.5 to 3 the keyboard routed twice as fast, 0.5 and 5 gained little.
+history_cost = 2.0
+# On a TKL-sized key matrix, 1.2 routed 15 times faster than 1.0 for 0.3 % more track.
+heuristic_weight = 1.2
+# Off: on the keyboard and the key matrices, corridors made detailed routing slower (docs/Benchmarks.md).
+global_routing = false
+# Connections searched side by side, then committed in order. Fixed, so results don't depend on the number of threads.
+batch_size = 16

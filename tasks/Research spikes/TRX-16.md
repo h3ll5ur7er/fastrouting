@@ -1,0 +1,18 @@
+---
+id: TRX-16
+title: "Spike: congestion kernels on wgpu"
+type: research
+status: todo
+priority: medium
+labels: [gpu, spike]
+estimate: 2
+---
+
+Find out early whether wgpu compute pays off at PCB scale ([[Architecture/Parallelism-and-GPU]]).
+
+- [ ] Coarse 3D grid of a keyboard-sized board; `update_congestion` and a frontier search in WGSL with 32-bit packed `atomicMin`
+- [ ] Same kernels on rayon + SIMD
+- [ ] Measure on an integrated GPU, a discrete GPU and Apple silicon; find the size where the GPU wins
+- [ ] Write the result into [[Architecture/Parallelism-and-GPU]]
+
+**Depends on:** [[TRX-1]]

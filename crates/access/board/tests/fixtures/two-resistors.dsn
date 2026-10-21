@@ -1,0 +1,99 @@
+(pcb two-resistors.dsn
+  (parser
+    (string_quote ")
+    (space_in_quoted_tokens on)
+    (host_cad "KiCad's Pcbnew")
+    (host_version "10.0.7")
+  )
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu
+      (type signal)
+      (property
+        (index 0)
+      )
+    )
+    (layer B.Cu
+      (type signal)
+      (property
+        (index 1)
+      )
+    )
+    (boundary
+      (path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000)
+    )
+    (via "Via[0-1]_600:300_um")
+    (rule
+      (width 200)
+      (clearance 200.1)
+      (clearance 200.1 (type default_smd))
+      (clearance 50 (type smd_smd))
+    )
+  )
+  (placement
+    (component "Resistor_THT:R_Axial"
+      (place R2 25000.000000 -15000.000000 front 0.000000 (PN 10k))
+    )
+    (component "Resistor_SMD:R_0603"
+      (place R1 5000.000000 -5000.000000 front 0.000000 (PN 1k))
+      (place R3 15000 -10000 back 90)
+    )
+  )
+  (library
+    (image "Resistor_THT:R_Axial"
+      (pin Round[A]Pad_1800_um 1 -1270 0)
+      (pin Round[A]Pad_1800_um 2 1270 0)
+      (keepout "" (circle F.Cu 2000 0 3000))
+    )
+    (image "Resistor_SMD:R_0603"
+      (outline (path signal 50  -1500 800  1500 800))
+      (pin Rect[T]Pad_1000x1200_um 1 -1000 0)
+      (pin Rect[T]Pad_1000x1200_um (rotate 90) 2 1000 0)
+      (via_keepout "" (circle F.Cu 500 0 1000))
+    )
+    (padstack Round[A]Pad_1800_um
+      (shape (circle F.Cu 1800))
+      (shape (circle B.Cu 1800))
+      (attach off)
+    )
+    (padstack Rect[T]Pad_1000x1200_um
+      (shape (rect F.Cu -500 -600 500 600))
+      (attach off)
+    )
+    (padstack "Via[0-1]_600:300_um"
+      (shape (circle F.Cu 600))
+      (shape (circle B.Cu 600))
+      (attach off)
+    )
+  )
+  (network
+    (net A
+      (pins R2-1 R1-1)
+    )
+    (net "Net with spaces"
+      (pins R2-2 R1-2 R3-1)
+    )
+    (class kicad_default "" A
+      (circuit
+        (use_via Via[0-1]_600:300_um)
+      )
+      (rule
+        (width 200)
+        (clearance 200.1)
+      )
+    )
+    (class Power "Net with spaces"
+      (circuit
+        (use_via Via[0-1]_600:300_um)
+      )
+      (rule
+        (width 500)
+        (clearance 300)
+      )
+    )
+  )
+  (wiring
+    (wire (path B.Cu 200  10000 -2000  12000 -2000)(net A)(type protect))
+  )
+)
