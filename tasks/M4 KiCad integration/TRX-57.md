@@ -2,7 +2,7 @@
 id: TRX-57
 title: Route on KiCad power layers that hold no plane
 type: improvement
-status: in-progress
+status: done
 priority: medium
 labels: [board-access, kicad]
 estimate: 1
@@ -15,5 +15,5 @@ Measured on a copy of the board with B.Cu as `signal`: 48 of 89 connections inst
 
 - [x] Failing test first: a KiCad DSN with a power layer without a plane takes tracks
 - [x] For boards from KiCad: a power layer that no `(plane …)` covers is routable; one with planes stays a plane layer (Issue269-z10_module's In1.Cu and In2.Cu, see [[TRX-58]]); other tools' power layers stay planes
-- [ ] Say in the route report which layers are kept free of tracks, and why
+- [x] Say in the route report which layers are kept free of tracks, and why (as planes)
 - [x] Issue269-caniot-tiny-arm: 3 of 89 connections routed before, 48 after (0.17 s instead of 12 s), clean

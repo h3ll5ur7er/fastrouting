@@ -52,6 +52,8 @@ pub struct RouteReport {
     pub elapsed: Duration,
     /// Where the routes were stored.
     pub output: PathBuf,
+    /// The names of the layers kept free of tracks, as planes.
+    pub planes: Vec<String>,
 }
 
 /// A connection routing could not make, by the names of its net and pads.
@@ -223,5 +225,11 @@ pub fn route(
         cancelled: cancel.is_cancelled(),
         elapsed: started.elapsed(),
         output,
+        planes: design
+            .layers
+            .iter()
+            .filter(|layer| !layer.routable)
+            .map(|layer| layer.name.clone())
+            .collect(),
     })
 }

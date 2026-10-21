@@ -237,6 +237,12 @@ fn summarise(report: &RouteReport) -> ExitCode {
         report.elapsed.as_secs_f64(),
         report.output.display()
     );
+    if !report.planes.is_empty() {
+        println!(
+            "Kept free of tracks, as planes: {}",
+            report.planes.join(", ")
+        );
+    }
     for unrouted in &report.unrouted {
         let why = match &unrouted.why {
             Unroutable::OffTheBoard(pad) => format!("{pad} lies outside the board"),

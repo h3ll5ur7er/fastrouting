@@ -225,3 +225,24 @@ fn routes_a_kicad_board_into_a_copy_beside_it_with_its_project() {
     assert!(routed.matches("(segment").count() >= report.tracks && report.tracks > 0);
     assert!(folder.path().join("crossing.routed.kicad_pro").is_file());
 }
+
+#[test]
+fn the_report_names_the_layers_kept_free_of_tracks() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let board = folder.path().join("planes.dsn");
+    let text = std::fs::read_to_string(fixture("two-nets.dsn"))
+        .expect("fixture")
+        .replace("(layer B.Cu (type signal)", "(layer B.Cu (type power)")
+        .replace(
+            "    (via ",
+            "    (plane GND (polygon B.Cu 0  30000 -20000  0 -20000  0 0  30000 0))\n    (via ",
+        );
+    std::fs::write(&board, text).expect("written");
+    let job = RouteJob {
+        input: board,
+        output: Some(folder.path().join("planes.ses")),
+        ..job("two-nets.dsn", folder.path())
+    };
+    let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
+    assert_eq!(report.planes, ["B.Cu"]);
+}
