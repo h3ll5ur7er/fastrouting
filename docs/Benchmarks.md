@@ -156,6 +156,15 @@ Four boards that stopped now finish (Issue039 in 19 s, Issue113, Issue145 and Is
 
 Issue093, Issue178, Issue217 and both Issue230 boards are now complete (Issue217 is one Freerouting completed only by breaking 6 rules), Issue110-Pajalnaja is short only of the pad outside the board, Issue269-caniot routes 61 of 94 nets instead of 47, Issue145 228 of 245 instead of 220 in less time. Issue029 now stops at 120 s: it routes more connections but takes longer ([[TRX-55]]).
 
+**After pads left along their axes** ([[TRX-54]]; commit 5dd40cc, same setup):
+
+| Router | Complete | Incomplete | Breaking rules | Stopped at 120 s | Failed | Time in all |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **traxide** | **47** | 19 | **0** | 7 | 3 | 1561 s |
+| Freerouting 2.5.0 | 18 | 7 | 18 | 31 | 2 | 4914 s |
+
+Two more boards are complete, Issue508-DAC2020_bm06 among them (38 of 38 nets, as Freerouting routes it), and Issue029 finishes again within the limit (159 of 163 nets in 108 s). Where traxide is short of complete, the gaps that remain are Issue632-MiniAutoPilot (124 of 211 nets: most of its parts lie outside the outline, [[TRX-60]]), Issue039 (37 of 74), both Mars-64 boards (72 of 94) and bm01 (78 of 99). Seven boards stop at 120 s for both routers. On the KiCad-judged bench of the same run, traxide routes matrix-6x17 in 0.2 s and keyboard-tkl in 1.0 s, both complete and clean; Freerouting takes 33 s and 592 s and breaks 14 and 199 track widths.
+
 ## One state per node (M2, TRX-48)
 
 October 2026: on the real boards of the corpus, the long searches expanded about 8 states per node and layer: the heading a node was entered with was part of the search state, and as a bend costs only 0.1 mm, all nine ways into a node cost nearly the same and were each expanded. A state is now a node on a layer; its heading is the direction of the cheapest way in found, which bend costs and the rule against acute turns follow. Every board stays clean in KiCad 10's DRC; track lengths are within 0.2 % of before.
