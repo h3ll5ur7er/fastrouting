@@ -2,7 +2,7 @@
 id: TRX-24
 title: Plan connections and batches in the Planning Engine
 type: feature
-status: in-progress
+status: todo
 priority: high
 labels: [planning]
 estimate: 4

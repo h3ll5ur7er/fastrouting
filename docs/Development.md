@@ -128,3 +128,13 @@ traxide is licensed `MIT OR Apache-2.0` ([LICENSE-MIT](../LICENSE-MIT), [LICENSE
 ## Commits and branches
 
 Name the task in commit messages and pull requests (`TRX-12: Route connections with multi-layer A*`). Tasks and wiki pages are committed with the work they describe.
+
+## Working in parallel
+
+Several agent sessions may work at once, each in an area of its own, so that their branches merge without conflicts ([[TRX-56]] showed that experiments in one area, such as negotiation, interfere and are better kept in one hand). Each session:
+
+- owns its tasks: their `assignee` names it (`claude` is the main session, which also reviews and merges the others; `claude-release`, `claude-planes`, `claude-gate` and so on are the others), and it keeps them true as it goes: `in-progress` when it starts, checklist items ticked as each lands, decisions and blockers noted, `review` when its branch waits to be merged, `done` only once it is merged and verified;
+- works on a branch of its own, `claude/<task>-<topic>`, and leaves merging to the main session, which reviews the branch, runs every check and the KiCad round trip again, and merges it into the branch of the open pull request;
+- records what it measured in [[Benchmarks]] and the task, rejected attempts included, with their numbers.
+
+The board in `tasks/` is how the maintainer follows the work: a task nobody works on is `todo`, however much of its checklist is ticked.

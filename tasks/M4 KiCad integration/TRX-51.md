@@ -2,7 +2,7 @@
 id: TRX-51
 title: Write DRC reports in KiCad's JSON format
 type: feature
-status: review
+status: done
 priority: low
 labels: [cli, compatibility, verification]
 estimate: 1

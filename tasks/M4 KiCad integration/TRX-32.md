@@ -2,7 +2,7 @@
 id: TRX-32
 title: Compile KiCad net classes and custom rules in the Rules Engine
 type: feature
-status: review
+status: done
 priority: high
 labels: [rules, kicad]
 estimate: 4
@@ -14,7 +14,6 @@ layer: engine
 - [x] Rules Engine: the last rule that applies wins; tests and layers it cannot tell only ever tighten ([[Research/KiCad-integration#custom-rules]])
 - [x] End-to-end: recipe `isolation` with a `.kicad_dru`, routed from its board file, clean in KiCad 10's DRC
 - [x] A broken `.kicad_dru` warns and routes with what can be read, as the maintainer decided (October 2026): a rule traxide cannot read is left out with its name and line, a file without `(version 1)` is read anyway, an unreadable file is left out whole ([[Research/KiCad-integration#custom-rules]])
-- [ ] Compare with KiCad's DRC on the corpus: no rule we route against may disagree (needs corpus boards with their own files, [[TRX-30]])
-- [ ] Later, if boards need them: `disallow`, `physical_clearance`, `annular_width`, per-layer values, vias of the sizes rules ask
+Moved to [[TRX-62]]: comparing with KiCad's DRC on real boards, and the constraints not compiled yet.
 
 **Depends on:** [[TRX-10]], [[TRX-30]]

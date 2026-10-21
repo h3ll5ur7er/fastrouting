@@ -4,6 +4,7 @@ title: Search free space instead of a fine grid
 type: improvement
 status: in-progress
 priority: high
+assignee: claude
 labels: [detailed-routing, performance]
 estimate: 8
 layer: engine

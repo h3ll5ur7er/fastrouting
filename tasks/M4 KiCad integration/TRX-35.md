@@ -4,6 +4,7 @@ title: Release static binaries for six targets
 type: chore
 status: in-progress
 priority: high
+assignee: claude-release
 labels: [release, ci]
 estimate: 2
 layer: infrastructure

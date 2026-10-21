@@ -4,6 +4,7 @@ title: Negotiate congestion until it settles
 type: improvement
 status: in-progress
 priority: high
+assignee: claude
 labels: [detailed-routing]
 estimate: 4
 layer: engine

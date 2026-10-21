@@ -2,8 +2,9 @@
 id: TRX-22
 title: Run the benchmark corpus and gate releases on it
 type: feature
-status: todo
+status: in-progress
 priority: high
+assignee: claude-gate
 labels: [benchmark, ci]
 estimate: 3
 layer: manager
