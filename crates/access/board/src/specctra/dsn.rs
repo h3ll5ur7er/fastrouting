@@ -162,13 +162,26 @@ impl<'a> DsnReader<'a> {
         let mut via_kinds = ViaKinds::default();
         let rules = self.rules(&padstacks, &mut via_kinds)?;
         let mut nets = self.nets(&pad_by_name)?;
-        for (index, net) in nets.iter_mut().enumerate() {
-            net.class = rules
+        let mut warnings = Vec::new();
+        for index in 0..nets.len() {
+            nets[index].class = rules
                 .class_of_net
-                .get(net.name.as_str())
+                .get(nets[index].name.as_str())
                 .copied()
                 .unwrap_or(rules.design.default_class);
-            for &pad in &net.pads {
+            for pad in nets[index].pads.clone() {
+                if let Some(earlier) = pads[pad.index()].net
+                    && earlier.index() != index
+                {
+                    warnings.push(format!(
+                        "pin {} is listed in the nets {} and {}; it stays in {}",
+                        pads[pad.index()].name,
+                        nets[earlier.index()].name,
+                        nets[index].name,
+                        nets[index].name
+                    ));
+                    nets[earlier.index()].pads.retain(|&p| p != pad);
+                }
                 pads[pad.index()].net = Some(NetId::from_index(index));
             }
         }
@@ -183,6 +196,7 @@ impl<'a> DsnReader<'a> {
             existing,
             rules: rules.design,
             resolution: self.resolution_nm,
+            warnings,
         })
     }
 

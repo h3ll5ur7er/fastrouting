@@ -510,3 +510,32 @@ fn a_power_layer_from_another_tool_is_a_plane() {
     let design = with_power_bottom(&text, "");
     assert!(!design.layers[layer(&design, "B.Cu").index()].routable);
 }
+
+#[test]
+fn a_pin_listed_in_two_nets_stays_in_the_last_and_is_named() {
+    let text = two_resistors_text().replace("(pins R2-1 R1-1)", "(pins R2-1 R1-1 R3-1)");
+    let design = specctra::parse_dsn(&text).expect("valid");
+    let r3 = pad(&design, "R3-1");
+    assert_eq!(
+        design.net(r3.net.expect("in a net")).name,
+        "Net with spaces"
+    );
+    let a = design.nets.iter().find(|n| n.name == "A").expect("net A");
+    assert!(a.pads.iter().all(|&p| design.pad(p).name != "R3-1"));
+    assert_eq!(
+        design.warnings,
+        ["pin R3-1 is listed in the nets A and Net with spaces; it stays in Net with spaces"]
+    );
+    assert!(two_resistors().warnings.is_empty());
+}
+
+#[test]
+fn a_pin_listed_twice_in_one_net_stays_in_it_without_a_word() {
+    let text = two_resistors_text().replace("(pins R2-1 R1-1)", "(pins R2-1 R1-1 R1-1)");
+    let design = specctra::parse_dsn(&text).expect("valid");
+    assert!(design.warnings.is_empty(), "{:?}", design.warnings);
+    assert_eq!(
+        design.net(pad(&design, "R1-1").net.expect("in a net")).name,
+        "A"
+    );
+}

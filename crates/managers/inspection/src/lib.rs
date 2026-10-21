@@ -31,6 +31,8 @@ pub struct CheckReport {
     pub tracks: usize,
     pub vias: usize,
     pub track_length_mm: f64,
+    /// What the reader found wrong with the board and read anyway.
+    pub warnings: Vec<String>,
 }
 
 impl CheckReport {
@@ -93,5 +95,6 @@ pub fn check(job: &CheckJob) -> Result<CheckReport, CheckError> {
         tracks: routes.tracks.len(),
         vias: routes.vias.len(),
         track_length_mm: routes.tracks.iter().map(|t| length(&t.path)).sum::<i64>() as f64 / 1e6,
+        warnings: design.warnings.clone(),
     })
 }

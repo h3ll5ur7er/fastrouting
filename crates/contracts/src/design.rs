@@ -18,6 +18,9 @@ pub struct Design {
     /// The coordinate step of the board's format. Routes are rounded to it when
     /// stored, so routing keeps that much extra clearance.
     pub resolution: i32,
+    /// What the reader found wrong with the board and read anyway, for the
+    /// designer.
+    pub warnings: Vec<String>,
 }
 
 impl Design {

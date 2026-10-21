@@ -54,6 +54,8 @@ pub struct RouteReport {
     pub output: PathBuf,
     /// The names of the layers kept free of tracks, as planes.
     pub planes: Vec<String>,
+    /// What the reader found wrong with the board and read anyway.
+    pub warnings: Vec<String>,
 }
 
 /// A connection routing could not make, by the names of its net and pads.
@@ -231,5 +233,6 @@ pub fn route(
             .filter(|layer| !layer.routable)
             .map(|layer| layer.name.clone())
             .collect(),
+        warnings: design.warnings.clone(),
     })
 }

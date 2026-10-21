@@ -191,6 +191,7 @@ mod tests {
                 custom: vec![],
             },
             resolution,
+            warnings: Vec::new(),
         }
     }
 

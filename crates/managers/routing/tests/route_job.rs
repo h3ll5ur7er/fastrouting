@@ -246,3 +246,24 @@ fn the_report_names_the_layers_kept_free_of_tracks() {
     let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
     assert_eq!(report.planes, ["B.Cu"]);
 }
+
+#[test]
+fn the_report_passes_on_what_the_reader_found_wrong_with_the_board() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let board = folder.path().join("twice.dsn");
+    let text = std::fs::read_to_string(fixture("two-nets.dsn"))
+        .expect("fixture")
+        .replace(
+            "(net Down (pins R3-1 R4-2))",
+            "(net Down (pins R3-1 R4-2 R1-2))",
+        );
+    std::fs::write(&board, text).expect("written");
+    let job = RouteJob {
+        input: board,
+        output: Some(folder.path().join("twice.ses")),
+        ..job("two-nets.dsn", folder.path())
+    };
+    let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
+    assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+    assert!(report.warnings[0].contains("R1-2"));
+}

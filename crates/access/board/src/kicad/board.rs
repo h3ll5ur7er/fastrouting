@@ -171,6 +171,7 @@ impl<'a> Reader<'a> {
                 rules,
                 // KiCad's files are in millimetres to the nanometre.
                 resolution: 1,
+                warnings: Vec::new(),
             },
             via_sizes: self.via_kinds.sizes,
             net_numbers,

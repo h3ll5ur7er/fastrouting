@@ -168,9 +168,13 @@ fn run_check(job: CheckJob, json: bool) -> Result<ExitCode> {
                 "tracks": report.tracks,
                 "vias": report.vias,
                 "track_length_mm": report.track_length_mm,
+                "warnings": report.warnings,
             })
         );
     } else {
+        for warning in &report.warnings {
+            println!("Warning: {warning}");
+        }
         println!(
             "{} of {} nets complete, {} pads unconnected; {} tracks, {} vias, {:.0} mm of track.",
             report.nets - report.incomplete_nets,
@@ -237,6 +241,9 @@ fn summarise(report: &RouteReport) -> ExitCode {
         report.elapsed.as_secs_f64(),
         report.output.display()
     );
+    for warning in &report.warnings {
+        println!("Warning: {warning}");
+    }
     if !report.planes.is_empty() {
         println!(
             "Kept free of tracks, as planes: {}",

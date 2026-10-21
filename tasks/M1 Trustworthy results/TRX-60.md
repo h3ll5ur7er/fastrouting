@@ -2,7 +2,7 @@
 id: TRX-60
 title: Say why a board cannot be completed
 type: improvement
-status: todo
+status: in-progress
 priority: medium
 labels: [manager, cli]
 estimate: 2
@@ -17,7 +17,7 @@ layer: manager
 - Issue313-FastTest: the board's protected wiring encloses two pads completely.
 - Reasons that mislead: a connection with two causes names only the first, such as a hemmed-in QFP pin whose other pad lies only on a plane layer (Issue269-caniot-tiny-arm, U1-47 → C4-2); once negotiation stops ripping up, a pad whose exits routed copper took is reported as hemmed in, as if fixed copper blocked it (Issue508-DAC2020_bm01, 3 connections that route alone).
 
-- [ ] Board Access warns about a pin listed in more than one net, naming both nets
+- [x] Board Access warns about a pin listed in more than one net, naming both nets (and takes it out of the earlier net, which still listed it); the route and check reports print the warnings, `check --json` lists them
 - [ ] The route and check reports name the problems of the board itself: parts outside the outline, pads of different nets closer than their clearance (by pair), pads with no legal way out because of fixed copper or keepouts
 - [ ] "Hemmed in" only when fixed copper, a keepout or the edge blocks the pad, not routed copper; a connection with two blocked pads names both
 - [ ] Tests for each, from small boards built in code; the corpus boards above as examples in [[Corpus-analysis]]
