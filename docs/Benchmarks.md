@@ -83,6 +83,24 @@ Issue029 stops at 120 s here either way (with no limit, 87 of 91 in 177 s with f
 
 In CI (commit 0640dce): traxide completes 50 boards, 17 incomplete, 6 stopped, 3 failed, 1379 s in all instead of 1415 s, and still breaks no rule; Freerouting 2.5.0 completes 18, breaks rules on 18, stops on 31, in 4867 s. Against 7768025: both Mars-64 boards route 70 of 94 nets instead of 69, in 24 s and 18 s instead of 69 s and 43 s; Issue039 44 of 74 instead of 41, in 33 s instead of 51 s; bm01 83 of 99 instead of 79, in 36 s instead of 55 s; caniot 79 of 94 instead of 80; Issue029 157 of 163 instead of 159. KiCad's DRC finds the keyboard (0.7 s) and the matrix (0.2 s) clean.
 
+## A time limit (M5, TRX-56)
+
+`traxide route --time-limit SECONDS` ends negotiation once the limit has passed, as when it stalls: what is still queued routes once more without ripping anything up, each connection in its own window only, without the wider windows of [[TRX-55]] or the check whether the board cuts it off. With 90 s, on this machine, the boards that stop at the corpus's 120 s and those near it (connections routed, time):
+
+| Board | No limit | **`--time-limit 90`** |
+| --- | --- | --- |
+| Issue208-freerouting (422) | stopped at 120 s | 190, 93 s |
+| Issue289-Autorouter_PCB_FHT-8086 (665) | stopped | 549, 103 s |
+| Issue289-Autorouter_PCB_FHT-VGA (747) | stopped | 577, 220 s |
+| Issue103-Board-Unrouted (702) | stopped | 556, 102 s |
+| Issue066-Project_GP8B (703) | stopped | 649, 113 s |
+| Issue113-Protein (326) | stopped | 264, 94 s |
+| Issue029-hw48na (91) | 85, 132 s | 80, 99 s |
+| Issue145-smoothieboard (792) | 782, 127 s | 776, 91 s |
+| Issue219-LogicBoard_smt (991) | 991, 124 s | 945, 103 s |
+
+Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone still takes 130 s. The corpus runs without a limit, so its numbers stay comparable with the earlier ones.
+
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
 Two changes with byte for byte the same routes: an edge of the grid is checked once for both directions instead of once from each end, and a query for copper near a track or via looks as far as the largest clearance between copper, no longer as far as the board's edge clearance, which KiCad sets to 0.5 mm and the outline check covers on its own.
