@@ -20,8 +20,8 @@ Tried by hand on commit 478b4f9 (tracks, arcs and vias stripped, zones kept):
 
 Both clean by `traxide check`; traxide routes the power nets with tracks, as it cannot join pads through zones yet ([[TRX-58]]).
 
-- [ ] Corpus entries that name a KiCad project by URL at a fixed commit: the board with its `.kicad_pro` and `.kicad_dru` downloaded beside it, as for DSN never committed here
-- [ ] A routed board is stripped of its unlocked tracks, arcs and vias before routing (zones and locked copper stay), and the board as committed is judged as the baseline it is ("routed by its author")
-- [ ] Freerouting runs on a DSN exported by KiCad (in its Docker image, as `cargo xtask e2e` exports), or is left out for such boards, said in the table
+- [x] Corpus entries that name a KiCad project by URL at a fixed commit: the board with its `.kicad_pro` and `.kicad_dru` downloaded beside it, as for DSN never committed here
+- [x] A routed board is stripped of its unlocked tracks, arcs and vias before routing (zones and locked copper stay), and the board as committed is judged as the baseline it is ("routed by its author")
+- [x] Freerouting runs on a DSN exported by KiCad (in its Docker image, as `cargo xtask e2e` exports), or is left out for such boards, said in the table
 - [ ] TokenBoard in the corpus, pinned to a commit, and its row in [[Benchmarks]]
 - [ ] Say in [[Development#benchmarking]] how to add a board: what the entry looks like, and that the board's licence must allow it (the corpus downloads, never stores)

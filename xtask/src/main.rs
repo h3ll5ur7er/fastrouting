@@ -3,6 +3,7 @@ mod corpus;
 mod e2e;
 mod gate;
 mod kicad;
+mod kicad_project;
 mod layers;
 mod negotiation;
 mod running_kicad;

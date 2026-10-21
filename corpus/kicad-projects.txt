@@ -1,0 +1,16 @@
+# KiCad projects, as their authors committed them to GitHub. `cargo xtask
+# corpus` downloads each board with the project (.kicad_pro) and custom rules
+# (.kicad_dru) of the same name into target/corpus/projects at run time: they
+# are test data under their authors' terms, never committed here and never
+# part of traxide (docs/Development.md#clean-room-rules). Add only boards
+# whose licence or author allows it.
+#
+# A board committed routed is stripped of its unlocked tracks, arcs and vias
+# before it is routed; zones and locked copper stay, and the board as
+# committed is judged as its author routed it.
+#
+# One board per line: the repository, the commit it is pinned to, and the
+# board's path in it.
+
+# TokenBoard, the maintainer's keyboard: KiCad 10, 4 layers, routed by Freerouting.
+https://github.com/h3ll5ur7er/tokenboard 478b4f9 kb/kb.kicad_pcb
