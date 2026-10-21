@@ -120,7 +120,7 @@ impl Kicad {
             out,
             &format!(
                 "python3 roundtrip.py import {{out}}/{recipe}.kicad_pcb {{out}}/{session} {{out}}/{routed}.kicad_pcb && \
-                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
+                 kicad-cli pcb drc --refill-zones --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
         judged(&printed, &out.join(report))
@@ -135,7 +135,7 @@ impl Kicad {
             out,
             &format!(
                 "python3 roundtrip.py stats {{out}}/{routed}.kicad_pcb && \
-                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
+                 kicad-cli pcb drc --refill-zones --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
         judged(&printed, &out.join(report))
@@ -157,7 +157,7 @@ impl Kicad {
             out,
             &format!(
                 "python3 plugin_route.py {{out}}/{recipe}.kicad_pcb {{out}}/{routed}.kicad_pcb {traxide} && \
-                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
+                 kicad-cli pcb drc --refill-zones --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
         judged(&printed, &out.join(report))

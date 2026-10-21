@@ -15,6 +15,7 @@ const DEFAULT_RECIPES: &[&str] = &[
     "placements",
     "crossing",
     "ground-pour",
+    "inner-plane",
     "matrix-3x4",
     "isolation",
 ];
