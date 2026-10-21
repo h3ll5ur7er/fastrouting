@@ -2,7 +2,7 @@
 id: TRX-35
 title: Release static binaries for six targets
 type: chore
-status: in-progress
+status: review
 priority: high
 assignee: claude-release
 labels: [release, ci]
@@ -24,5 +24,7 @@ Decisions:
 - No cargo-dist: the Binaries workflow already builds every target, and a single binary needs no installer; cargo-dist would replace a working workflow and generate one of its own to keep up to date. Reconsider when the GPU builds bring more targets.
 - Archives are named `traxide-VERSION-TARGET`, the KiCad packages `traxide-kicad-VERSION-TARGET.zip`; Windows archives are zip files, the others `.tar.gz` with the executable bit.
 - Not testable here: the workflows themselves (they run on GitHub), Windows and macOS. They are valid YAML and pass `actionlint` (which only does not know the `windows-11-arm` label yet); the archive step was run locally on a mock of the artifacts, and the Linux KiCad package through `cargo xtask e2e`.
+
+Open, for the maintainer: Developer ID signing and notarisation (credentials), and the glibc GPU builds once [[TRX-28]] exists. To release: set the version in `Cargo.toml`, tag `vX.Y.Z`, push the tag, then read through and publish the draft release.
 
 **Depends on:** [[TRX-3]], [[TRX-14]]

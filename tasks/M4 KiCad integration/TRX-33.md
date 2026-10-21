@@ -2,7 +2,7 @@
 id: TRX-33
 title: Route inside KiCad with a native plugin
 type: feature
-status: in-progress
+status: review
 priority: high
 assignee: claude-release
 labels: [kicad, client]
@@ -28,5 +28,7 @@ Decisions:
 - One binary, no launcher: KiCad passes no arguments, so a bare `traxide` started with KiCad's API socket in its environment is the button. In a terminal a bare `traxide` still prints its usage.
 - The plugin writes only its summary (as `--quiet`), and to stderr: KiCad 10.0.7 shows each stderr line as a notification once the plugin ends and ignores stdout, as pressing the button showed; a progress line rewritten in place would be noise there.
 - The package asks for KiCad 9.0: KiCad 9 loads and runs the exec plugin as KiCad 10 does, and the IPC path is tested on both.
+
+Open, for a person with Windows and macOS: the install check above. Everything else is done and in `cargo xtask e2e`.
 
 **Depends on:** [[TRX-31]], [[TRX-13]]
