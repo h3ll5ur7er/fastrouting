@@ -30,7 +30,7 @@ traxide's KiCad plugin adds a **Route board** button to the PCB editor's toolbar
 
 1. **Enable KiCad's API first**: *Preferences → Preferences… → Plugins → Enable KiCad API*. It is off by default, and **without it KiCad shows no traxide button at all**.
 2. Download the KiCad package for your platform (`traxide-kicad-<version>-<platform>.zip`) from the Releases and install it with *Plugin and Content Manager → Install from File…*.
-3. Restart the PCB editor: the button appears in its top toolbar. What traxide reports appears in KiCad's message panel (KiCad 10.0.1 and later).
+3. Restart the PCB editor: the button appears in its top toolbar. In KiCad 10, traxide's report (how much it routed, and what it could not) appears under the warning sign at the right end of the status bar; KiCad 9 shows the routes but not the report.
 
 The package carries the traxide binary itself; there is no Python. From a terminal, `traxide route --kicad` does what the button does.
 
