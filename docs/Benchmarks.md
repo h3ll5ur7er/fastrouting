@@ -96,6 +96,8 @@ Every copper query of the layout looked up the largest clearance between any two
 
 Issue066 and Issue103-Board-Unrouted still take more than 300 s.
 
+In CI (commit 91b6981, 120 s per board): traxide stops on 3 boards instead of 6, as Issue208 (224 of 415 nets, 93 s), Issue289-VGA (100 of 242, 95 s) and Issue289-8086 (69 of 142, 69 s) now finish; 50 complete, 20 incomplete, 3 failed, 1267 s in all instead of 1379 s, and still no rule broken. Freerouting 2.5.0: 18 complete, 17 breaking rules, 32 stopped, 4784 s. KiCad's DRC finds the keyboard (0.7 s) and the matrix (0.2 s) clean.
+
 ## A time limit (M5, TRX-56)
 
 `traxide route --time-limit SECONDS` ends negotiation once the limit has passed, as when it stalls: what is still queued routes once more without ripping anything up, each connection in its own window only, without the wider windows of [[TRX-55]] or the check whether the board cuts it off. With 90 s, on this machine, the boards that stop at the corpus's 120 s and those near it (connections routed, time):
