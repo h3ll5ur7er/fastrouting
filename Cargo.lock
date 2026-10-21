@@ -853,6 +853,9 @@ dependencies = [
  "serde_json",
  "traxide-board-access",
  "traxide-contracts",
+ "traxide-events",
+ "traxide-planning",
+ "traxide-routing",
 ]
 
 [[package]]

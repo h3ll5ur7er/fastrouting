@@ -240,6 +240,7 @@ fn show(event: &Event) {
         }
         Event::StageStarted(_) => Ok(()),
         Event::ConnectionRouted { done, total } => write!(stderr, "\r\x1b[KRouting {done}/{total}"),
+        Event::RippedUp { .. } => Ok(()),
     };
 }
 

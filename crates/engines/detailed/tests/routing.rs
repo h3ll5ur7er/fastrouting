@@ -361,6 +361,45 @@ fn rips_up_a_connection_in_the_way_and_routes_it_again_elsewhere() {
 }
 
 #[test]
+fn says_which_connection_ripped_up_which_and_where_they_met() {
+    // Y takes the top gap first; X can reach no other and rips it up there.
+    let design = two_gaps();
+    let rules = traxide_rules::compile(
+        &design,
+        Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
+    let mut layout = Layout::build(&design, &rules);
+    let plan = Plan {
+        connections: vec![
+            connection(&design, "Y1", "Y2"),
+            connection(&design, "X1", "X2"),
+        ],
+    };
+    let rip_ups = std::cell::RefCell::new(Vec::new());
+    let collect = |event: Event| {
+        if let Event::RippedUp { connection, by, at } = event {
+            rip_ups.borrow_mut().push((connection, by, at));
+        }
+    };
+    Router::new(&design, &rules, &short_detours()).route_plan(
+        &plan,
+        None,
+        &mut layout,
+        &CancelToken::new(),
+        &collect,
+    );
+    let rip_ups = rip_ups.into_inner();
+    let &(ripped, by, at) = rip_ups.first().expect("a rip-up");
+    assert_eq!((ripped, by), (ConnectionId(0), ConnectionId(1)));
+    assert!(
+        (mm(8.0)..=mm(12.0)).contains(&at.x) && at.y >= mm(4.0),
+        "they meet around the top gap, not at {at:?}"
+    );
+}
+
+#[test]
 fn a_connection_whose_only_way_runs_further_round_than_its_window_routes() {
     // The wall's end lies 15 mm beyond the pads, three times the margin.
     let design = DesignBuilder::new(40.0, 20.0)

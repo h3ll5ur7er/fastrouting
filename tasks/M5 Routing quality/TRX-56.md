@@ -15,7 +15,11 @@ Freerouting 2.5.0, run as a black box with 900 s, does much better: Mars-64 (Iss
 
 The routes traxide leaves on these boards wander and use many vias (Mars-64: 199 vias for 72 connections; Freerouting 155 for all of them), taking room that the last connections need.
 
-- [ ] Instrument first: per round, connections routed, rip-ups and the places of collisions; a picture of where Issue039's and Mars-64's connections take turns
+- [x] Instrument first: per round, connections routed, rip-ups and the places of collisions; a picture of where Issue039's and Mars-64's connections take turns. `cargo run --release -p xtask -- negotiation BOARD` ([[Development#benchmarking]]); the router publishes each rip-up, with the place where the two routes meet. What it shows today (a round being as many commits as there are connections):
+  - Issue039 (204): 146 routed after round 1, then 146, 134, 139 and 140 after rounds 2–5 with about 200 rip-ups each, and 157 in the last round, once rip-up has stopped and the queue routes without crossing anything. Past the first round, rip-up there only reshuffles. The rip-ups spread thinly over U1 and the resistor arrays RN1–RN4 and CA1–CA2 (at most 6 in any square millimetre); the pairs that trade places most are neighbouring pins (/VOUT4_DAC and /VOUT5_DAC at U1-21 and U1-20, five times).
+  - Mars-64 (106): 57, 65, 67, 67, 66 and 63 routed after rounds 1–6 with about 100 rip-ups each, 83 in the last round. The pairs that trade places are again neighbouring pins of U101 and U102 (SPI_CLK and SPI_MOSI at pins 19 and 18).
+  - keyboard-tkl (315): complete in two rounds, 47 rip-ups, all around the RP2350 (U1), with COL15 and COL16 at U1-12 and U1-13 among the pairs.
+  - So the time goes to neighbouring fine-pitch pins taking each other's way out, over and over; the connections that only fit once nobody may rip up are the ones that come last. Both point at escaping the pins first.
 - [ ] Negotiate in rounds over all connections, PathFinder's way: while negotiating, overlaps are allowed at a present-congestion price that rises each round, history costs accumulate, and only the final round must be legal; compare with the current first-come rip-up on the corpus
 - [ ] A stopping rule from progress across rounds and the time budget, not a fixed count of rip-ups
 - [ ] Try escaping fine-pitch SMD pins first (a short stub and a via, planned before the long connections, as [[TRX-24]] plans hemmed-in pads first) and measure it separately

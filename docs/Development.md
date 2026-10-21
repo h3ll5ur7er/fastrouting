@@ -110,6 +110,8 @@ Three levels, all run by `cargo test` except where noted:
 
 `cargo xtask bench [RECIPE…]` routes boards with traxide and, given `--freerouting "java -jar freerouting.jar"`, with Freerouting too, and has KiCad judge both the same way: time, unconnected items and violations from KiCad's DRC, tracks, vias and track length. `--timeout SECONDS` stops a router that runs too long. The default boards are `matrix-6x17` and `keyboard-tkl`; results land in `target/bench/`. The Benchmark workflow runs it in CI against Freerouting 2.5.0 and shows the table in the job summary; [[Benchmarks]] keeps the history.
 
+`cargo run --release -p xtask -- negotiation BOARD` routes one board and shows what negotiation did ([[TRX-56]]): per round of as many commits as the board has connections, the connections routed at its end and the rip-ups it took; the pairs of connections that take each other's place most often; and the 1 mm squares with the most rip-ups, drawn over the board in `target/negotiation/<board>/rip-ups.svg` with the connections ripped up as lines. Built in release, as routing in a debug build takes ten times as long.
+
 Later, with [[TRX-22]], `cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
 
 ## Clean-room rules

@@ -13,6 +13,9 @@ serde.workspace = true
 serde_json.workspace = true
 traxide-board-access = { workspace = true, features = ["testing"] }
 traxide-contracts.workspace = true
+traxide-events.workspace = true
+traxide-planning.workspace = true
+traxide-routing.workspace = true
 
 [lints]
 workspace = true

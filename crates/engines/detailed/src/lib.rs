@@ -16,7 +16,7 @@ use search::NoRoute;
 use std::cmp::Reverse;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use traxide_contracts::geometry::Rect;
+use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
     Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, Obstruction,
     Plan, Profile, Routes, RoutingResult,
@@ -445,6 +445,13 @@ impl Negotiated {
             "connections of one batch keep out of each other's territory"
         );
         for displaced in displaced {
+            if let Some(theirs) = &self.routed[displaced.index()] {
+                events.publish(Event::RippedUp {
+                    connection: displaced,
+                    by: id,
+                    at: where_they_meet(&found, theirs),
+                });
+            }
             layout.remove_route(displaced);
             self.routed[displaced.index()] = None;
             self.rip_ups[displaced.index()] += 1;
@@ -462,6 +469,44 @@ impl Negotiated {
         }
         events.publish(Event::ConnectionRouted { done, total });
     }
+}
+
+/// About where the copper of `ours` comes closest to that of `theirs`: the
+/// middle between the nearest of each one's corners and the other's tracks.
+fn where_they_meet(ours: &Routes, theirs: &Routes) -> Point {
+    let pieces = |routes: &Routes| -> Vec<Segment> {
+        let tracks = routes
+            .tracks
+            .iter()
+            .flat_map(|t| t.path.windows(2).map(|pair| Segment::new(pair[0], pair[1])));
+        let vias = routes
+            .vias
+            .iter()
+            .map(|v| Segment::new(v.position, v.position));
+        tracks.chain(vias).collect()
+    };
+    let (ours, theirs) = (pieces(ours), pieces(theirs));
+    let nearest = |pieces: &[Segment], others: &[Segment]| {
+        pieces
+            .iter()
+            .flat_map(|piece| [piece.a, piece.b])
+            .flat_map(|corner| {
+                others
+                    .iter()
+                    .map(move |other| (corner, other.closest_point(corner)))
+            })
+            .min_by_key(|&(corner, on_other)| corner.distance(on_other))
+    };
+    [nearest(&ours, &theirs), nearest(&theirs, &ours)]
+        .into_iter()
+        .flatten()
+        .min_by_key(|&(corner, on_other)| corner.distance(on_other))
+        .map_or(Point::default(), |(corner, on_other)| {
+            Point::new(
+                corner.x + (on_other.x - corner.x) / 2,
+                corner.y + (on_other.y - corner.y) / 2,
+            )
+        })
 }
 
 /// Makes the places where `routes` overlap routed copper dearer for later searches.
