@@ -94,14 +94,26 @@ fn custom_rules_come_from_the_rules_file_beside_the_board() {
 }
 
 #[test]
-fn broken_custom_rules_are_refused_with_their_line() {
+fn a_broken_custom_rule_is_left_out_with_a_warning_naming_its_line() {
     let folder = tempfile::tempdir().expect("temporary folder");
     let board = crossing_with_custom_rules(
         folder.path(),
-        "(version 1)\n(rule r\n  (constraint clearance (min 1)))",
+        "(version 1)\n(rule r\n  (constraint clearance (min 1)))\n(rule wide (constraint clearance (min 1mm)))",
     );
-    let error = load_design(&board).unwrap_err().to_string();
-    assert!(error.contains("custom rules, line 3"), "{error}");
+    let design = load_design(&board).expect("routable with the rules it can read");
+    let names: Vec<&str> = design
+        .rules
+        .custom
+        .iter()
+        .map(|r| r.name.as_str())
+        .collect();
+    assert_eq!(names, ["wide"]);
+    assert_eq!(design.warnings.len(), 1, "{:?}", design.warnings);
+    assert!(
+        design.warnings[0].contains("custom rule r") && design.warnings[0].contains("line 3"),
+        "{:?}",
+        design.warnings
+    );
 }
 
 #[test]

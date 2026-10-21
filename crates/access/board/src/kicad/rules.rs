@@ -18,9 +18,19 @@ pub(crate) struct Names<'a> {
     pub layers: &'a [Layer],
 }
 
+/// The rules of a `.kicad_dru` that traxide could read, and what it could not.
+#[derive(Debug, Default)]
+pub(crate) struct Read {
+    pub rules: Vec<CustomRule>,
+    pub warnings: Vec<String>,
+}
+
 /// The rules in `text`, in their order, one per constraint. Constraints traxide
-/// does not route by are left out, and so are rules KiCad does not check.
-pub(crate) fn read(text: &str, names: &Names) -> Result<Vec<CustomRule>, BoardError> {
+/// does not route by are left out, and so are rules KiCad does not check. A
+/// broken file does not stop routing: KiCad's DRC would ignore it all, but the
+/// rules that can be read still keep the routes where the designer meant them,
+/// so traxide leaves out only what it cannot read, and says so.
+pub(crate) fn read(text: &str, names: &Names) -> Read {
     let uncommented: String = text
         .trim_start_matches('\u{feff}')
         .lines()
@@ -33,13 +43,24 @@ pub(crate) fn read(text: &str, names: &Names) -> Result<Vec<CustomRule>, BoardEr
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let mut read = Read::default();
     // The file is a sequence of lists; one around them keeps the line numbers.
-    let root = sexpr::parse(&format!("(kicad_dru {uncommented}\n)"))?;
+    let root = match sexpr::parse(&format!("(kicad_dru {uncommented}\n)")) {
+        Ok(root) => root,
+        Err(error) => {
+            read.warnings.push(format!(
+                "the custom rules cannot be read ({error}); routing without them"
+            ));
+            return read;
+        }
+    };
     let version = root.child("version").and_then(|v| v.atoms().next());
     if version != Some("1") {
-        return Err(root.invalid("not KiCad custom rules: expected (version 1)"));
+        read.warnings.push(
+            "the custom rules lack (version 1), so KiCad's DRC ignores them; traxide routes by them anyway"
+                .to_owned(),
+        );
     }
-    let mut rules = Vec::new();
     for rule in root.children("rule") {
         let ignored = rule
             .child("severity")
@@ -48,29 +69,43 @@ pub(crate) fn read(text: &str, names: &Names) -> Result<Vec<CustomRule>, BoardEr
         if ignored {
             continue;
         }
-        let name = rule.arg_atom(0, "rule name")?;
-        let mut condition = match rule.child("condition").and_then(|c| c.atoms().next()) {
-            Some(expression) => condition(expression, names),
-            None => Condition::Always,
+        match read_rule(rule, names) {
+            Ok(rules) => read.rules.extend(rules),
+            Err(error) => {
+                let name = rule.atoms().next().unwrap_or("without a name");
+                read.warnings
+                    .push(format!("custom rule {name} left out: {error}"));
+            }
+        }
+    }
+    read
+}
+
+/// One rule, as one custom rule per constraint traxide routes by.
+fn read_rule(rule: &Sexp, names: &Names) -> Result<Vec<CustomRule>, BoardError> {
+    let mut rules = Vec::new();
+    let name = rule.arg_atom(0, "rule name")?;
+    let mut condition = match rule.child("condition").and_then(|c| c.atoms().next()) {
+        Some(expression) => condition(expression, names),
+        None => Condition::Always,
+    };
+    if let Some(layer) = rule.child("layer").and_then(|l| l.atoms().next()) {
+        condition = Condition::All(vec![on_layer(layer, names.layers), condition]);
+    }
+    for constraint in rule.children("constraint") {
+        let Some(kind) = constraint.atoms().next().and_then(constraint_kind) else {
+            continue;
         };
-        if let Some(layer) = rule.child("layer").and_then(|l| l.atoms().next()) {
-            condition = Condition::All(vec![on_layer(layer, names.layers), condition]);
-        }
-        for constraint in rule.children("constraint") {
-            let Some(kind) = constraint.atoms().next().and_then(constraint_kind) else {
-                continue;
-            };
-            rules.push(CustomRule {
-                name: name.to_owned(),
-                condition: condition.clone(),
-                constraint: kind,
-                limits: Limits {
-                    min: limit(constraint, "min")?,
-                    opt: limit(constraint, "opt")?,
-                    max: limit(constraint, "max")?,
-                },
-            });
-        }
+        rules.push(CustomRule {
+            name: name.to_owned(),
+            condition: condition.clone(),
+            constraint: kind,
+            limits: Limits {
+                min: limit(constraint, "min")?,
+                opt: limit(constraint, "opt")?,
+                max: limit(constraint, "max")?,
+            },
+        });
     }
     Ok(rules)
 }
@@ -352,7 +387,7 @@ mod tests {
             nets: &nets,
             layers: &layers,
         };
-        read(&format!("(version 1)\n{text}"), &names).expect("valid rules")
+        read(&format!("(version 1)\n{text}"), &names).rules
     }
 
     fn only(text: &str) -> CustomRule {
@@ -496,27 +531,44 @@ mod tests {
         );
     }
 
+    const NO_NAMES: Names = Names {
+        classes: &[],
+        nets: &[],
+        layers: &[],
+    };
+
+    fn names_and_warnings(text: &str) -> (Vec<String>, Vec<String>) {
+        let read = read(text, &NO_NAMES);
+        (
+            read.rules.into_iter().map(|r| r.name).collect(),
+            read.warnings,
+        )
+    }
+
     #[test]
-    fn rules_without_a_version_or_with_lengths_without_units_are_refused() {
-        let names = Names {
-            classes: &[],
-            nets: &[],
-            layers: &[],
-        };
-        assert!(read("(rule r (constraint clearance (min 1mm)))", &names).is_err());
-        assert!(matches!(
-            read(
-                "(version 1)\n(rule r\n (constraint clearance (min 1)))",
-                &names
-            ),
-            Err(BoardError::Invalid { line: 3, .. })
-        ));
-        assert!(
-            read(
-                "(version 1) (rule r (constraint clearance (min 1um)))",
-                &names
-            )
-            .is_err()
+    fn a_rule_with_a_length_traxide_cannot_read_is_left_out_with_a_warning() {
+        let (names, warnings) = names_and_warnings(
+            "(version 1)\n(rule r\n (constraint clearance (min 1)))\n(rule s (constraint clearance (min 1um)))\n(rule t (constraint clearance (min 1mm)))",
         );
+        assert_eq!(names, ["t"]);
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert!(warnings[0].contains("custom rule r") && warnings[0].contains("line 3"));
+        assert!(warnings[1].contains("custom rule s"));
+    }
+
+    #[test]
+    fn rules_without_a_version_are_read_with_a_warning() {
+        let (names, warnings) = names_and_warnings("(rule r (constraint clearance (min 1mm)))");
+        assert_eq!(names, ["r"]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("(version 1)"));
+    }
+
+    #[test]
+    fn rules_that_are_no_lists_at_all_are_left_out_with_a_warning() {
+        let (names, warnings) = names_and_warnings("(version 1)\n(rule r (constraint");
+        assert_eq!(names, Vec::<String>::new());
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("custom rules"), "{warnings:?}");
     }
 }
