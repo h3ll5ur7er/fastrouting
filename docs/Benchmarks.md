@@ -81,6 +81,8 @@ With the pins escaped, negotiation no longer needs four rounds without gain befo
 
 Issue029 stops at 120 s here either way (with no limit, 87 of 91 in 177 s with four, 85 in 132 s with two); three rounds route fewer than either. The keyboard routes the same in 0.72 s with four and 0.78 s with two (medians of seven).
 
+In CI (commit 0640dce): traxide completes 50 boards, 17 incomplete, 6 stopped, 3 failed, 1379 s in all instead of 1415 s, and still breaks no rule; Freerouting 2.5.0 completes 18, breaks rules on 18, stops on 31, in 4867 s. Against 7768025: both Mars-64 boards route 70 of 94 nets instead of 69, in 24 s and 18 s instead of 69 s and 43 s; Issue039 44 of 74 instead of 41, in 33 s instead of 51 s; bm01 83 of 99 instead of 79, in 36 s instead of 55 s; caniot 79 of 94 instead of 80; Issue029 157 of 163 instead of 159. KiCad's DRC finds the keyboard (0.7 s) and the matrix (0.2 s) clean.
+
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
 Two changes with byte for byte the same routes: an edge of the grid is checked once for both directions instead of once from each end, and a query for copper near a track or via looks as far as the largest clearance between copper, no longer as far as the board's edge clearance, which KiCad sets to 0.5 mm and the outline check covers on its own.
