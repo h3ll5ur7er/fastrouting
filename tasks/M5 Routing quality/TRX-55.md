@@ -28,4 +28,4 @@ A wide window for every search would make the long searches slower; only the sea
 - [x] When a search finds no way in its window, search again in a window grown step by step (×4) up to the board's outline, before reporting no way found
 - [x] Batches stay apart without growing their territories: the wider searches run one at a time after their batch has committed ([[TRX-27]])
 - [x] The boards above complete as in the table, but for Issue269-z10 (65 of 68); the keyboard routes the same in the same time ([[Benchmarks#a-wider-window-where-no-way-was-found-m5-trx-55]])
-- [ ] Issue029 routes 87 of 91 instead of 83 but takes 149 s instead of 40 s: make the wider searches cheaper, or the negotiation they start ([[TRX-56]])
+- [ ] Issue029 routes 87 of 91 instead of 83 but takes 149 s instead of 40 s: make the wider searches cheaper, or the negotiation they start ([[TRX-56]]). Not the cause, measured: widening a connection only until it fails once, or starting its wider search from the margin that worked before (147.5 s)
