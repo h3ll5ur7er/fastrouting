@@ -2,10 +2,12 @@
 //! with its padstack.
 
 use super::super::board::Board;
-use super::messages::{
-    Any, Distance, Drill, LAYER_BACK, LAYER_FRONT, Net, PADSTACK_NORMAL, PadStack, PadStackLayer,
-    SHAPE_CIRCLE, Track, VIA_BLIND_BURIED, VIA_THROUGH, Vector2, Via,
+use super::messages::board::types::{
+    BoardLayer, DrillProperties, Net, PadStack, PadStackLayer, PadStackShape, PadStackType, Track,
+    Via, ViaType,
 };
+use super::messages::common::types::{Distance, Vector2};
+use super::messages::{Any, Packed};
 use crate::BoardError;
 use traxide_contracts::geometry::Point;
 use traxide_contracts::{LayerId, NetId, Routes};
@@ -22,6 +24,7 @@ pub(super) fn of(board: &Board, routes: &Routes) -> Result<Vec<Any>, BoardError>
                 width: Some(distance(track.width)),
                 layer,
                 net: Some(net(board, track.net)),
+                ..Track::default()
             }));
         }
     }
@@ -38,30 +41,38 @@ pub(super) fn of(board: &Board, routes: &Routes) -> Result<Vec<Any>, BoardError>
         items.push(Any::of(&Via {
             position: Some(vector(via.position)),
             pad_stack: Some(PadStack {
-                stack_type: PADSTACK_NORMAL,
+                r#type: PadStackType::PstNormal.into(),
                 layers: vec![top, bottom],
-                drill: Some(Drill {
+                drill: Some(DrillProperties {
                     start_layer: top,
                     end_layer: bottom,
                     diameter: round(size.drill),
+                    ..DrillProperties::default()
                 }),
                 // A padstack the same on every layer keeps its shape under the front's.
                 copper_layers: vec![PadStackLayer {
-                    layer: LAYER_FRONT,
-                    shape: SHAPE_CIRCLE,
+                    layer: FRONT,
+                    shape: PadStackShape::PssCircle.into(),
                     size: round(size.diameter),
+                    ..PadStackLayer::default()
                 }],
+                ..PadStack::default()
             }),
             net: Some(net(board, via.net)),
-            via_type: if through {
-                VIA_THROUGH
+            r#type: if through {
+                ViaType::VtThrough
             } else {
-                VIA_BLIND_BURIED
-            },
+                ViaType::VtBlindBuried
+            }
+            .into(),
+            ..Via::default()
         }));
     }
     Ok(items)
 }
+
+const FRONT: i32 = BoardLayer::BlFCu as i32;
+const BACK: i32 = BoardLayer::BlBCu as i32;
 
 /// KiCad's number for the copper layer: the front, `In1.Cu` to `In30.Cu`, the back.
 fn layer_number(board: &Board, layer: LayerId) -> Result<i32, BoardError> {
@@ -70,11 +81,11 @@ fn layer_number(board: &Board, layer: LayerId) -> Result<i32, BoardError> {
         .strip_prefix("In")
         .and_then(|n| n.strip_suffix(".Cu"))
         .and_then(|n| n.parse::<i32>().ok())
-        .filter(|n| (1..LAYER_BACK - LAYER_FRONT).contains(n));
+        .filter(|n| (1..BACK - FRONT).contains(n));
     match (name.as_str(), inner) {
-        ("F.Cu", _) => Ok(LAYER_FRONT),
-        ("B.Cu", _) => Ok(LAYER_BACK),
-        (_, Some(inner)) => Ok(LAYER_FRONT + inner),
+        ("F.Cu", _) => Ok(FRONT),
+        ("B.Cu", _) => Ok(BACK),
+        (_, Some(inner)) => Ok(FRONT + inner),
         _ => Err(BoardError::Kicad(format!(
             "KiCad has no copper layer named {name}"
         ))),
@@ -84,6 +95,7 @@ fn layer_number(board: &Board, layer: LayerId) -> Result<i32, BoardError> {
 fn net(board: &Board, net: NetId) -> Net {
     Net {
         name: board.design.net(net).name.clone(),
+        code: None,
     }
 }
 
@@ -150,8 +162,12 @@ mod tests {
                     y_nm: -500
                 }),
                 width: Some(Distance { value_nm: 250_000 }),
-                layer: LAYER_FRONT + 2,
-                net: Some(Net { name: "GND".into() }),
+                layer: FRONT + 2,
+                net: Some(Net {
+                    name: "GND".into(),
+                    code: None
+                }),
+                ..Track::default()
             }
         );
         assert_eq!(tracks.len(), 2);
@@ -169,9 +185,9 @@ mod tests {
             }],
         };
         let via: Via = decoded(&of(&board, &routes).expect("convertible")[0]);
-        assert_eq!(via.via_type, VIA_THROUGH);
+        assert_eq!(via.r#type, i32::from(ViaType::VtThrough));
         let stack = via.pad_stack.expect("a padstack");
-        assert_eq!(stack.layers, [LAYER_FRONT, LAYER_BACK]);
+        assert_eq!(stack.layers, [FRONT, BACK]);
         let drill = stack.drill.expect("a drill").diameter.expect("a diameter");
         assert_eq!(drill.x_nm, 300_000, "KiCad's default via drill");
         let copper = stack.copper_layers[0].size.expect("a size");

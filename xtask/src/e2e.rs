@@ -11,7 +11,13 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 use traxide_contracts::Design;
 
-const DEFAULT_RECIPES: &[&str] = &["placements", "crossing", "matrix-3x4", "isolation"];
+const DEFAULT_RECIPES: &[&str] = &[
+    "placements",
+    "crossing",
+    "ground-pour",
+    "matrix-3x4",
+    "isolation",
+];
 
 pub fn run(args: &[String]) -> Result<()> {
     let kicad = Kicad::from_args(args);
@@ -100,7 +106,9 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
 
 /// Opens the recipe's board in KiCad, requires KiCad's API to give the same
 /// design as the board file, routes it there as a plugin would, has KiCad save
-/// it and judge it, then requires one undo to take the routes back.
+/// it and judge it with its zones as traxide left them, refilled, then
+/// requires the undos to take the routes back: one, or two on a board with
+/// copper zones, whose refill is an undo step of its own.
 fn through_running_kicad(
     kicad: &Kicad,
     root: &Path,
@@ -146,18 +154,40 @@ fn through_running_kicad(
             .concat()
             .join("\n  ")
     );
+    ensure!(
+        judgement.filled_zones == judgement.zones,
+        "routed in KiCad, {} of the board's {} copper zones are filled",
+        judgement.filled_zones,
+        judgement.zones
+    );
+    let undos = if judgement.zones > 0 {
+        running.undo()?;
+        // KiCad runs the undo on its GUI thread after answering.
+        std::thread::sleep(Duration::from_secs(2));
+        ensure!(
+            running.design()? != before,
+            "the first undo took the routes back rather than the refilled zones"
+        );
+        "two undos, the first taking back the refill"
+    } else {
+        "one undo"
+    };
     running.undo()?;
-    // KiCad runs the undo on its GUI thread after answering.
     let started = Instant::now();
     while running.design()? != before {
         ensure!(
             started.elapsed() < Duration::from_secs(10),
-            "one undo did not take the routes back out of KiCad"
+            "{undos} did not take the routes back out of KiCad"
         );
         std::thread::sleep(Duration::from_millis(200));
     }
+    let zones = if judgement.zones > 0 {
+        ", zones refilled"
+    } else {
+        ""
+    };
     Ok(format!(
-        "routed in a running KiCad ({} track segments, {} vias), clean, and gone after one undo",
+        "routed in a running KiCad ({} track segments, {} vias{zones}), clean, and gone after {undos}",
         judgement.tracks, judgement.vias
     ))
 }

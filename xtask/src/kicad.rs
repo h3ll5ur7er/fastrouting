@@ -25,6 +25,9 @@ pub struct Judgement {
     pub tracks: usize,
     pub vias: usize,
     pub length_mm: f64,
+    /// The copper zones, and those of them that KiCad filled.
+    pub zones: usize,
+    pub filled_zones: usize,
 }
 
 impl Judgement {
@@ -65,6 +68,8 @@ struct Imported {
     tracks: usize,
     vias: usize,
     length_mm: f64,
+    zones: usize,
+    filled_zones: usize,
 }
 
 impl Kicad {
@@ -231,6 +236,8 @@ fn judged(printed: &str, report: &Path) -> Result<Judgement> {
         tracks: imported.tracks,
         vias: imported.vias,
         length_mm: imported.length_mm,
+        zones: imported.zones,
+        filled_zones: imported.filled_zones,
     })
 }
 

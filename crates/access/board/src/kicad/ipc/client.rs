@@ -1,7 +1,7 @@
-use super::messages::{
-    Any, ApiRequest, ApiResponse, DOCUMENT_PCB, Document, GetOpenDocuments,
-    GetOpenDocumentsResponse, RequestHeader, StatusCode,
-};
+use super::messages::common::commands::{GetOpenDocuments, GetOpenDocumentsResponse};
+use super::messages::common::types::{DocumentSpecifier, DocumentType};
+use super::messages::common::{ApiRequest, ApiRequestHeader, ApiResponse, ApiStatusCode};
+use super::messages::{Any, Packed};
 use super::nng::{self, Connection};
 use crate::BoardError;
 use prost::{Message, Name};
@@ -85,7 +85,7 @@ impl Kicad {
         Reply: Message + Name + Default,
     {
         let envelope = ApiRequest {
-            header: Some(RequestHeader {
+            header: Some(ApiRequestHeader {
                 kicad_token: self.token.clone(),
                 client_name: self.client_name.clone(),
             }),
@@ -102,8 +102,8 @@ impl Kicad {
             let response = ApiResponse::decode(reply.as_slice())
                 .map_err(|error| failed(format!("an unreadable reply: {error}")))?;
             let status = response.status.unwrap_or_default();
-            match StatusCode::try_from(status.status).unwrap_or(StatusCode::Unknown) {
-                StatusCode::Ok => {
+            match ApiStatusCode::try_from(status.status).unwrap_or(ApiStatusCode::AsUnknown) {
+                ApiStatusCode::AsOk => {
                     let message = response.message.unwrap_or_default();
                     return message.to::<Reply>().ok_or_else(|| {
                         failed(format!(
@@ -113,23 +113,26 @@ impl Kicad {
                         ))
                     });
                 }
-                StatusCode::Busy | StatusCode::NotReady if started.elapsed() < PATIENCE => {
+                ApiStatusCode::AsBusy | ApiStatusCode::AsNotReady
+                    if started.elapsed() < PATIENCE =>
+                {
                     std::thread::sleep(RETRY_PAUSE);
                 }
-                StatusCode::Busy | StatusCode::NotReady => {
+                ApiStatusCode::AsBusy | ApiStatusCode::AsNotReady => {
                     return Err(failed(format!(
                         "KiCad stayed busy for {} s; close any dialog open in KiCad and try again",
                         PATIENCE.as_secs()
                     )));
                 }
-                StatusCode::TokenMismatch => {
+                ApiStatusCode::AsTokenMismatch => {
                     return Err(failed(
                         "KiCad refused the token: the KiCad that started traxide has closed".into(),
                     ));
                 }
                 code => {
                     return Err(failed(format!(
-                        "KiCad answered {code:?}: {}",
+                        "KiCad answered {}: {}",
+                        status_name(code),
                         status.error_message
                     )));
                 }
@@ -138,9 +141,9 @@ impl Kicad {
     }
 
     /// The board open in KiCad's PCB editor.
-    pub fn open_board(&mut self) -> Result<Document, BoardError> {
+    pub fn open_board(&mut self) -> Result<DocumentSpecifier, BoardError> {
         let open: GetOpenDocumentsResponse = self.call(&GetOpenDocuments {
-            document_type: DOCUMENT_PCB,
+            r#type: DocumentType::DoctypePcb.into(),
         })?;
         open.documents
             .into_iter()
@@ -149,9 +152,16 @@ impl Kicad {
     }
 }
 
+/// The status without the `As` that the generated enum puts before each name.
+fn status_name(code: ApiStatusCode) -> String {
+    let name = format!("{code:?}");
+    name.strip_prefix("As").unwrap_or(&name).to_owned()
+}
+
 #[cfg(all(test, unix))]
 mod tests {
-    use super::super::messages::{GetNets, NetsResponse};
+    use super::super::messages::board::commands::{GetNets, NetsResponse};
+    use super::super::messages::common::ApiResponseStatus;
     use super::*;
     use std::os::unix::net::UnixListener;
 
@@ -171,9 +181,10 @@ mod tests {
         );
     }
 
-    fn reply(status: StatusCode, message: Option<Any>) -> Vec<u8> {
+    fn reply(status: ApiStatusCode, message: Option<Any>) -> Vec<u8> {
         ApiResponse {
-            status: Some(super::super::messages::ResponseStatus {
+            header: None,
+            status: Some(ApiResponseStatus {
                 status: status as i32,
                 error_message: "the reason".into(),
             }),
@@ -202,9 +213,9 @@ mod tests {
     fn retries_while_kicad_is_busy() {
         let nets = NetsResponse::default();
         let (_folder, environment) = kicad_answering(vec![
-            reply(StatusCode::NotReady, None),
-            reply(StatusCode::Busy, None),
-            reply(StatusCode::Ok, Some(Any::of(&nets))),
+            reply(ApiStatusCode::AsNotReady, None),
+            reply(ApiStatusCode::AsBusy, None),
+            reply(ApiStatusCode::AsOk, Some(Any::of(&nets))),
         ]);
         let mut kicad = Kicad::connect(&environment).expect("connected");
         let answer: NetsResponse = kicad.call(&GetNets::default()).expect("answered");
@@ -213,7 +224,8 @@ mod tests {
 
     #[test]
     fn says_why_kicad_refused_a_request() {
-        let (_folder, environment) = kicad_answering(vec![reply(StatusCode::BadRequest, None)]);
+        let (_folder, environment) =
+            kicad_answering(vec![reply(ApiStatusCode::AsBadRequest, None)]);
         let mut kicad = Kicad::connect(&environment).expect("connected");
         let error = kicad
             .call::<_, NetsResponse>(&GetNets::default())
@@ -227,7 +239,7 @@ mod tests {
     #[test]
     fn refuses_a_reply_of_another_type() {
         let (_folder, environment) = kicad_answering(vec![reply(
-            StatusCode::Ok,
+            ApiStatusCode::AsOk,
             Some(Any::of(&GetNets::default())),
         )]);
         let mut kicad = Kicad::connect(&environment).expect("connected");

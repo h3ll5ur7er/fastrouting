@@ -4,11 +4,13 @@
       builds the recipe's board, saves FOLDER/RECIPE.kicad_pcb with its custom
       rules in FOLDER/RECIPE.kicad_dru, if it has any, and exports
       FOLDER/RECIPE.dsn, as a user would with File → Export → Specctra DSN.
+      Its zones stay unfilled.
 
   python3 roundtrip.py import BOARD.kicad_pcb SESSION.ses ROUTED.kicad_pcb
       imports the session into the board, as File → Import → Specctra Session
       does, saves the result as ROUTED.kicad_pcb and prints, as JSON, how many
-      tracks and vias it holds and how long the tracks are.
+      tracks and vias it holds, how long the tracks are, and how many copper
+      zones it has and how many of them are filled.
 
   python3 roundtrip.py stats ROUTED.kicad_pcb
       loads a board routed without KiCad, as KiCad opens it, and prints the
@@ -67,7 +69,14 @@ def print_stats(board) -> None:
     items = list(board.GetTracks())
     vias = [item for item in items if item.GetClass() == "PCB_VIA"]
     length = sum(item.GetLength() for item in items if item.GetClass() != "PCB_VIA")
-    print(json.dumps({"tracks": len(items) - len(vias), "vias": len(vias), "length_mm": pcbnew.ToMM(length)}))
+    zones = [zone for zone in board.Zones() if not zone.GetIsRuleArea()]
+    print(json.dumps({
+        "tracks": len(items) - len(vias),
+        "vias": len(vias),
+        "length_mm": pcbnew.ToMM(length),
+        "zones": len(zones),
+        "filled_zones": sum(1 for zone in zones if zone.IsFilled()),
+    }))
 
 
 if __name__ == "__main__":

@@ -16,10 +16,12 @@ Prove the in-editor path before building it ([[Research/KiCad-integration]]). Pr
 - [x] Install through PCM's *Install from File* on Linux: executable bit kept, toolbar icons shown, the action commits through the API
 - [ ] Install on Windows and macOS; check the named pipe, the toolbar icon and macOS quarantine (moved to [[TRX-33]], which builds those packages)
 - [x] Note what KiCad 11 (master) changes: design rules over IPC, headless mode
-- [x] Settle the licence question: messages are defined from field numbers, so no `.proto` text enters traxide; whether to ask the KiCad developers anyway is the maintainer's call
+- [x] Settle the licence question: the spike defined messages from field numbers, so no `.proto` text entered traxide; the maintainer then decided to generate them from KiCad's `.proto` files after all ([[TRX-31]])
 
 **Findings.** KiCad passes `KICAD_API_SOCKET` as an NNG address (`ipc://…`), not a path, starts an exec action from its folder with no arguments, and sets `KIPRJMOD` to the project. NNG's REQ framing is simple enough to write in about 100 lines of pure Rust, which avoids building C libnng with CMake for every release target. KiCad 10 serves net classes but not the board's minimum rules or custom rules, which come from the project files. With the API off, the plugin's buttons are not shown at all. Details and sources: [[Research/KiCad-integration#the-ipc-api]].
 
 **Decisions for the maintainer.** Hand-written client (recommended) or `kicad-ipc-rs`; whether to ask the KiCad developers to confirm that clients of the API may be permissively licensed; how a single binary serves several actions without arguments (one entry point per action).
+
+**Decided.** The client stays hand-written, but its messages are generated from KiCad's own `.proto` files, vendored unchanged with their GPL-3.0-or-later headers in `crates/access/board/proto/kicad/`, as `kicad-python` (MIT) and other permissive clients do: the maintainer accepts the small licence risk, and these files are the one exception to the clean-room rules ([[Development#clean-room-rules]]). The KiCad developers were not asked.
 
 **Depends on:** [[TRX-1]]
