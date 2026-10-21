@@ -2,7 +2,7 @@
 id: TRX-54
 title: Leave off-grid pins along their axis
 type: improvement
-status: review
+status: done
 priority: high
 labels: [detailed-routing]
 estimate: 2
@@ -18,6 +18,6 @@ Fix it where the pad is left, not by refining the grid: a stub from the pad's ce
 - [x] The path keeps the stub as its first and last segment; the octilinear test of [[TRX-47]] still holds
 - [x] Corpus, each with its unrouted count before → after: Issue508-DAC2020_bm01 (42 hemmed in), bm05 (22), bm06 (4), Issue102 and Issue326 Mars-64 (11 each), Issue269-caniot-tiny-arm (28, with [[TRX-57]]), Issue297-myboard (4), Issue157-TeamAdapt-LinePCB (1)
   - unrouted 42 → 26, 22 → 8, 4 → **0**, 25 → 23 each, 86 → 83, 4 → 1, 3 → 3; hemmed in 42 → 0, 22 → 2, 4 → 0, 11 → 0, 33 → 6, 4 → 1, 3 → 3 ([[Benchmarks#off-grid-pins-left-along-their-axis-m5-trx-54]]). Issue157's three end at pads the board's own track runs across ([[TRX-59]])
-- [x] The keyboard and the key matrices route as before ([[Benchmarks]]): keyboard-tkl's and matrix-3x4's DSN route byte for byte the same, the keyboard in 2.10 s instead of 2.05 s; the KiCad round trip still to run where Docker is available
+- [x] The keyboard and the key matrices route as before ([[Benchmarks]]): keyboard-tkl's and matrix-3x4's DSN route byte for byte the same, the keyboard in 2.10 s instead of 2.05 s; and `cargo xtask e2e` with the keyboard is clean in KiCad 10's DRC, from the DSN, the board file and the plugin
 
 Freerouting connects bm06 completely and cleanly where traxide leaves these 4 pins; bm05 and bm06 are two of the seven boards where Freerouting connects more ([[Benchmarks#real-boards-the-corpus-against-freerouting-m2-trx-15]]). The free-space graph of [[TRX-48]] would contain the pins' axes anyway; this fix is needed whichever search remains.
