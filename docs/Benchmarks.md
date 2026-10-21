@@ -39,6 +39,27 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Fine-pitch pins escaped first (M5, TRX-56)
+
+Freerouting's log shows a fan-out stage that escapes most SMD pins before anything else (236 of 242 on Issue039). Planning now does the same for fine-pitch pins: each SMD pin of a part with at least 8 pins that another net's copper hems in, and that connects to another part, gets a stub straight away from its part, or at 45° to either side, to the nearest point off the pin where a track may turn any way. The stubs are planned before any connection is routed, one after the other along each row, and held as fixed copper of their nets, so other connections cannot take a pin's only way out; the connections that leave the part start at the stub's end ([[TRX-56]]). Measured alone on this machine, connections routed and time (the keyboard and matrix: median of nine runs; every session as clean as before):
+
+| Board | Before | A stub and a via (rejected) | **A stub (kept)** |
+| --- | --- | --- | --- |
+| keyboard-tkl (315) | 315, 1.64 s, 113 vias | 315, 2.1 s, 136 vias | **315, 0.82 s, 101 vias** |
+| matrix-6x17 (306) | 306, 0.21 s | the same routes | the same routes, 0.22 s |
+| Issue039-bug-design (204) | 157, 72 s | 156, 91 s | **164**, 83 s |
+| Issue102, Issue326 Mars-64 (106 each) | 83, 41 s | 79, 42 s | 81, 86 s |
+| Issue283-UnconnectedTracesUnderPads (200) | 182, 91 s | 182, 91 s | 182, 88 s |
+| Issue508-DAC2020_bm01 (195) | 169, 80 s | 172, 99 s | **173**, 105 s |
+| Issue269-caniot-tiny-arm (89) | 72, 19 s | 69, 21 s | **74**, 17 s |
+| Issue034-Green14SegLED (147) | 147, 26 s | 147, 25 s | 147, 25 s |
+| Issue110-RelayModule (88) | 84, 86 s | **88**, 43 s | **88, 20 s** |
+| Issue015-StackOverflow (61) | 61, 19 s | 61, 20 s | 61, 20 s |
+
+On the keyboard 36 pins escape. A via at the end of each stub made the keyboard slower and cost Mars-64 four connections: at 0.5 mm pitch, 0.6 mm vias do not fit beside each other, so only half the pins of each TQFP got one, and those vias stood in the way of the rest. With `cargo xtask bench`, KiCad 10's DRC finds the keyboard (1.0 s, 101 vias) and the matrix clean, with nothing unconnected.
+
+The whole corpus, 120 s per board: 49 boards complete instead of 47 (Issue110-RelayModule and Issue297-myboard), none less complete except Mars-64, 18 connections more in all (Issue508-bm05 99 → 103 of 107 in 2.4 s instead of 5.1 s), and no session breaks a rule the board did not already break. Mars-64 loses 2 connections of 106 and takes twice as long, for reasons not yet known.
+
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
 Two changes with byte for byte the same routes: an edge of the grid is checked once for both directions instead of once from each end, and a query for copper near a track or via looks as far as the largest clearance between copper, no longer as far as the board's edge clearance, which KiCad sets to 0.5 mm and the outline check covers on its own.

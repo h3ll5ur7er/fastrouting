@@ -39,7 +39,7 @@ The Rules Engine turns the design's rules into a `ConstraintSet`: a clearance ma
 
 - **Decompose** each multi-pin net into two-pin connections: a rectilinear Steiner tree (FLUTE-style) or MST, and ordered chains for the rows and columns of a key matrix.
 - **Recognise structure**: a switch and its diode become a short local stub; rows and columns become buses.
-- **Pre-route patterns**: escapes for QFN and BGA pads from templates, plane-connection vias for GND and power, the coupled regions of differential pairs.
+- **Pre-route patterns**: escapes for QFN and BGA pads from templates, plane-connection vias for GND and power, the coupled regions of differential pairs. Built so far: each hemmed-in SMD pin of a part with at least 8 pins gets a stub straight away from its part to where a track may turn, held as fixed copper of its net before anything is routed; the connections that leave the part start there ([[TRX-56]]). A via at the end of each stub was tried and rejected ([[Benchmarks#fine-pitch-pins-escaped-first-m5-trx-56]]).
 - **Order**: connections from hemmed-in pads (no track fits between them and another net's copper, as at a fine-pitch chip) first, then shortest first; ties by names, never by the order the board lists things in. Detailed routing then forms batches of connections whose territories are apart ([Parallelism and GPU](Parallelism-and-GPU.md#batches)).
 
 ### Global routing

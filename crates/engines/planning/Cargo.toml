@@ -12,6 +12,9 @@ traxide-contracts.workspace = true
 
 [dev-dependencies]
 traxide-contracts = { workspace = true, features = ["testing"] }
+traxide-layout-access.workspace = true
+traxide-rules.workspace = true
+traxide-verification.workspace = true
 
 [lints]
 workspace = true

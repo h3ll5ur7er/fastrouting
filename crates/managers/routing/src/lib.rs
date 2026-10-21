@@ -202,9 +202,13 @@ pub fn route(
     let skipped = net_classes_named(&design, &job.unrouted_net_classes)?;
     plan.connections
         .retain(|c| !skipped.contains(&design.net(c.net).class));
+    let escaped = traxide_planning::escape(&design, &rules, &plan, &mut layout);
+    // Built anew, the layout holds the escapes as pads of their nets, which
+    // rip-up can never take from them.
+    let (plan, mut layout) = (&escaped.plan, Layout::build(&escaped.design, &rules));
     let corridors = profile.global_routing.then(|| {
         events.publish(Event::StageStarted(Stage::GlobalRouting));
-        traxide_global::route(&design, &plan, &rules, &profile)
+        traxide_global::route(&escaped.design, plan, &rules, &profile)
     });
     events.publish(Event::StageStarted(Stage::Routing));
     let total = plan.connections.len();
@@ -212,14 +216,27 @@ pub fn route(
         .threads
         .or_else(|| std::thread::available_parallelism().ok())
         .map_or(1, NonZeroUsize::get);
-    let mut router = Router::new(&design, &rules, &profile).with_threads(threads);
+    let mut router = Router::new(&escaped.design, &rules, &profile).with_threads(threads);
     let RoutingResult {
-        routes,
+        routes: routed,
         unrouted,
         hemmed_in,
         exits_taken,
         cut_off,
-    } = router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
+    } = router.route_plan(plan, corridors.as_ref(), &mut layout, cancel, events);
+    let mut routes = escaped.copper_used(&unrouted);
+    routes.extend(routed);
+    let at_pins = |connections: Vec<Connection>| -> Vec<Connection> {
+        connections
+            .into_iter()
+            .map(|c| escaped.at_pins(c))
+            .collect()
+    };
+    let at_pin = |pads: Vec<PadId>| -> Vec<PadId> {
+        pads.into_iter().map(|p| escaped.original(p)).collect()
+    };
+    let (unrouted, cut_off) = (at_pins(unrouted), at_pins(cut_off));
+    let (hemmed_in, exits_taken) = (at_pin(hemmed_in), at_pin(exits_taken));
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());

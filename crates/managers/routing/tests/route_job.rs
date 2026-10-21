@@ -312,3 +312,17 @@ fn says_when_the_board_itself_leaves_no_way_between_two_pads() {
     let reasons: Vec<&[Unroutable]> = report.unrouted.iter().map(|u| u.why.as_slice()).collect();
     assert_eq!(reasons, [&[Unroutable::CutOff][..]]);
 }
+
+#[test]
+fn the_pins_of_a_fine_pitch_chip_escape_by_stubs_that_the_session_keeps() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let report = route(
+        &job("fine-pitch.dsn", &folder.path().join("board.ses")),
+        &Silent,
+        &CancelToken::new(),
+    )
+    .expect("routable");
+    assert_eq!((report.connections, report.unrouted.len()), (16, 0));
+    assert!(report.verdict.is_clean(), "{:?}", report.verdict);
+    assert!(report.tracks >= 2 * 16, "a stub and a route per pin");
+}
