@@ -683,6 +683,41 @@ fn a_connection_that_fixed_copper_cuts_off_is_named() {
 }
 
 #[test]
+fn past_its_deadline_routing_searches_no_further_than_each_window() {
+    // As above, but routing has no time left for whole-board searches: B
+    // stays unrouted without being found cut off.
+    let ring = [
+        wall(at(7.0, 2.0), at(13.0, 2.5)),
+        wall(at(7.0, 7.5), at(13.0, 8.0)),
+        wall(at(7.0, 2.0), at(7.5, 8.0)),
+        wall(at(12.5, 2.0), at(13.0, 8.0)),
+    ];
+    let mut builder = DesignBuilder::new(20.0, 10.0).layers(1);
+    for side in ring {
+        builder = builder.keepout(side, None, KeepoutScope::Everything);
+    }
+    let design = builder
+        .smd("B1", Some("B"), at(10.0, 5.0), 0.5, 0)
+        .smd("B2", Some("B"), at(17.0, 5.0), 0.5, 0)
+        .build();
+    let rules = traxide_rules::compile(
+        &design,
+        Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
+    let mut layout = Layout::build(&design, &rules);
+    let plan = Plan {
+        connections: vec![connection(&design, "B1", "B2")],
+    };
+    let result = Router::new(&design, &rules, &profile())
+        .with_deadline(std::time::Instant::now())
+        .route_plan(&plan, None, &mut layout, &CancelToken::new(), &Silent);
+    assert_eq!(result.unrouted, [connection(&design, "B1", "B2")]);
+    assert_eq!(result.cut_off, []);
+}
+
+#[test]
 fn a_connection_only_routed_copper_cuts_off_is_not_named_cut_off() {
     // A's track crosses the one-layer board from edge to edge before B is
     // routed, with no rip-up: B1 lies below it, B2 above.

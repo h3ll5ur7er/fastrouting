@@ -69,11 +69,17 @@ impl<'a> Router<'a> {
 
     /// Searches the connections of a batch on up to `threads` threads. The
     /// routes are the same on any number of them.
-    /// Stops negotiation at `deadline`: what is still queued then routes
-    /// once more without crossing anything, so routing ends a little later.
+    /// Stops negotiation at `deadline`: what is still queued then routes once
+    /// more without crossing anything, each in its own window only, so routing
+    /// ends a little later.
     pub fn with_deadline(mut self, deadline: Instant) -> Self {
         self.deadline = Some(deadline);
         self
+    }
+
+    fn is_past_deadline(&self) -> bool {
+        self.deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
     }
 
     pub fn with_threads(mut self, threads: usize) -> Self {
@@ -115,10 +121,7 @@ impl<'a> Router<'a> {
                 unrouted.extend(state.queue.drain(..));
                 break;
             }
-            if self
-                .deadline
-                .is_some_and(|deadline| Instant::now() >= deadline)
-            {
+            if self.is_past_deadline() {
                 state.may_rip_up = false;
             }
             let batch = self.next_batch(&mut state.queue, plan, corridors);
@@ -144,6 +147,11 @@ impl<'a> Router<'a> {
             // the copper of a connection searched beside it.
             for id in no_way {
                 let connection = plan.connections[id.index()];
+                // Past the deadline no time is left for searches up to the whole board.
+                if self.is_past_deadline() {
+                    unrouted.push(id);
+                    continue;
+                }
                 match self.find_wider(connection, layout, state.negotiation()) {
                     Some(found) => state.commit(self.finder.design, layout, id, found, &[], events),
                     None => {

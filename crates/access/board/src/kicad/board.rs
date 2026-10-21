@@ -142,18 +142,16 @@ impl<'a> Reader<'a> {
             }
         }
         let outline = self.outline()?;
+        let mut warnings = Vec::new();
         if let Some(text) = custom_rules {
             let names = rules::Names {
                 classes: &rules.classes,
                 nets: &self.nets,
                 layers: &self.layers,
             };
-            rules.custom = rules::read(text, &names).map_err(|error| match error {
-                BoardError::Syntax { line, message } | BoardError::Invalid { line, message } => {
-                    BoardError::CustomRules { line, message }
-                }
-                other => other,
-            })?;
+            let read = rules::read(text, &names);
+            rules.custom = read.rules;
+            warnings = read.warnings;
         }
         for (index, pad) in pads.iter().enumerate() {
             if let Some(net) = pad.net {
@@ -180,7 +178,7 @@ impl<'a> Reader<'a> {
                 rules,
                 // KiCad's files are in millimetres to the nanometre.
                 resolution: 1,
-                warnings: Vec::new(),
+                warnings,
             },
             via_sizes: self.via_kinds.sizes,
             net_numbers,
