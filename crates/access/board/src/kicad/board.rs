@@ -532,13 +532,14 @@ impl<'a> Reader<'a> {
     }
 
     /// The outer loops of the edges are the board; loops inside them are
-    /// cutouts, which keep everything out.
+    /// holes in it, cutouts that copper keeps the edge clearance from, as
+    /// KiCad's DRC does, whether the board or a footprint draws them.
     fn outline(&mut self) -> Result<Region, BoardError> {
         let polygons: Vec<Polygon> = loops(std::mem::take(&mut self.edges))
             .into_iter()
             .filter_map(|points| Polygon::new(distinct(points)))
             .collect();
-        let mut outer = Vec::new();
+        let (mut outer, mut holes) = (Vec::new(), Vec::new());
         for (i, polygon) in polygons.iter().enumerate() {
             let around = polygons
                 .iter()
@@ -548,18 +549,15 @@ impl<'a> Reader<'a> {
             if around % 2 == 0 {
                 outer.push(polygon.clone());
             } else {
-                let all = self.all_layers();
-                self.keepouts_on(
-                    &all,
-                    Shape::Polygon(polygon.clone()),
-                    KeepoutScope::Everything,
-                );
+                holes.push(polygon.clone());
             }
         }
-        Region::new(outer).ok_or_else(|| {
-            self.root
-                .invalid("the board has no closed outline on the Edge.Cuts layer")
-        })
+        Region::new(outer)
+            .map(|region| region.with_holes(holes))
+            .ok_or_else(|| {
+                self.root
+                    .invalid("the board has no closed outline on the Edge.Cuts layer")
+            })
     }
 }
 
@@ -1044,13 +1042,17 @@ mod tests {
     }
 
     #[test]
-    fn a_loop_inside_the_outline_is_a_cutout() {
+    fn a_loop_inside_the_outline_is_a_hole_in_the_board() {
+        // A hole is board edge, which copper keeps the edge clearance from, not
+        // a keepout, which it only may not touch.
         let design = board(r#"(gr_circle (center 5 5) (end 6 5) (layer "Edge.Cuts"))"#);
         assert_eq!(design.outline.polygons().len(), 1);
-        assert_eq!(design.keepouts.len(), 1);
-        let hole = design.keepouts[0].shape.bounds();
+        assert_eq!(design.keepouts.len(), 0);
+        assert_eq!(design.outline.holes().len(), 1);
+        let hole = design.outline.holes()[0].bounds();
         assert!(hole.min.x >= 4 * MM && hole.max.x <= 6 * MM, "{hole:?}");
-        assert!(design.keepouts[0].shape.bounds().max.x > 6 * MM - 10_000);
+        assert!(hole.max.x > 6 * MM - 10_000);
+        assert!(!design.outline.contains(Point::new(5 * MM, 5 * MM)));
     }
 
     #[test]

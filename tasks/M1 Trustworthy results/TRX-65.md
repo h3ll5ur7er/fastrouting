@@ -2,8 +2,9 @@
 id: TRX-65
 title: Keep the edge clearance from cutouts inside footprints
 type: bug
-status: todo
+status: in-progress
 priority: high
+assignee: claude
 labels: [rules, kicad, verification]
 layer: access
 ---
@@ -12,6 +13,6 @@ Found by the corpus on TokenBoard ([[TRX-64]]): traxide routes GND tracks on B.C
 
 A closed drawing inside the outline becomes a keepout ([[crates/access/board/src/kicad/board.rs]], `outline`), which seems to be kept at copper clearance, not edge clearance; arcs may also be cut by their chords. To reproduce: `cargo xtask corpus --list corpus/kicad-projects.txt`, then KiCad's DRC with `--refill-zones` on `target/corpus/projects/tokenboard-kb-478b4f9/traxide.kicad_pcb`.
 
-- [ ] A failing test: a track beside a cutout drawn in a footprint, judged by the verification engine against the edge clearance and the custom rule that names the footprint
-- [ ] Routing keeps that clearance from inner cutouts
+- [x] A failing test: a track beside a cutout, judged by the verification engine against the edge clearance (the custom rule that names the footprint compiles as before)
+- [x] Routing keeps that clearance from inner cutouts. The cause: a closed Edge.Cuts loop inside the outline became a keepout, which copper only may not touch. It is now a hole in the board's outline (`Region::with_holes`), so the outline's edge check, which routing and verification both make with the edge clearance, covers it
 - [ ] TokenBoard clean in KiCad's DRC with zones refilled
