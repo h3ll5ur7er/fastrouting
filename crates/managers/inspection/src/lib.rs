@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use traxide_board_access::BoardError;
-use traxide_contracts::{Violation, geometry::Point};
+use traxide_contracts::{ConstraintSet, Design, Violation, geometry::Point};
 use traxide_rules::Purpose;
 
 /// Check the board in `board`, with the routes of `session` if given.
@@ -95,6 +95,26 @@ pub fn check(job: &CheckJob) -> Result<CheckReport, CheckError> {
         tracks: routes.tracks.len(),
         vias: routes.vias.len(),
         track_length_mm: routes.tracks.iter().map(|t| length(&t.path)).sum::<i64>() as f64 / 1e6,
-        warnings: design.warnings.clone(),
+        warnings: [design.warnings.clone(), pads_too_close(&design, &rules)].concat(),
     })
+}
+
+/// Warns of each pair of pads of different nets closer than their clearance,
+/// which verification leaves to the footprints and no routing can fix.
+fn pads_too_close(design: &Design, rules: &ConstraintSet) -> Vec<String> {
+    let named = |pad| {
+        let pad = design.pad(pad);
+        let net = pad.net.map_or("", |net| design.net(net).name.as_str());
+        format!("{} (net {net})", pad.name)
+    };
+    traxide_verification::pads_too_close(design, rules)
+        .into_iter()
+        .map(|[a, b]| {
+            format!(
+                "the pads {} and {} are closer than their clearance",
+                named(a),
+                named(b)
+            )
+        })
+        .collect()
 }

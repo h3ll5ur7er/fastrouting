@@ -35,11 +35,7 @@ pub fn load_design(path: &Path) -> Result<Design, BoardError> {
 fn parts_outside(design: &Design) -> Option<String> {
     let mut inside_or_not: BTreeMap<&str, bool> = BTreeMap::new();
     for pad in &design.pads {
-        let part = pad
-            .name
-            .rsplit_once('-')
-            .map_or(pad.name.as_str(), |(part, _)| part);
-        *inside_or_not.entry(part).or_insert(false) |= design.outline.contains(pad.position);
+        *inside_or_not.entry(pad.part()).or_insert(false) |= design.outline.contains(pad.position);
     }
     let outside: Vec<&str> = inside_or_not
         .into_iter()

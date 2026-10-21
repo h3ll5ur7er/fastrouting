@@ -134,10 +134,15 @@ struct Stub {
 }
 
 /// Why a search found no route.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum NoRoute {
-    /// No track can leave this pad at all.
-    HemmedIn(PadId),
+    /// No track can leave these pads at all.
+    Blocked {
+        /// Pads fixed copper, a keepout or the edge leaves no way out of.
+        hemmed_in: Vec<PadId>,
+        /// Pads whose every way out the routed copper of other connections took.
+        exits_taken: Vec<PadId>,
+    },
     NotFound,
 }
 
@@ -164,6 +169,8 @@ pub(crate) struct Search<'a, L> {
     diagonal: i64,
     /// What crossing routed copper costs; `None` when it may not be crossed at all.
     negotiation: Option<Negotiation<'a>>,
+    /// Whether routed copper is looked through, to tell what fixed copper alone blocks.
+    ignores_routed_copper: bool,
     /// The profile's heuristic weight in thousandths, so ranking stays in integers.
     weight_per_mille: i64,
     /// The corridor global routing planned for this connection, if any.
@@ -198,6 +205,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 .distance(Point::new(profile.grid_pitch, profile.grid_pitch))
                 .max(pitch),
             negotiation,
+            ignores_routed_copper: false,
             corridor,
             weight_per_mille: (profile.heuristic_weight * 1000.0).round() as i64,
         }
@@ -208,11 +216,8 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             return Ok(direct);
         }
         let (from_access, to_access) = (self.access(self.from), self.access(self.to));
-        if from_access.is_empty() {
-            return Err(NoRoute::HemmedIn(self.connection.from));
-        }
-        if to_access.is_empty() {
-            return Err(NoRoute::HemmedIn(self.connection.to));
+        if from_access.is_empty() || to_access.is_empty() {
+            return Err(self.blocked(from_access.is_empty(), to_access.is_empty()));
         }
         // A search floods everything cheaper than the way into its target. Into a
         // pad hemmed in by its neighbours, such as a pin of a fine-pitch chip,
@@ -231,6 +236,30 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
         self.search(from_access, to_access, scratch)
             .ok_or(NoRoute::NotFound)
+    }
+
+    /// Which of the connection's pads with no way out fixed copper hems in, and
+    /// which only routed copper does, which may move.
+    fn blocked(self, from_blocked: bool, to_blocked: bool) -> NoRoute {
+        let fixed_only = Search {
+            ignores_routed_copper: true,
+            ..self
+        };
+        let (mut hemmed_in, mut exits_taken) = (Vec::new(), Vec::new());
+        for (blocked, id, pad) in [
+            (from_blocked, self.connection.from, self.from),
+            (to_blocked, self.connection.to, self.to),
+        ] {
+            match (blocked, fixed_only.access(pad).is_empty()) {
+                (false, _) => {}
+                (true, true) => hemmed_in.push(id),
+                (true, false) => exits_taken.push(id),
+            }
+        }
+        NoRoute::Blocked {
+            hemmed_in,
+            exits_taken,
+        }
     }
 
     fn search(self, start: Vec<Way>, target: Vec<Way>, scratch: &mut Scratch) -> Option<Vec<Step>> {
@@ -406,6 +435,12 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     /// What a track segment costs beyond its length: nothing when it is clear,
     /// the price of ripping up what it crosses when that is allowed, else `None`.
     fn track_extra(&self, layer: LayerId, segment: Segment) -> Option<i64> {
+        if self.ignores_routed_copper {
+            let obstruction = self
+                .layout
+                .track_obstruction(self.net, layer, segment, self.width);
+            return (obstruction != Obstruction::Fixed).then_some(0);
+        }
         match self.negotiation {
             None => self
                 .layout

@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
 pub use traxide_board_access::RUNNING_KICAD;
 use traxide_contracts::{
-    Connection, CopperItem, Design, Event, NetClassId, PadId, Routes, RoutingResult, Stage,
-    Verdict, Violation,
+    Connection, ConstraintSet, CopperItem, Design, Event, NetClassId, PadId, Routes, RoutingResult,
+    Stage, Verdict, Violation,
 };
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Publisher};
@@ -66,7 +66,9 @@ pub struct Unrouted {
     pub net: String,
     pub from: String,
     pub to: String,
-    pub why: Unroutable,
+    /// What blocks each of its pads that no track can leave, or else that no
+    /// way was found between them.
+    pub why: Vec<Unroutable>,
 }
 
 /// Why a connection stayed unrouted, so that the designer can act on it.
@@ -79,6 +81,9 @@ pub enum Unroutable {
     /// Copper of another net, a keepout or the board's edge is too close to
     /// this pad for any track to leave it.
     HemmedIn(String),
+    /// The tracks of other connections took every way out of this pad; routed
+    /// in another order, it may have been left.
+    ExitsTaken(String),
     /// Both pads can be left, but no way between them was found.
     NoWayFound,
 }
@@ -91,6 +96,31 @@ pub enum RouteError {
     Profile(#[from] ProfileError),
     #[error("no net class named {name}; there are {}", known.join(", "))]
     UnknownNetClass { name: String, known: Vec<String> },
+}
+
+fn why_unrouted(
+    design: &Design,
+    connection: &Connection,
+    hemmed_in: &[PadId],
+    exits_taken: &[PadId],
+) -> Vec<Unroutable> {
+    let blocked: Vec<Unroutable> = [connection.from, connection.to]
+        .into_iter()
+        .filter_map(|pad| {
+            if hemmed_in.contains(&pad) {
+                Some(why_hemmed_in(design, pad))
+            } else {
+                exits_taken
+                    .contains(&pad)
+                    .then(|| Unroutable::ExitsTaken(design.pad(pad).name.clone()))
+            }
+        })
+        .collect();
+    if blocked.is_empty() {
+        vec![Unroutable::NoWayFound]
+    } else {
+        blocked
+    }
 }
 
 /// What keeps every track from leaving `pad`.
@@ -181,15 +211,13 @@ pub fn route(
         routes,
         unrouted,
         hemmed_in,
+        exits_taken,
     } = router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());
-    let full_verdict = traxide_verification::verify(
-        &design,
-        &traxide_rules::compile(&design, Purpose::Verification),
-        &everything,
-    );
+    let verification_rules = traxide_rules::compile(&design, Purpose::Verification);
+    let full_verdict = traxide_verification::verify(&design, &verification_rules, &everything);
     events.publish(Event::StageStarted(Stage::Storing));
     let output = job
         .output
@@ -214,10 +242,7 @@ pub fn route(
         net: design.net(c.net).name.clone(),
         from: design.pad(c.from).name.clone(),
         to: design.pad(c.to).name.clone(),
-        why: [c.from, c.to]
-            .into_iter()
-            .find(|pad| hemmed_in.contains(pad))
-            .map_or(Unroutable::NoWayFound, |pad| why_hemmed_in(&design, pad)),
+        why: why_unrouted(&design, c, &hemmed_in, &exits_taken),
     };
     Ok(RouteReport {
         connections: total,
@@ -235,6 +260,30 @@ pub fn route(
             .filter(|layer| !layer.routable)
             .map(|layer| layer.name.clone())
             .collect(),
-        warnings: design.warnings.clone(),
+        warnings: [
+            design.warnings.clone(),
+            pads_too_close(&design, &verification_rules),
+        ]
+        .concat(),
     })
+}
+
+/// Warns of each pair of pads of different nets closer than their clearance,
+/// which verification leaves to the footprints and no routing can fix.
+fn pads_too_close(design: &Design, rules: &ConstraintSet) -> Vec<String> {
+    let named = |pad| {
+        let pad = design.pad(pad);
+        let net = pad.net.map_or("", |net| design.net(net).name.as_str());
+        format!("{} (net {net})", pad.name)
+    };
+    traxide_verification::pads_too_close(design, rules)
+        .into_iter()
+        .map(|[a, b]| {
+            format!(
+                "the pads {} and {} are closer than their clearance",
+                named(a),
+                named(b)
+            )
+        })
+        .collect()
 }

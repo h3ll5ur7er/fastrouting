@@ -97,7 +97,7 @@ impl<'a> Router<'a> {
             rip_ups_since_most: 0,
         };
         let mut unrouted = Vec::new();
-        let mut hemmed_in = Vec::new();
+        let (mut hemmed_in, mut exits_taken) = (Vec::new(), Vec::new());
         while !state.queue.is_empty() {
             if cancel.is_cancelled() {
                 unrouted.extend(state.queue.drain(..));
@@ -112,8 +112,12 @@ impl<'a> Router<'a> {
                         state.commit(self.finder.design, layout, id, found, &batch, events)
                     }
                     Err(NoRoute::NotFound) => no_way.push(id),
-                    Err(NoRoute::HemmedIn(pad)) => {
-                        hemmed_in.push(pad);
+                    Err(NoRoute::Blocked {
+                        hemmed_in: fixed,
+                        exits_taken: taken,
+                    }) => {
+                        hemmed_in.extend(fixed);
+                        exits_taken.extend(taken);
                         unrouted.push(id);
                     }
                 }
@@ -130,8 +134,10 @@ impl<'a> Router<'a> {
         }
         let Negotiated { routed, .. } = state;
         unrouted.sort_unstable();
-        hemmed_in.sort_unstable();
-        hemmed_in.dedup();
+        for pads in [&mut hemmed_in, &mut exits_taken] {
+            pads.sort_unstable();
+            pads.dedup();
+        }
         let mut routes = Routes::default();
         for found in routed.into_iter().flatten() {
             routes.extend(found);
@@ -143,6 +149,7 @@ impl<'a> Router<'a> {
                 .map(|id| plan.connections[id.index()])
                 .collect(),
             hemmed_in,
+            exits_taken,
         }
     }
 

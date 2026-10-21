@@ -243,6 +243,22 @@ fn show(event: &Event) {
     };
 }
 
+fn reason(why: &Unroutable) -> String {
+    match why {
+        Unroutable::OffTheBoard(pad) => format!("{pad} lies outside the board"),
+        Unroutable::OnlyOnLayersNotRouted(pad) => {
+            format!("{pad} is only on layers not routed on, such as planes")
+        }
+        Unroutable::HemmedIn(pad) => format!(
+            "no track can leave {pad}: another net's copper, a keepout or the edge is too close"
+        ),
+        Unroutable::ExitsTaken(pad) => {
+            format!("the tracks of other nets took every way out of {pad}")
+        }
+        Unroutable::NoWayFound => "no way found".to_owned(),
+    }
+}
+
 fn summarise(report: &RouteReport) -> ExitCode {
     let routed = report.connections - report.unrouted.len();
     println!(
@@ -263,16 +279,8 @@ fn summarise(report: &RouteReport) -> ExitCode {
         );
     }
     for unrouted in &report.unrouted {
-        let why = match &unrouted.why {
-            Unroutable::OffTheBoard(pad) => format!("{pad} lies outside the board"),
-            Unroutable::OnlyOnLayersNotRouted(pad) => {
-                format!("{pad} is only on layers not routed on, such as planes")
-            }
-            Unroutable::HemmedIn(pad) => format!(
-                "no track can leave {pad}: another net's copper, a keepout or the edge is too close"
-            ),
-            Unroutable::NoWayFound => "no way found".to_owned(),
-        };
+        let why: Vec<String> = unrouted.why.iter().map(reason).collect();
+        let why = why.join("; ");
         println!(
             "  unrouted: {} from {} to {}: {why}",
             unrouted.net, unrouted.from, unrouted.to

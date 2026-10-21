@@ -82,7 +82,7 @@ Seven boards complete, among them Issue217, which Freerouting completed only by 
 
 ## Congestion
 
-131 connections on 9 boards route alone with the default profile but not together with the rest: Issue039-bug-design (49), the two Mars-64 boards (23 each), Issue283-UnconnectedTracesUnderPads (22), Issue110-RelayModule (6), Issue029, Issue110-Pajalnaja (2 each), Issue508-DAC2020_bm01 (3, reported as hemmed in: once negotiation stops, routed copper took the pins' exits) and Issue269-caniot (1). The wider window of [[TRX-55]] settles the 10 on Issue029, RelayModule and Pajalnaja; the rest are lost in negotiation.
+131 connections on 9 boards route alone with the default profile but not together with the rest: Issue039-bug-design (49), the two Mars-64 boards (23 each), Issue283-UnconnectedTracesUnderPads (22), Issue110-RelayModule (6), Issue029, Issue110-Pajalnaja (2 each), Issue508-DAC2020_bm01 (3, then reported as hemmed in: once negotiation stops, routed copper took the pins' exits; the report now says so) and Issue269-caniot (1). The wider window of [[TRX-55]] settles the 10 on Issue029, RelayModule and Pajalnaja; the rest are lost in negotiation.
 
 Rip-up and reroute stops ripping up once twice as many rip-ups as there are connections have passed without more connections routed; the connections still queued then search without crossing anything, and fail. That rule ends negotiation on every congested board (Issue039: 472 rip-ups for 204 connections; Mars-64: 412 for 106). No profile setting helps:
 
@@ -121,7 +121,7 @@ traxide keeps all wiring a board comes with. Specctra's `(type route)` wiring, w
 - **Conflicting pads** (5). Issue069-TestSensel (both files): KiCad exported the interdigitated sensor pads as overlapping quadrilaterals, so J4-1 lies under J4-2 of another net. Issue110-testPCBSpecctraFile: C11-2 overlaps the GND pad XP4-2. Issue433-my-board: the pin R1_source_component_2-2 is listed in two nets; the DSN reader keeps the last one, and joining the other would short them.
 - **Enclosed by locked wiring** (2). Issue313-FastTest, a tiny board in mils (0.045 mm tracks), whose protected wiring encloses two pads completely: no way even on a 0.0025 mm grid.
 
-Verification does not report pad-to-pad conflicts (the footprint's business), so none of this shows in `traxide check` before routing; [[TRX-60]] makes the reports say it.
+Verification does not count pad-to-pad conflicts as broken rules (the footprint's business). Since [[TRX-60]], `traxide check` and `traxide route` warn of them instead, pair by pair. Pads of one part are named only where they overlap, as a footprint may set its pins closer than the board's clearance. So the corpus warns of the four pairs of TestSensel (both files), XP4-2 with C11-2 and R17-1 on Issue110-testPCBSpecctraFile, and one pair each on Issue163 and Issue367-Charger. The route report names each pad of an unrouted connection that no track can leave. It also tells fixed copper that hems a pad in from the routed copper of other nets that took its ways out (Issue269-caniot: U1-20 and U1-52). Issue313's enclosed pads are still reported as "no way found".
 
 ## Redoing the analysis
 

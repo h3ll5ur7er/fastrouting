@@ -37,4 +37,7 @@ pub struct RoutingResult {
     /// Pads no track could leave at all, in id order: the reason some of the
     /// unrouted connections are.
     pub hemmed_in: Vec<PadId>,
+    /// Pads every way out of which the routed copper of other connections took,
+    /// in id order; routed in another order, they may have been left.
+    pub exits_taken: Vec<PadId>,
 }

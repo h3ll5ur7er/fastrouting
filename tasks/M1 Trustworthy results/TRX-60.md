@@ -19,6 +19,7 @@ layer: manager
 
 - [x] Board Access warns about a pin listed in more than one net, naming both nets (and takes it out of the earlier net, which still listed it); the route and check reports print the warnings, `check --json` lists them
 - [x] The route and check reports name the parts that lie wholly outside the outline (Issue632-MiniAutoPilot: its 31 parts in one line)
-- [ ] They name pads of different nets closer than their clearance (by pair), and pads with no legal way out because of fixed copper or keepouts
-- [ ] "Hemmed in" only when fixed copper, a keepout or the edge blocks the pad, not routed copper; a connection with two blocked pads names both
-- [ ] Tests for each, from small boards built in code; the corpus boards above as examples in [[Corpus-analysis]]
+- [x] They name pads of different nets closer than their clearance (by pair), and pads with no legal way out because of fixed copper or keepouts. Pads of one part count only where they overlap: a footprint may set its pins closer than the board's clearance, and counting those named 110 pairs on Issue145 alone; so the corpus warns on the four boards above and two pairs elsewhere
+- [x] "Hemmed in" only when fixed copper, a keepout or the edge blocks the pad; where routed copper took its ways out, the report says so (Issue269-caniot: U1-20 and U1-52); a connection with two blocked pads names both (Issue110-testPCBSpecctraFile: C11-2 and R17-1)
+- [x] Tests for each, from small boards built in code; the corpus boards above as examples in [[Corpus-analysis]]
+- [ ] Pads enclosed by fixed copper farther out than their exits are named as enclosed, not "no way found" (Issue313-FastTest)

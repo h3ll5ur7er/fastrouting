@@ -139,3 +139,36 @@ fn copper_on_the_wrong_layer_does_not_connect() {
         [Violation::Unconnected { .. }]
     ));
 }
+
+#[test]
+fn pads_of_different_nets_closer_than_their_clearance_are_named_once_a_pair() {
+    // A1 and B1 through both layers, 0.1 mm apart; A1 and A2 as close, but of one net.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .tht("A1", Some("A"), at(5.0, 5.0), 1.0)
+        .tht("B1", Some("B"), at(6.1, 5.0), 1.0)
+        .tht("A2", Some("A"), at(3.9, 5.0), 1.0)
+        .tht("C1", Some("C"), at(15.0, 5.0), 1.0)
+        .build();
+    let rules = compile(&design, Purpose::Verification);
+    assert_eq!(
+        traxide_verification::pads_too_close(&design, &rules),
+        [[design.pad_named("A1"), design.pad_named("B1")]]
+    );
+}
+
+#[test]
+fn pads_of_one_part_are_named_only_where_they_overlap() {
+    // A footprint may set its pins closer than the board's clearance: U1's are
+    // 0.1 mm apart. U2's overlap, which shorts their nets.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .smd("U1-1", Some("A"), at(5.0, 5.0), 0.5, 0)
+        .smd("U1-2", Some("B"), at(5.6, 5.0), 0.5, 0)
+        .smd("U2-1", Some("A"), at(10.0, 5.0), 0.5, 0)
+        .smd("U2-2", Some("B"), at(10.4, 5.0), 0.5, 0)
+        .build();
+    let rules = compile(&design, Purpose::Verification);
+    assert_eq!(
+        traxide_verification::pads_too_close(&design, &rules),
+        [[design.pad_named("U2-1"), design.pad_named("U2-2")]]
+    );
+}

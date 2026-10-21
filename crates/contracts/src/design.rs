@@ -66,6 +66,14 @@ pub struct Pad {
 }
 
 impl Pad {
+    /// The part the pad belongs to: its name up to the first `-`, such as `R1`
+    /// of `R1-2`; a pin's own name may hold one, as `-D+` of `J3--D+`.
+    pub fn part(&self) -> &str {
+        self.name
+            .split_once('-')
+            .map_or(self.name.as_str(), |(part, _)| part)
+    }
+
     pub fn is_on(&self, layer: LayerId) -> bool {
         self.copper.iter().any(|c| c.layer == layer)
     }

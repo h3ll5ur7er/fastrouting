@@ -169,7 +169,7 @@ fn the_drc_report_judges_the_stored_copper_with_the_boards_own() {
 
 #[test]
 fn says_why_a_connection_stayed_unrouted() {
-    // R2 lies beyond the board's right edge.
+    // R2 lies beyond the board's right edge, R5 beyond R2.
     let folder = tempfile::tempdir().expect("temp dir");
     let report = route(
         &job("pad-off-board.dsn", &folder.path().join("board.ses")),
@@ -177,8 +177,24 @@ fn says_why_a_connection_stayed_unrouted() {
         &CancelToken::new(),
     )
     .expect("routable");
-    let reasons: Vec<&Unroutable> = report.unrouted.iter().map(|u| &u.why).collect();
-    assert_eq!(reasons, [&Unroutable::OffTheBoard("R2-1".into())]);
+    let reasons: Vec<(&str, &[Unroutable])> = report
+        .unrouted
+        .iter()
+        .map(|u| (u.net.as_str(), u.why.as_slice()))
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            (
+                "Away",
+                &[
+                    Unroutable::OffTheBoard("R2-2".into()),
+                    Unroutable::OffTheBoard("R5-1".into())
+                ][..]
+            ),
+            ("Across", &[Unroutable::OffTheBoard("R2-1".into())][..]),
+        ]
+    );
 }
 
 #[test]
@@ -266,4 +282,19 @@ fn the_report_passes_on_what_the_reader_found_wrong_with_the_board() {
     let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
     assert!(report.warnings[0].contains("R1-2"));
+}
+
+#[test]
+fn warns_of_pads_of_different_nets_closer_than_their_clearance() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let report = route(
+        &job("pads-too-close.dsn", &folder.path().join("board.ses")),
+        &Silent,
+        &CancelToken::new(),
+    )
+    .expect("routable");
+    assert_eq!(
+        report.warnings,
+        ["the pads R1-2 (net Across) and R3-1 (net Short) are closer than their clearance"]
+    );
 }

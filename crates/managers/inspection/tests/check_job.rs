@@ -84,3 +84,18 @@ fn the_check_writes_a_drc_report_in_kicads_format_when_asked() {
         "one pad of each net apart"
     );
 }
+
+#[test]
+fn names_pads_of_different_nets_closer_than_their_clearance() {
+    // R3-1 of net Short overlaps R1-2 of net Across.
+    let report = check(&CheckJob {
+        board: fixture("pads-too-close.dsn"),
+        session: None,
+        drc_report: None,
+    })
+    .expect("readable");
+    assert_eq!(
+        report.warnings,
+        ["the pads R1-2 (net Across) and R3-1 (net Short) are closer than their clearance"]
+    );
+}

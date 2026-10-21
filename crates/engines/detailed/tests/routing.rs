@@ -532,6 +532,63 @@ fn a_pad_with_no_way_out_is_named() {
 }
 
 #[test]
+fn a_connection_with_both_pads_hemmed_in_names_both() {
+    let design = DesignBuilder::new(20.0, 10.0)
+        .keepout(
+            wall(at(1.0, 4.0), at(3.0, 6.0)),
+            None,
+            KeepoutScope::Everything,
+        )
+        .keepout(
+            wall(at(17.0, 4.0), at(19.0, 6.0)),
+            None,
+            KeepoutScope::Everything,
+        )
+        .smd("A1", Some("A"), at(2.0, 5.0), 0.5, 0)
+        .smd("A2", Some("A"), at(18.0, 5.0), 0.5, 0)
+        .build();
+    let result = route(&design, &[("A1", "A2")]);
+    assert_eq!(
+        result.hemmed_in,
+        [design.pad_named("A1"), design.pad_named("A2")]
+    );
+}
+
+#[test]
+fn a_pad_whose_ways_out_routed_copper_took_is_not_hemmed_in() {
+    // B1, small and off the grid, sits in a pocket of keepouts that leaves it
+    // only the way up along its axis; A's track runs across the pocket's mouth,
+    // as close as the clearance allows, before B is routed, with no rip-up.
+    let pocket = |min, max| (wall(min, max), None, KeepoutScope::Everything);
+    let mut builder = DesignBuilder::new(20.0, 10.0).layers(1);
+    for (shape, layer, scope) in [
+        pocket(at(9.0, 4.0), at(9.91, 5.15)),
+        pocket(at(10.19, 4.0), at(11.0, 5.15)),
+        pocket(at(9.0, 4.0), at(11.0, 4.91)),
+    ] {
+        builder = builder.keepout(shape, layer, scope);
+    }
+    let design = builder
+        .smd("B1", Some("B"), at(10.05, 5.05), 0.2, 0)
+        .smd("B2", Some("B"), at(10.0, 9.0), 0.5, 0)
+        .smd("A1", Some("A"), at(2.0, 5.5), 0.5, 0)
+        .smd("A2", Some("A"), at(18.0, 5.5), 0.5, 0)
+        .build();
+    let no_rip_up = Profile {
+        max_rip_ups: 0,
+        ..profile()
+    };
+    assert_eq!(
+        route_with(&design, &no_rip_up, &[("B1", "B2")]).unrouted,
+        []
+    );
+    let result = route_with(&design, &no_rip_up, &[("A1", "A2"), ("B1", "B2")]);
+    assert_eq!(result.unrouted, [connection(&design, "B1", "B2")]);
+    assert_eq!(result.hemmed_in, []);
+    assert_eq!(result.exits_taken, [design.pad_named("B1")]);
+}
+
+#[test]
 fn a_pad_over_the_board_edge_is_left_from_its_copper_on_the_board() {
     // A1's centre lies on the board's left edge, as an edge connector's might.
     let design = DesignBuilder::new(20.0, 10.0)
