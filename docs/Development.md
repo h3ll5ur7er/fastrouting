@@ -112,7 +112,13 @@ Three levels, all run by `cargo test` except where noted:
 
 `cargo run --release -p xtask -- negotiation BOARD` routes one board and shows what negotiation did ([[TRX-56]]): per round of as many commits as the board has connections, the connections routed at its end and the rip-ups it took; the pairs of connections that take each other's place most often; and the 1 mm squares with the most rip-ups, drawn over the board in `target/negotiation/<board>/rip-ups.svg` with the connections ripped up as lines. Built in release, as routing in a debug build takes ten times as long.
 
-Later, with [[TRX-22]], `cargo xtask bench` runs the Inspection Manager over `corpus/` and prints, per board, time, completion, vias, wire length and violations, next to the stored baselines (Freerouting's result and the last release's). CI runs it on the main branch and keeps the history, so a slowdown or a drop in completion shows up in the pull request that caused it.
+`cargo xtask corpus` routes the real boards of [[corpus/freerouting-fixtures.txt]] and writes traxide's results to `target/corpus/results-K-of-N.json`; `cargo xtask gate RESULTS.json…` compares them with the baseline in `corpus/baseline.json` and fails on a regression: a board the baseline completes that is no longer complete, any rule broken, or clearly fewer nets routed ([[TRX-22]] has the tolerances). It lists the improvements; `--update-baseline` writes the results into the baseline, which is how it is raised, on purpose and in its own commit. `--partial` compares only the boards the results hold, as after one shard:
+
+```bash
+cargo xtask corpus --shard 1/6 && cargo xtask gate --partial target/corpus/results-1-of-6.json
+```
+
+The Benchmark workflow runs the gate after its six corpus shards; its `corpus-results` artifact, copied over `corpus/baseline.json`, raises the baseline to that run. Later, with [[TRX-21]], CI keeps the history across commits and comments regressions on the pull request that caused them.
 
 ## Clean-room rules
 

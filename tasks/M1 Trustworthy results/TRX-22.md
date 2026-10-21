@@ -15,5 +15,13 @@ UC6 of [[Architecture/Use-cases#uc6-run-the-benchmark-corpus]]: the Inspection M
 - [ ] `traxide bench corpus/ --profile …` and `cargo xtask bench`
 - [ ] Table per board: time, completion, vias, length, violations, against Freerouting and the previous release
 - [ ] CI job on main that stores the history and comments regressions on pull requests
+- [ ] A stored baseline of traxide's corpus results per board: `corpus/baseline.json`, written by `cargo xtask corpus` as `target/corpus/results-K-of-N.json`
+- [x] A gate that fails the Benchmark workflow on a regression against the baseline and lists the improvements: `cargo xtask gate`, the workflow's `gate` job
+- [ ] Raise the baseline on purpose: `cargo xtask gate --update-baseline`, or the workflow's `corpus-results` artifact copied over `corpus/baseline.json`
+- [x] The per-board table, now against the baseline, in the job summary
+
+**Decisions (the gate, [[xtask/src/gate.rs]]).** The baseline keeps, per board, traxide's outcome (finished, stopped at the limit, failed), nets, nets routed, rules broken and time, and the time limit it ran with; results with another limit are not compared. The gate fails when a board breaks any rule (beyond those the board broke before routing), when a board the baseline completes is not complete, when a board the baseline finishes stops or fails, when a board stopped in the baseline now fails, when a board routes more than 2 % of its nets fewer than the baseline (`nets / 50`, so any loss on a board under 100 nets), and, unless `--partial`, when a board of the baseline is missing from the results (a shard that failed). Tolerances: a board the baseline finishes in at least half the time limit may stop at it (Issue029, Issue145 and Issue219 flip so with the same routes, [[Benchmarks]]); a few nets fewer within the 2 % and a board more than twice and 10 s slower are listed as notes, not failures, as times vary with the runner. More nets, a stopped or failed board that finishes, are improvements; the gate lists them so that the baseline can be raised, but does not fail on them. Only traxide is gated: Freerouting's results vary from run to run and are not ours to keep. The shards still only record; one `gate` job after them compares all boards at once, so the summary shows one table of the 76 boards.
+
+**Left for later.** The history across commits and the comments on pull requests need a place to keep runs ([[TRX-21]]) and a token that may write comments; the Inspection Manager's `traxide bench` (UC6) and the comparison with the last release's results instead of a stored file come with it. The workflow still runs on every push that touches the code, not only on main.
 
 **Depends on:** [[TRX-15]], [[TRX-20]], [[TRX-21]], [[TRX-14]]
