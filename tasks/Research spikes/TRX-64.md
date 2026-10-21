@@ -34,8 +34,8 @@ Measured on commit 22f4462, 4 cores, 120 s limit (the baseline): traxide 90.8 s,
 - [x] Freerouting runs on a DSN exported by KiCad (in its Docker image, as `cargo xtask e2e` exports), or is left out for such boards, said in the table
 - [x] TokenBoard in the corpus, pinned to a commit, and its row in [[Benchmarks]]
 - [x] Say in [[Development#benchmarking]] how to add a board: what the entry looks like, and that the board's licence must allow it (the corpus downloads, never stores)
-- [x] TokenBoard in the gate's baseline ([[corpus/baseline.json]]), with traxide's 120 s result
+- [x] TokenBoard in the gate's baseline ([[corpus/baseline.json]]), with traxide's 120 s result: 232 of 241 nets in 92.9 s with [[TRX-65]] merged, the edge clearance from the LED cutouts kept (236 before, with 199 edge clearance violations that KiCad found and `traxide check` did not)
 - [x] traxide stops negotiating on a project at three quarters of `--timeout`, so that a board too big for the limit finishes and the gate compares routes
 - [ ] The Benchmark workflow green with TokenBoard in shard 4 (its first CI run: the runner's KiCad export and Freerouting's session import)
-- [ ] Judge KiCad projects with KiCad's DRC as well, zones refilled, once [[TRX-65]] is fixed: `traxide check` misses the 199 edge clearance violations KiCad finds on traxide's TokenBoard
+- [ ] Judge KiCad projects with KiCad's DRC as well, zones refilled: with [[TRX-65]] merged it finds traxide's TokenBoard clean, but `traxide check` counts 4 edge clearance violations on the author's board that KiCad does not
 - [x] Freerouting's result on TokenBoard: no session after 28 min, nor after 40 min with `-mp 2` (still in its fanout stage); in CI it stops at the corpus's 120 s. The way its session takes (KiCad's DSN export, KiCad's import) was tried with traxide's Freerouting mode in its place: it works, and shows the DSN losing TokenBoard's 0.2 mm clearances of VLED and GND (38 broken)

@@ -26,6 +26,7 @@ October 2026, on this machine (4 cores), `cargo xtask corpus --list corpus/kicad
 | Its author (Freerouting, as committed) | | 238 of 241 | 438 | 0 | 2549 | 638 | 12381 mm |
 | traxide, no limit | 189 s | 236 of 241 | 6 | 0 | 8515 | 1567 | 17983 mm |
 | traxide, `--time-limit 90` (as in the corpus) | 92 s | 236 of 241 | 13 | 0 | 7770 | 1487 | 17160 mm |
+| traxide with [[TRX-65]], `--time-limit 90` (the baseline) | 93 s | 232 of 241 | 18 | 0 | 7690 | 1479 | 17196 mm |
 | traxide on KiCad's DSN, session imported by KiCad | 189 s | 239 of 241 | 3 | 38 clearance | 9238 | 1992 | 19994 mm |
 | Freerouting 2.5.0, defaults | no session after 28 min | | | | | | |
 
@@ -33,7 +34,7 @@ Freerouting 2.5.0 (Java 25) wrote no session within 28 minutes, nor, limited to 
 
 traxide routes the power nets with tracks, as it cannot join pads through zones yet ([[TRX-58]]): hence its tracks and vias. The 5 nets it leaves incomplete are around the RP2350 (U1) and its flash (U2): `/MCU/VREG_LX`, `/MCU/DVDD`, `/MCU/QSPI_SCLK`, `/MCU/QSPI_SD1`, `ROW9`.
 
-**KiCad's DRC disagrees with `traxide check`.** With the zones refilled (`kicad-cli pcb drc --refill-zones`), KiCad 10 finds 199 `copper_edge_clearance` violations on traxide's board: GND tracks 0.136 mm from the cutouts the LED footprints draw on Edge.Cuts, where the board's custom rule asks for 0.2 mm ([[TRX-65]]). Without refilling, it also counts the old zone fills against the new tracks. The board as committed passes with no violation.
+**KiCad's DRC disagreed with `traxide check`.** With the zones refilled (`kicad-cli pcb drc --refill-zones`), KiCad 10 found 199 `copper_edge_clearance` violations on traxide's board: GND tracks 0.136 mm from the cutouts the LED footprints draw on Edge.Cuts, where the board's custom rule asks for 0.2 mm. [[TRX-65]] makes such loops holes in the board, which routing and checking keep the edge clearance from: traxide then routes 232 of 241 nets, and KiCad's DRC with the zones refilled finds no violation, only the 9 incomplete nets. `traxide check` now counts 4 edge clearance violations on the author's board, where KiCad finds none: tracks of COL1, ROW2, COL5 and COL8. Without refilling, KiCad also counts the old zone fills against the new tracks.
 
 These numbers predate the planes of [[TRX-58]], which joins pads through zones and planes: with it, traxide routes 236 of 241 nets with 5 pads unconnected in 154 s, and `traxide check` counts the author's board at 240 of 241 nets with 27 pads unconnected.
 

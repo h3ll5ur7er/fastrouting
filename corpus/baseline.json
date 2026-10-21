@@ -502,9 +502,9 @@
     },
     "tokenboard-kb": {
       "outcome": "finished",
-      "seconds": 90.8,
+      "seconds": 92.9,
       "nets": 241,
-      "routed": 236,
+      "routed": 232,
       "rules_broken": 0
     }
   }
