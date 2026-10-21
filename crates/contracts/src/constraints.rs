@@ -9,6 +9,9 @@ pub struct ConstraintSet {
     via_kinds_of_class: Vec<Vec<ViaKindId>>,
     /// Row-major, classes × classes.
     clearance_between_classes: Vec<i32>,
+    /// The largest of them, which every copper query asks: a board with
+    /// hundreds of classes has a table of tens of thousands.
+    largest_clearance: i32,
     edge_clearance: i32,
 }
 
@@ -25,12 +28,14 @@ impl ConstraintSet {
         let classes = track_width_of_class.len();
         assert_eq!(via_kinds_of_class.len(), classes);
         assert_eq!(clearance_between_classes.len(), classes * classes);
+        let largest_clearance = clearance_between_classes.iter().copied().max().unwrap_or(0);
         Self {
             class_of_net,
             default_class,
             track_width_of_class,
             via_kinds_of_class,
             clearance_between_classes,
+            largest_clearance,
             edge_clearance,
         }
     }
@@ -57,11 +62,7 @@ impl ConstraintSet {
     /// copper others can conflict with it. The board's edge, checked against
     /// the outline, keeps its own.
     pub fn largest_clearance(&self) -> i32 {
-        self.clearance_between_classes
-            .iter()
-            .copied()
-            .max()
-            .unwrap_or(0)
+        self.largest_clearance
     }
 
     pub fn edge_clearance(&self) -> i32 {
