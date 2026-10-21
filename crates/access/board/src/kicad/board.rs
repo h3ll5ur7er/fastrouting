@@ -26,11 +26,20 @@ pub(crate) fn read(
     project: Option<&str>,
     custom_rules: Option<&str>,
 ) -> Result<Board, BoardError> {
+    read_with(text, Project::read(project)?, custom_rules)
+}
+
+/// The board in `text`, with the rules of `project` and its custom rules.
+pub(crate) fn read_with(
+    text: &str,
+    project: Project,
+    custom_rules: Option<&str>,
+) -> Result<Board, BoardError> {
     let root = sexpr::parse(text.trim_start_matches('\u{feff}'))?;
     if root.keyword() != Some("kicad_pcb") {
         return Err(root.invalid("not a KiCad board: expected (kicad_pcb …)"));
     }
-    Reader::new(&root, Project::read(project)?)?.read(custom_rules)
+    Reader::new(&root, project)?.read(custom_rules)
 }
 
 /// How far an arc may bulge beyond the straight segments it is read as.

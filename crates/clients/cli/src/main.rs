@@ -28,9 +28,16 @@ enum Command {
     Route {
         /// The board: BOARD.kicad_pcb, with the rules of BOARD.kicad_pro, or a
         /// Specctra design (KiCad: File → Export → Specctra DSN).
-        input: PathBuf,
+        #[arg(required_unless_present = "kicad")]
+        input: Option<PathBuf>,
+        /// Route the board open in KiCad's PCB editor instead, through KiCad's API
+        /// (Preferences → Plugins → Enable KiCad API), and add the routes to it as
+        /// one step that Edit → Undo takes back.
+        #[arg(long, conflicts_with = "input")]
+        kicad: bool,
         /// Where to write the routes. By default beside the input: BOARD.ses for a
-        /// design, a copy BOARD.routed.kicad_pcb (and its project) for a KiCad board.
+        /// design, a copy BOARD.routed.kicad_pcb (and its project) for a KiCad board;
+        /// into KiCad with --kicad.
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// The routing profile.
@@ -120,13 +127,18 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Route {
             input,
+            // Clap lets through either a board or --kicad, never both.
+            kicad: _,
             output,
             profile,
             config,
             threads,
             quiet,
             drc,
-        } => (input, output, profile, config, threads, quiet, drc),
+        } => {
+            let input = input.unwrap_or_else(|| PathBuf::from(traxide_routing::RUNNING_KICAD));
+            (input, output, profile, config, threads, quiet, drc)
+        }
     };
     let job = RouteJob {
         input,

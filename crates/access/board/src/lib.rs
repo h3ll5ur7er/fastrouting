@@ -1,6 +1,7 @@
 //! Board Access: where boards come from and where routes go (volatility V10 of
 //! docs/Architecture/Volatilities.md). Callers see format-neutral contracts; the
-//! file extension picks the format.
+//! file extension picks the format, and [`RUNNING_KICAD`] names the board open
+//! in KiCad.
 
 mod error;
 pub mod kicad;
@@ -13,7 +14,19 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use traxide_contracts::{Design, Routes, Verdict};
 
+/// Where a path would name a board: the board open in a running KiCad's PCB
+/// editor, reached through KiCad's IPC API. Its routes go back into KiCad as
+/// one commit, which one undo removes.
+pub const RUNNING_KICAD: &str = "kicad://current";
+
+fn is_running_kicad(path: &Path) -> bool {
+    path == Path::new(RUNNING_KICAD)
+}
+
 pub fn load_design(path: &Path) -> Result<Design, BoardError> {
+    if is_running_kicad(path) {
+        return kicad::ipc::load_design(&kicad::ipc::Environment::of_process());
+    }
     match extension(path) {
         Some("dsn") => specctra::parse_dsn(&read(path)?),
         Some("kicad_pcb") => {
@@ -29,8 +42,11 @@ pub fn load_design(path: &Path) -> Result<Design, BoardError> {
 
 /// Where the routes of the board at `board` go unless told otherwise: a session
 /// beside a Specctra design, and a copy beside a KiCad board, which KiCad opens
-/// with the board's project.
+/// with the board's project; and the running KiCad for its board.
 pub fn default_routes_path(board: &Path) -> PathBuf {
+    if is_running_kicad(board) {
+        return board.into();
+    }
     match extension(board) {
         Some("kicad_pcb") => board.with_extension("routed.kicad_pcb"),
         _ => board.with_extension("ses"),
@@ -45,6 +61,9 @@ pub fn store_routes(
     design: &Design,
     routes: &Routes,
 ) -> Result<(), BoardError> {
+    if is_running_kicad(path) && is_running_kicad(board) {
+        return kicad::ipc::store_routes(&kicad::ipc::Environment::of_process(), design, routes);
+    }
     let text = match (extension(path), extension(board)) {
         (Some("ses"), _) => {
             let name = path
@@ -79,7 +98,7 @@ pub fn store_routes(
         _ => {
             return Err(BoardError::UnsupportedFormat {
                 path: path.into(),
-                expected: "a Specctra session (.ses), or a KiCad board (.kicad_pcb) for a KiCad board",
+                expected: "a Specctra session (.ses), a KiCad board (.kicad_pcb) for a KiCad board, or the running KiCad for its board",
             });
         }
     };
@@ -95,10 +114,14 @@ pub fn store_drc_report(
     routes: &Routes,
     verdict: &Verdict,
 ) -> Result<(), BoardError> {
-    let source = source
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let source = if is_running_kicad(source) {
+        RUNNING_KICAD.to_owned()
+    } else {
+        source
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
     let report = kicad::drc::report(&source, SystemTime::now(), design, routes, verdict);
     write(path, &format!("{report:#}\n"))
 }
@@ -125,6 +148,7 @@ const PROJECT: &str = "kicad_pro";
 const CUSTOM_RULES: &str = "kicad_dru";
 
 /// The texts of the files next to a KiCad board that hold its rules.
+#[derive(Default)]
 struct Beside {
     project: Option<String>,
     custom_rules: Option<String>,
@@ -147,6 +171,42 @@ impl Beside {
             project: self.project.as_deref(),
             custom_rules: self.custom_rules.as_deref(),
         }
+    }
+}
+
+/// What the end-to-end test does with a KiCad it started itself, whose socket
+/// and project folder it names, as a designer and a plugin would.
+#[cfg(feature = "testing")]
+pub mod testing {
+    use crate::BoardError;
+    use crate::kicad::ipc::{self, Environment};
+    use std::path::Path;
+    use traxide_contracts::Design;
+
+    fn environment(socket: &Path, project_folder: Option<&Path>) -> Environment {
+        Environment {
+            socket: socket.into(),
+            token: String::new(),
+            project_folder: project_folder.map(Path::to_path_buf),
+        }
+    }
+
+    /// The design of the board open in the KiCad listening on `socket`.
+    pub fn load_design_in_kicad(
+        socket: &Path,
+        project_folder: &Path,
+    ) -> Result<Design, BoardError> {
+        ipc::load_design(&environment(socket, Some(project_folder)))
+    }
+
+    /// Saves the board open in KiCad to its file, as *File → Save* does.
+    pub fn save_board_in_kicad(socket: &Path) -> Result<(), BoardError> {
+        ipc::testing::save_board(&environment(socket, None))
+    }
+
+    /// Undoes the last change to the board open in KiCad, as *Edit → Undo* does.
+    pub fn undo_in_kicad(socket: &Path) -> Result<(), BoardError> {
+        ipc::testing::undo(&environment(socket, None))
     }
 }
 
