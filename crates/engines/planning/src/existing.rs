@@ -1,10 +1,40 @@
+use std::collections::{HashMap, HashSet};
 use traxide_contracts::geometry::{Point, Rect, Segment, Shape};
-use traxide_contracts::{Design, LayerId, NetId};
+use traxide_contracts::{Design, LayerId, NetId, Plane};
 
 /// For each pad, the smallest index of the pads that the board's own copper of
-/// its net joins it to: pads with the same number need no connection between
-/// them. Boards often come partly routed.
+/// its net, its planes included, joins it to: pads with the same number need no
+/// connection between them. Boards often come partly routed.
 pub(crate) fn joined_pads(design: &Design) -> Vec<usize> {
+    joins(design).representative
+}
+
+/// For each pad, whether the board's own copper of its net joins it to one of
+/// the net's planes.
+pub(crate) fn pads_on_planes(design: &Design) -> Vec<bool> {
+    joins(design).on_a_plane
+}
+
+/// Whether copper of a plane's net shaped `shape` on the plane's layer joins
+/// it: where it lies on the plane, and no plane of another net overlaps it,
+/// as only their order of priority tells which fills there. Only on a layer
+/// that takes no tracks: elsewhere routes of other nets may cut a pour apart.
+pub(crate) fn joins_plane(design: &Design, plane: &Plane, shape: &Shape) -> bool {
+    !design.layers[plane.layer.index()].routable
+        && shape.is_inside(&plane.outline, 0)
+        && !design.planes.iter().any(|other| {
+            other.layer == plane.layer
+                && other.net != plane.net
+                && Shape::Polygon(other.outline.clone()).is_closer_than(shape, 0)
+        })
+}
+
+struct Joins {
+    representative: Vec<usize>,
+    on_a_plane: Vec<bool>,
+}
+
+fn joins(design: &Design) -> Joins {
     let mut pieces: Vec<Piece> = Vec::new();
     for (index, pad) in design.pads.iter().enumerate() {
         let Some(net) = pad.net else { continue };
@@ -60,20 +90,41 @@ pub(crate) fn joined_pads(design: &Design) -> Vec<usize> {
             }
         }
     }
+    let mut on_planes = Vec::new();
+    for plane in &design.planes {
+        let on: Vec<usize> = (0..pieces.len())
+            .filter(|&i| {
+                let piece = &pieces[i];
+                piece.net == plane.net
+                    && piece.layer == plane.layer
+                    && joins_plane(design, plane, &piece.shape)
+            })
+            .collect();
+        for pair in on.windows(2) {
+            groups.join(pair[0], pair[1]);
+        }
+        on_planes.extend(on);
+    }
+    let plane_groups: HashSet<usize> = on_planes.into_iter().map(|i| groups.root(i)).collect();
     let mut representative = vec![usize::MAX; design.pads.len()];
-    let mut first_pad_of_group = std::collections::HashMap::new();
+    let mut on_a_plane = vec![false; design.pads.len()];
+    let mut first_pad_of_group = HashMap::new();
     for (index, piece) in pieces.iter().enumerate() {
         if let Owner::Pad(pad) = piece.owner {
             let group = groups.root(index);
             let first = *first_pad_of_group.entry(group).or_insert(pad);
             representative[pad] = first;
+            on_a_plane[pad] = plane_groups.contains(&group);
         }
     }
-    representative
-        .into_iter()
-        .enumerate()
-        .map(|(pad, first)| if first == usize::MAX { pad } else { first })
-        .collect()
+    Joins {
+        representative: representative
+            .into_iter()
+            .enumerate()
+            .map(|(pad, first)| if first == usize::MAX { pad } else { first })
+            .collect(),
+        on_a_plane,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

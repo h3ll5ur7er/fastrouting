@@ -1,0 +1,39 @@
+(pcb gnd-plane.dsn
+  (parser (string_quote ") (space_in_quoted_tokens on) (host_cad "KiCad's Pcbnew") (host_version "10.0.7"))
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal) (property (index 0)))
+    (layer In1.Cu (type power) (property (index 1)))
+    (layer In2.Cu (type signal) (property (index 2)))
+    (layer B.Cu (type signal) (property (index 3)))
+    (boundary (path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000))
+    (plane GND (polygon In1.Cu 0  500 -500  29500 -500  29500 -19500  500 -19500))
+    (via "Via[0-3]_600:300_um")
+    (rule (width 200) (clearance 200))
+  )
+  (placement
+    (component "test:C"
+      (place C1 5000 -5000 front 0)
+      (place C2 25000 -5000 front 0)
+      (place C3 5000 -15000 back 0)
+      (place C4 25000 -15000 back 0)
+    )
+  )
+  (library
+    (image "test:C"
+      (pin Rect[T]Pad_1000x1200_um 1 -1000 0)
+      (pin Rect[T]Pad_1000x1200_um 2 1000 0)
+    )
+    (padstack Rect[T]Pad_1000x1200_um (shape (rect F.Cu -500 -600 500 600)) (attach off))
+    (padstack "Via[0-3]_600:300_um"
+      (shape (circle F.Cu 600)) (shape (circle In1.Cu 600)) (shape (circle In2.Cu 600)) (shape (circle B.Cu 600))
+      (attach off))
+  )
+  (network
+    (net GND (pins C1-1 C2-2 C3-1 C4-2))
+    (net Across (pins C1-2 C2-1))
+    (net Down (pins C3-2 C4-1))
+  )
+  (wiring)
+)

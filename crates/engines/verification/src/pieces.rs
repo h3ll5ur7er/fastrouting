@@ -77,3 +77,34 @@ pub(crate) fn join_layers_of_the_same_item(pieces: &[Piece], joined: &mut Unions
         }
     }
 }
+
+/// A plane joins the copper of its net that lies on it, where no plane of
+/// another net overlaps it, as only their order of priority tells which fills
+/// there. Only on a layer that takes no tracks: elsewhere routes of other nets
+/// may cut a pour apart, and only refilling it tells where.
+pub(crate) fn join_through_planes(design: &Design, pieces: &[Piece], joined: &mut Unions) {
+    for plane in design
+        .planes
+        .iter()
+        .filter(|p| !design.layers[p.layer.index()].routable)
+    {
+        let others: Vec<Shape> = design
+            .planes
+            .iter()
+            .filter(|other| other.layer == plane.layer && other.net != plane.net)
+            .map(|other| Shape::Polygon(other.outline.clone()))
+            .collect();
+        let on_the_plane = |piece: &Piece| {
+            piece.net == Some(plane.net)
+                && piece.layer == plane.layer
+                && piece.shape.is_inside(&plane.outline, 0)
+                && !others.iter().any(|o| o.is_closer_than(&piece.shape, 0))
+        };
+        let on: Vec<usize> = (0..pieces.len())
+            .filter(|&i| on_the_plane(&pieces[i]))
+            .collect();
+        for pair in on.windows(2) {
+            joined.join(pair[0], pair[1]);
+        }
+    }
+}
