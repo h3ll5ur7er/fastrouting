@@ -1,11 +1,15 @@
 //! The real-world test: KiCad builds each board and exports it, traxide routes
-//! it, KiCad imports the session and KiCad's own DRC judges the result.
+//! it, KiCad imports the session and KiCad's own DRC judges the result. In
+//! Docker, traxide also routes each board open in a running KiCad, through
+//! KiCad's IPC API.
 
 use crate::kicad::{self, Kicad};
+use crate::running_kicad::RunningKicad;
 use anyhow::{Result, bail, ensure};
 use std::path::Path;
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use traxide_contracts::Design;
 
 const DEFAULT_RECIPES: &[&str] = &["placements", "crossing", "matrix-3x4", "isolation"];
 
@@ -68,9 +72,10 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .concat()
             .join("\n  ")
     );
+    let in_kicad = through_running_kicad(kicad, root, traxide, recipe, &out)?;
     if custom_rules {
         return Ok(format!(
-            "routed from the board file by its custom rules in {seconds:.2} s, clean in KiCad's DRC ({})",
+            "routed from the board file by its custom rules in {seconds:.2} s, clean in KiCad's DRC ({}); {in_kicad}",
             first_line(&direct.stdout)
                 .split(" → ")
                 .next()
@@ -89,8 +94,90 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .join("\n  ")
     );
     Ok(format!(
-        "clean in KiCad's DRC, from the board file and through the KiCad plugin too; {summary}"
+        "clean in KiCad's DRC, from the board file and through the KiCad plugin too; {summary}; {in_kicad}"
     ))
+}
+
+/// Opens the recipe's board in KiCad, requires KiCad's API to give the same
+/// design as the board file, routes it there as a plugin would, has KiCad save
+/// it and judge it, then requires one undo to take the routes back.
+fn through_running_kicad(
+    kicad: &Kicad,
+    root: &Path,
+    traxide: &Path,
+    recipe: &str,
+    out: &Path,
+) -> Result<String> {
+    let Some(image) = kicad.image() else {
+        return Ok("not routed in a running KiCad, which needs Docker".into());
+    };
+    let running = RunningKicad::open(
+        image,
+        &out.join(format!("{recipe}.kicad_pcb")),
+        &out.join("in-kicad"),
+    )?;
+    let before = running.design()?;
+    let from_file =
+        traxide_board_access::load_design(&running.project.join(format!("{recipe}.kicad_pcb")))?;
+    ensure!(
+        before == from_file,
+        "KiCad's API gives another design than the board file; they differ in {}",
+        differences(&before, &from_file).join(", ")
+    );
+    let routed = running
+        .plugin_command(traxide)
+        .args(["route", "--quiet", "--kicad"])
+        .output()?;
+    ensure!(
+        routed.status.success(),
+        "traxide did not route the board open in KiCad completely:\n{}{}",
+        String::from_utf8_lossy(&routed.stdout),
+        String::from_utf8_lossy(&routed.stderr)
+    );
+    running.save()?;
+    let judgement = kicad.judge_board(root, &running.project, recipe)?;
+    ensure!(
+        judgement.is_clean() && judgement.tracks > 0,
+        "routed in KiCad and saved, KiCad's DRC found {} violations and {} unconnected items in {} tracks:\n  {}",
+        judgement.violations.len(),
+        judgement.unconnected.len(),
+        judgement.tracks,
+        [judgement.violations, judgement.unconnected]
+            .concat()
+            .join("\n  ")
+    );
+    running.undo()?;
+    // KiCad runs the undo on its GUI thread after answering.
+    let started = Instant::now();
+    while running.design()? != before {
+        ensure!(
+            started.elapsed() < Duration::from_secs(10),
+            "one undo did not take the routes back out of KiCad"
+        );
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    Ok(format!(
+        "routed in a running KiCad ({} track segments, {} vias), clean, and gone after one undo",
+        judgement.tracks, judgement.vias
+    ))
+}
+
+/// The parts in which two designs differ.
+fn differences(a: &Design, b: &Design) -> Vec<&'static str> {
+    [
+        ("layers", a.layers == b.layers),
+        ("outline", a.outline == b.outline),
+        ("nets", a.nets == b.nets),
+        ("pads", a.pads == b.pads),
+        ("via kinds", a.via_kinds == b.via_kinds),
+        ("keepouts", a.keepouts == b.keepouts),
+        ("existing copper", a.existing == b.existing),
+        ("rules", a.rules == b.rules),
+    ]
+    .into_iter()
+    .filter(|(_, same)| !same)
+    .map(|(part, _)| part)
+    .collect()
 }
 
 /// Routes the recipe's DSN export and has KiCad judge the imported session;

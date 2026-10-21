@@ -82,6 +82,14 @@ impl Kicad {
         }
     }
 
+    /// The Docker image KiCad runs from, unless it runs as installed.
+    pub fn image(&self) -> Option<&str> {
+        match self {
+            Self::Docker { image } => Some(image),
+            Self::Local { .. } => None,
+        }
+    }
+
     /// Builds `recipe` and exports it to `out/RECIPE.dsn`, next to the board.
     pub fn export(&self, root: &Path, out: &Path, recipe: &str) -> Result<()> {
         self.run(
