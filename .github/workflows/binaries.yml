@@ -1,15 +1,18 @@
 name: Binaries
 
-# Builds traxide for every platform and keeps the archives as artifacts of the
-# run, to download and try. Publishing releases comes later (TRX-35).
+# Builds traxide for every platform and the KiCad plugin's packages, and keeps
+# them as artifacts of the run, to download and try. The Release workflow runs
+# it on a version tag and publishes what it built.
 on:
   workflow_dispatch:
+  workflow_call:
   push:
     paths:
       - "crates/**"
       - "Cargo.*"
       - "rust-toolchain.toml"
       - "kicad-plugin/**"
+      - "xtask/**"
       - ".github/workflows/binaries.yml"
 
 env:
@@ -77,6 +80,11 @@ jobs:
           lipo -create -output dist/traxide-macos-universal/traxide \
             target/aarch64-apple-darwin/release/traxide target/x86_64-apple-darwin/release/traxide
           lipo -info dist/traxide-macos-universal/traxide
+          # Apple silicon runs only signed code; lipo and strip leave the
+          # linker's signatures in doubt, so sign anew, ad hoc. Signing with a
+          # Developer ID and notarising need the maintainer's Apple account (TRX-35).
+          codesign --force --sign - dist/traxide-macos-universal/traxide
+          codesign --verify --verbose dist/traxide-macos-universal/traxide
           cp README.md LICENSE-MIT LICENSE-APACHE dist/traxide-macos-universal/
       - name: Smoke test
         run: dist/traxide-macos-universal/traxide route fixtures/boards/matrix-3x4.dsn -o smoke.ses
@@ -95,25 +103,21 @@ jobs:
         with:
           path: built
           merge-multiple: true
-      # One package per platform, each with its traxide in plugins/bin, to
-      # install with KiCad's Plugin and Content Manager → Install from File.
+      - run: rustup show active-toolchain || rustup toolchain install
+      # One package per platform, with its traxide as the plugin's entry point,
+      # to install with KiCad's Plugin and Content Manager → Install from File.
       - name: Assemble
         run: |
-          package() { # target, platform
-            folder="packages/$1"
-            mkdir -p "$folder/plugins/bin"
-            cp kicad-plugin/plugins/*.py "$folder/plugins/"
-            cp built/traxide-$1/traxide built/traxide-$1/traxide.exe "$folder/plugins/bin/" 2>/dev/null || true
-            chmod +x "$folder"/plugins/bin/*
-            jq --arg platform "$2" '.versions[0].platforms = [$platform]' kicad-plugin/metadata.json > "$folder/metadata.json"
-            (cd "$folder" && zip -qr "../traxide-kicad-$1.zip" .)
+          package() { # target, platform, executable
+            cargo xtask kicad-package "$2" "built/traxide-$1/$3" "packages/traxide-kicad-$1.zip"
           }
-          package x86_64-unknown-linux-musl linux
-          package aarch64-unknown-linux-musl linux
-          package x86_64-pc-windows-msvc windows
-          package aarch64-pc-windows-msvc windows
-          package macos-universal macos
-          for zip in packages/*.zip; do unzip -l "$zip" | grep -q "plugins/bin/traxide" || { echo "no traxide in $zip"; exit 1; }; done
+          mkdir -p packages
+          package x86_64-unknown-linux-musl linux traxide
+          package aarch64-unknown-linux-musl linux traxide
+          package x86_64-pc-windows-msvc windows traxide.exe
+          package aarch64-pc-windows-msvc windows traxide.exe
+          package macos-universal macos traxide
+          for zip in packages/*.zip; do unzip -l "$zip"; done
       - uses: actions/upload-artifact@v4
         with:
           name: traxide-kicad-packages

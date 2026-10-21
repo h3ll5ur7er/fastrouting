@@ -6,7 +6,7 @@
 
 ## Try it
 
-Every push builds traxide for Linux, Windows (x86-64 and ARM64) and macOS: open the latest run of the **Binaries** workflow under the repository's *Actions* tab and download the archive for your platform. Or build it:
+Download traxide and its KiCad plugin from the repository's **Releases**: archives for Linux, Windows (x86-64 and ARM64 each) and macOS (universal), with nothing else to install, and a KiCad package for each. Between releases, every push builds the same in the **Binaries** workflow under the *Actions* tab. Or build it:
 
 ```bash
 cargo build --release
@@ -26,9 +26,13 @@ target/release/traxide freerouting -de board.dsn -do board.ses
 
 ### From inside KiCad
 
-With KiCad 10's API enabled (*Preferences → Preferences… → Plugins → Enable KiCad API*, then restart the PCB editor), `traxide route --kicad` routes the board open in the PCB editor and adds the routes to it as one step: *Edit → Undo traxide: route* takes them all back. The rules come from KiCad's net classes and the project's files.
+traxide's KiCad plugin adds a **Route board** button to the PCB editor's toolbar (KiCad 9 and 10). It routes every unrouted connection of the open board and adds the routes as one step: *Edit → Undo traxide: route* takes them all back. The rules come from KiCad's net classes and the project's files. On a board with copper zones traxide then refills them around the routes, a step of its own, so taking the routes back takes two undos.
 
-[`kicad-plugin/`](kicad-plugin) is an action plugin for KiCad 9 and 10: *Tools → External Plugins → Route with traxide* exports the open board, routes it and imports the result in one step. The **Binaries** workflow packages it with traxide for each platform (`traxide-kicad-packages`): install the one for yours with *Plugin and Content Manager → Install from File*. Or copy the folder `kicad-plugin/plugins` into KiCad's plugin folder (*Tools → External Plugins → Open Plugin Directory*) as `traxide`, and put the traxide binary into its `bin` folder, on the `PATH`, or name it in the `TRAXIDE` environment variable. A native plugin without Python follows for KiCad 10 and later.
+1. **Enable KiCad's API first**: *Preferences → Preferences… → Plugins → Enable KiCad API*. It is off by default, and **without it KiCad shows no traxide button at all**.
+2. Download the KiCad package for your platform (`traxide-kicad-<version>-<platform>.zip`) from the Releases and install it with *Plugin and Content Manager → Install from File…*.
+3. Restart the PCB editor: the button appears in its top toolbar. In KiCad 10, traxide's report (how much it routed, and what it could not) appears under the warning sign at the right end of the status bar; KiCad 9 shows the routes but not the report.
+
+The package carries the traxide binary itself; there is no Python. From a terminal, `traxide route --kicad` does what the button does.
 
 A copy of the binary named `freerouting` (`freerouting.exe` on Windows) takes Freerouting's arguments too, for tools that run Freerouting.
 

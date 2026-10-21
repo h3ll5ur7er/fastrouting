@@ -1,12 +1,13 @@
 //! The real-world test: KiCad builds each board and exports it, traxide routes
 //! it, KiCad imports the session and KiCad's own DRC judges the result. In
-//! Docker, traxide also routes each board open in a running KiCad, through
-//! KiCad's IPC API.
+//! Docker, traxide's KiCad plugin is installed into a running KiCad and routes
+//! each board open there when its button is pressed, through KiCad's IPC API.
 
 use crate::kicad::{self, Kicad};
+use crate::kicad_package::{self, Platform};
 use crate::running_kicad::RunningKicad;
-use anyhow::{Result, bail, ensure};
-use std::path::Path;
+use anyhow::{Context, Result, bail, ensure};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 use traxide_contracts::Design;
@@ -23,9 +24,13 @@ const DEFAULT_RECIPES: &[&str] = &[
 pub fn run(args: &[String]) -> Result<()> {
     let kicad = Kicad::from_args(args);
     let (root, traxide) = kicad::build_traxide()?;
+    let package = match kicad.image() {
+        Some(_) => Some(plugin_package(&root)?),
+        None => None,
+    };
     let mut failures = Vec::new();
     for recipe in kicad::recipes(args, DEFAULT_RECIPES) {
-        match round_trip(&kicad, &root, &traxide, recipe) {
+        match round_trip(&kicad, &root, &traxide, package.as_deref(), recipe) {
             Ok(summary) => println!("{recipe}: {summary}"),
             Err(error) => {
                 println!("{recipe}: FAILED\n{error:#}");
@@ -43,7 +48,25 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Result<String> {
+/// The KiCad plugin's package for Linux, as the Binaries workflow builds it.
+fn plugin_package(root: &Path) -> Result<PathBuf> {
+    let package = root.join("target/e2e/traxide-kicad-linux.zip");
+    std::fs::create_dir_all(package.parent().context("a folder")?)?;
+    kicad_package::package(
+        Platform::Linux,
+        &kicad::build_static_traxide(root)?,
+        &package,
+    )?;
+    Ok(package)
+}
+
+fn round_trip(
+    kicad: &Kicad,
+    root: &Path,
+    traxide: &Path,
+    package: Option<&Path>,
+    recipe: &str,
+) -> Result<String> {
     let out = root.join("target/e2e").join(recipe);
     std::fs::create_dir_all(&out)?;
     kicad.export(root, &out, recipe)?;
@@ -79,51 +102,43 @@ fn round_trip(kicad: &Kicad, root: &Path, traxide: &Path, recipe: &str) -> Resul
             .concat()
             .join("\n  ")
     );
-    let in_kicad = through_running_kicad(kicad, root, traxide, recipe, &out)?;
-    if custom_rules {
-        return Ok(format!(
-            "routed from the board file by its custom rules in {seconds:.2} s, clean in KiCad's DRC ({}); {in_kicad}",
+    let in_kicad = match package {
+        Some(package) => through_running_kicad(kicad, root, package, recipe, &out)?,
+        None => "not routed in a running KiCad, which needs Docker".into(),
+    };
+    let how = if custom_rules {
+        format!(
+            "routed from the board file by its custom rules in {seconds:.2} s, clean in KiCad's DRC ({})",
             first_line(&direct.stdout)
                 .split(" → ")
                 .next()
                 .unwrap_or_default()
-        ));
-    }
-    let through_plugin =
-        kicad.route_with_plugin(root, &out, recipe, &kicad.traxide_for_kicad(root)?)?;
-    ensure!(
-        through_plugin.is_clean(),
-        "routed through the KiCad plugin, KiCad's DRC found {} violations and {} unconnected items:\n  {}",
-        through_plugin.violations.len(),
-        through_plugin.unconnected.len(),
-        [through_plugin.violations, through_plugin.unconnected]
-            .concat()
-            .join("\n  ")
-    );
-    Ok(format!(
-        "clean in KiCad's DRC, from the board file and through the KiCad plugin too; {summary}; {in_kicad}"
-    ))
+        )
+    } else {
+        format!("clean in KiCad's DRC from the board file too; {summary}")
+    };
+    Ok(format!("{how}; {in_kicad}"))
 }
 
-/// Opens the recipe's board in KiCad, requires KiCad's API to give the same
-/// design as the board file, routes it there as a plugin would, has KiCad save
+/// Opens the recipe's board in KiCad with the plugin `package` installed,
+/// requires KiCad's API to give the same design as the board file, routes it
+/// by pressing the plugin's button, has KiCad save
 /// it and judge it with its zones as traxide left them, refilled, then
 /// requires the undos to take the routes back: one, or two on a board with
 /// copper zones, whose refill is an undo step of its own.
 fn through_running_kicad(
     kicad: &Kicad,
     root: &Path,
-    traxide: &Path,
+    package: &Path,
     recipe: &str,
     out: &Path,
 ) -> Result<String> {
-    let Some(image) = kicad.image() else {
-        return Ok("not routed in a running KiCad, which needs Docker".into());
-    };
+    let image = kicad.image().context("KiCad in Docker")?;
     let running = RunningKicad::open(
         image,
         &out.join(format!("{recipe}.kicad_pcb")),
         &out.join("in-kicad"),
+        package,
     )?;
     let before = running.design()?;
     let from_file =
@@ -133,16 +148,7 @@ fn through_running_kicad(
         "KiCad's API gives another design than the board file; they differ in {}",
         differences(&before, &from_file).join(", ")
     );
-    let routed = running
-        .plugin_command(traxide)
-        .args(["route", "--quiet", "--kicad"])
-        .output()?;
-    ensure!(
-        routed.status.success(),
-        "traxide did not route the board open in KiCad completely:\n{}{}",
-        String::from_utf8_lossy(&routed.stdout),
-        String::from_utf8_lossy(&routed.stderr)
-    );
+    running.route_with_the_plugin(&before)?;
     running.save()?;
     let judgement = kicad.judge_board(root, &running.project, recipe)?;
     ensure!(
@@ -188,7 +194,7 @@ fn through_running_kicad(
         ""
     };
     Ok(format!(
-        "routed in a running KiCad ({} track segments, {} vias{zones}), clean, and gone after {undos}",
+        "routed in a running KiCad by its traxide button ({} track segments, {} vias{zones}), clean, and gone after {undos}",
         judgement.tracks, judgement.vias
     ))
 }

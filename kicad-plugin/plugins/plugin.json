@@ -1,0 +1,19 @@
+{
+  "$schema": "https://go.kicad.org/api/schemas/v1",
+  "identifier": "com.github.h3ll5ur7er.traxide",
+  "name": "traxide",
+  "description": "A fast autorouter",
+  "runtime": { "type": "exec" },
+  "actions": [
+    {
+      "identifier": "route",
+      "name": "Route board",
+      "description": "Route every unrouted connection of the board with traxide",
+      "show-button": true,
+      "scopes": ["pcb"],
+      "entrypoint": "traxide",
+      "icons-light": ["icon.png"],
+      "icons-dark": ["icon-dark.png"]
+    }
+  ]
+}

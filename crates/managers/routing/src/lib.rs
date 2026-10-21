@@ -57,6 +57,9 @@ pub struct RouteReport {
     pub elapsed: Duration,
     /// Where the routes were stored.
     pub output: PathBuf,
+    /// The running KiCad refilled the board's copper zones around the routes,
+    /// an undo step of its own: taking the routes back takes two undos.
+    pub zones_refilled: bool,
     /// The names of the layers kept free of tracks, as planes.
     pub planes: Vec<String>,
     /// What the reader found wrong with the board and read anyway.
@@ -267,7 +270,7 @@ pub fn route(
         .output
         .clone()
         .unwrap_or_else(|| traxide_board_access::default_routes_path(&job.input));
-    traxide_board_access::store_routes(&output, &job.input, &design, &routes)?;
+    let stored = traxide_board_access::store_routes(&output, &job.input, &design, &routes)?;
     if let Some(drc_report) = &job.drc_report {
         traxide_board_access::store_drc_report(
             drc_report,
@@ -298,6 +301,7 @@ pub fn route(
         cancelled: cancel.is_cancelled(),
         elapsed: started.elapsed(),
         output,
+        zones_refilled: stored.zones_refilled,
         planes: design
             .layers
             .iter()
