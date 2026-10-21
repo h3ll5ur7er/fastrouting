@@ -32,7 +32,7 @@ The requirements: Windows, macOS and Linux on x86-64 and ARM64; every core used,
 | Triangulation | `spade` | For a later topological backend |
 | Arenas, scratch memory | `index_vec` or `slotmap`, `bumpalo` | Typed indices, SoA in hot loops; no ECS |
 | GPU | `wgpu` with WGSL | See below |
-| KiCad IPC | `kicad-ipc-rs` or own code generated with `prost` from KiCad's `.proto` files | |
+| KiCad IPC | Own client; messages generated at build time with `prost-build` and `protox` (no `protoc`) from KiCad's `.proto` files | [[TRX-17]], [[TRX-31]] |
 | CLI, config, logs | `clap`, `serde` with `toml`, `tracing` | |
 | Viewer | `egui` on `wgpu` | Optional client |
 | Web | `wasm-bindgen`, `wasm-bindgen-rayon` | Threads need cross-origin isolation |
@@ -78,4 +78,4 @@ In the order they are built:
 2. **The GPU may not pay off** on typical boards. It is milestone M3 and benchmark-gated.
 3. **KiCad IPC churn** between 10 and 11, the API being off by default, PCM icon issues ([[TRX-17]]).
 4. **Determinism under parallelism**: fixed batch order, seeded tie-breaks, tested ([[TRX-27]]).
-5. **Licence**: traxide is `MIT OR Apache-2.0`, so companies that ban copyleft can use it. That rules out copying from GPL projects — Freerouting, KiCad, the GPL Rust port of Freerouting — and makes every dependency's licence matter; see [[Development#clean-room-rules]]. One open point: KiCad's IPC API `.proto` files carry GPL-3.0 headers, while `kicad-ipc-rs`, generated from them, is MIT ([[TRX-17]] settles whether we can depend on it, or must talk to KiCad from our own message definitions).
+5. **Licence**: traxide is `MIT OR Apache-2.0`, so companies that ban copyleft can use it. That rules out copying from GPL projects — Freerouting, KiCad, the GPL Rust port of Freerouting — and makes every dependency's licence matter; see [[Development#clean-room-rules]]. KiCad's IPC API `.proto` files carry GPL-3.0 headers; the maintainer decided to generate traxide's messages from them anyway, as `kicad-python` (MIT) and `kicad-ipc-rs` (MIT) do, the one exception to the clean-room rules ([[TRX-17]]).

@@ -63,16 +63,16 @@ What [[TRX-31]] built in Board Access (`kicad/ipc/`), verified against KiCad 10.
 
 | | Hand-written (`spikes/kicad-ipc`) | `kicad-ipc-rs` 0.5.1 |
 | --- | --- | --- |
-| Licence of what enters the binary | prost, prost-types: Apache-2.0 | MIT and Apache-2.0 throughout (kicad-ipc-rs, nng, nng-sys with the bundled C libnng, tokio, prost) |
-| Build | Pure Rust | Builds libnng (C) with CMake through `nng-sys` 1.4.0-rc.0, a release candidate; a C toolchain per target |
+| Licence of what enters the binary | prost, prost-types: Apache-2.0 (protox and prost-build, MIT and Apache-2.0, only build) | MIT and Apache-2.0 throughout (kicad-ipc-rs, nng, nng-sys with the bundled C libnng, tokio, prost) |
+| Build | Pure Rust, `protox` instead of `protoc` | Builds libnng (C) with CMake through `nng-sys` 1.4.0-rc.0, a release candidate; a C toolchain per target |
 | Size | About 100 lines of transport plus the messages used; spike binary 0.8 MB | 21 crates with tokio; 0.7 MB for a bare connect |
 | Coverage | What traxide needs, added per message | All of 10.0.1's commands, typed wrappers |
-| KiCad's text in it | None: messages defined from field numbers and types | The generated code carries the `.proto` files' comments (GPL-3.0-or-later headers) |
+| KiCad's text in it | The `.proto` files it needs, unchanged, generated without their comments | The generated code carries the `.proto` files' comments (GPL-3.0-or-later headers) |
 | Maintenance | Ours; the API is stable by protobuf rules (fields are added, never changed) | One maintainer, releases since February 2026, pinned to 10.0.1 |
 
 Both worked against KiCad 10.0.7. The recommendation is the hand-written client: no C build in the cross-compiled release binaries ([[TRX-35]]), no async runtime, and the licence question below does not arise.
 
-**Licence**: KiCad's `.proto` files carry GPL-3.0-or-later headers. The KiCad developers themselves publish `kicad-python`, generated from those files, under MIT (relicensed in its 0.2.0, February 2025), which suggests they do not treat the API definitions as making clients GPL; no explicit statement was found in the documentation. Defining our own messages from the field numbers keeps traxide clear of the question either way: field numbers and types are the interface, not KiCad's text.
+**Licence**: KiCad's `.proto` files carry GPL-3.0-or-later headers. The KiCad developers themselves publish `kicad-python`, generated from those files, under MIT (relicensed in its 0.2.0, February 2025), which suggests they do not treat the API definitions as making clients GPL; no explicit statement was found in the documentation. [[TRX-17]] first defined traxide's messages by hand from the field numbers to stay clear of the question; the maintainer then decided to accept the small risk, as many MIT and Apache projects do, and generate them from KiCad's files: `crates/access/board/proto/kicad/` holds the nine files traxide needs from KiCad 10.0.7, headers intact, and the build script compiles them with `protox` and `prost-build`, leaving their comments out. It is the one exception to the clean-room rules ([[Development#clean-room-rules]]).
 
 ## The plugin
 

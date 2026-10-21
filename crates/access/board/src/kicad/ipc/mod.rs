@@ -16,12 +16,17 @@ use super::board::{self, Board};
 use super::project::{ClassValues, LiveClass, Project};
 use crate::{Beside, BoardError, RUNNING_KICAD};
 use client::Kicad;
-use messages::{
-    BeginCommit, BeginCommitResponse, COMMIT_DROP, COMMIT_PUSH, CreateItems, CreateItemsResponse,
-    Distance, Document, EndCommit, EndCommitResponse, GetNetClassForNets, GetNets, ITEM_OK,
-    ItemHeader, NET_CLASS_IMPLICIT, Net, NetClass, NetClassForNetsResponse, NetsResponse,
-    REQUEST_OK, SaveDocumentToString, SavedDocumentResponse,
+use messages::board::commands::{
+    GetNetClassForNets, GetNets, NetClassForNetsResponse, NetsResponse,
 };
+use messages::board::types::Net;
+use messages::common::commands::{
+    BeginCommit, BeginCommitResponse, CommitAction, CreateItems, CreateItemsResponse, EndCommit,
+    EndCommitResponse, ItemStatusCode, SaveDocumentToString, SavedDocumentResponse,
+};
+use messages::common::project::{NetClass, NetClassType};
+use messages::common::types::document_specifier::Identifier;
+use messages::common::types::{Distance, DocumentSpecifier, ItemHeader, ItemRequestStatus};
 use std::path::PathBuf;
 use traxide_contracts::{Design, Routes};
 
@@ -60,16 +65,18 @@ pub(crate) fn store_routes(
     if items.is_empty() {
         return Ok(());
     }
-    let commit: BeginCommitResponse = kicad.call(&BeginCommit {})?;
+    let commit: BeginCommitResponse = kicad.call(&BeginCommit::default())?;
     let added = create(&mut kicad, &document, items);
     let ended = kicad.call::<_, EndCommitResponse>(&EndCommit {
         id: commit.id,
         action: if added.is_ok() {
-            COMMIT_PUSH
+            CommitAction::CmaCommit
         } else {
-            COMMIT_DROP
-        },
+            CommitAction::CmaDrop
+        }
+        .into(),
         message: COMMIT_MESSAGE.into(),
+        header: None,
     });
     added?;
     ended.map(drop)
@@ -77,16 +84,18 @@ pub(crate) fn store_routes(
 
 fn create(
     kicad: &mut Kicad,
-    document: &Document,
+    document: &DocumentSpecifier,
     items: Vec<messages::Any>,
 ) -> Result<(), BoardError> {
     let created: CreateItemsResponse = kicad.call(&CreateItems {
         header: Some(ItemHeader {
             document: Some(document.clone()),
+            ..ItemHeader::default()
         }),
         items,
+        container: None,
     })?;
-    if created.status != REQUEST_OK {
+    if created.status != i32::from(ItemRequestStatus::IrsOk) {
         return Err(BoardError::Kicad(format!(
             "the board refused new items ({})",
             created.status
@@ -96,7 +105,7 @@ fn create(
         .created_items
         .iter()
         .filter_map(|item| item.status.as_ref())
-        .find(|status| status.code != ITEM_OK)
+        .find(|status| status.code != i32::from(ItemStatusCode::IscOk))
     {
         Some(refused) => Err(BoardError::Kicad(format!(
             "KiCad refused a track or via: {}",
@@ -108,7 +117,7 @@ fn create(
 
 fn read(
     kicad: &mut Kicad,
-    document: &Document,
+    document: &DocumentSpecifier,
     environment: &Environment,
 ) -> Result<Board, BoardError> {
     let saved: SavedDocumentResponse = kicad.call(&SaveDocumentToString {
@@ -116,9 +125,10 @@ fn read(
     })?;
     let nets: NetsResponse = kicad.call(&GetNets {
         board: Some(document.clone()),
+        netclass_filter: Vec::new(),
     })?;
     let classes: NetClassForNetsResponse = kicad.call(&GetNetClassForNets {
-        nets: nets.nets.clone(),
+        net: nets.nets.clone(),
     })?;
     let rule_files = rule_files(document, environment)?;
     let mut project = Project::read(rule_files.project.as_deref())?;
@@ -128,13 +138,20 @@ fn read(
 
 /// The project's rule files: in the folder KiCad passes to plugins, else in
 /// the project's folder as KiCad names it, named after the project.
-fn rule_files(document: &Document, environment: &Environment) -> Result<Beside, BoardError> {
+fn rule_files(
+    document: &DocumentSpecifier,
+    environment: &Environment,
+) -> Result<Beside, BoardError> {
     let project = document.project.clone().unwrap_or_default();
     let folder = environment
         .project_folder
         .clone()
         .or_else(|| (!project.path.is_empty()).then(|| PathBuf::from(&project.path)));
-    let name = match (project.name.as_str(), &document.board_filename) {
+    let board_filename = match &document.identifier {
+        Some(Identifier::BoardFilename(board)) => Some(board),
+        _ => None,
+    };
+    let name = match (project.name.as_str(), board_filename) {
         ("", Some(board)) => board.strip_suffix(".kicad_pcb").unwrap_or(board),
         (name, _) => name,
     };
@@ -152,7 +169,7 @@ fn live_classes(nets: &[Net], classes: &NetClassForNetsResponse) -> Vec<LiveClas
         .filter(|net| !net.name.is_empty())
         .filter_map(|net| {
             let class = classes.classes.get(&net.name)?;
-            Some(if class.class_type == NET_CLASS_IMPLICIT {
+            Some(if class.r#type == i32::from(NetClassType::NctImplicit) {
                 LiveClass {
                     net: net.name.clone(),
                     class: class.constituents.first().unwrap_or(&class.name).clone(),
@@ -194,7 +211,9 @@ fn nanometres(value: i64) -> i32 {
 /// What the end-to-end test does to the running KiCad as a designer would.
 #[cfg(feature = "testing")]
 pub(crate) mod testing {
-    use super::messages::{ACTION_OK, Empty, RunAction, RunActionResponse, SaveDocument};
+    use super::messages::common::commands::{
+        RunAction, RunActionResponse, RunActionStatus, SaveDocument,
+    };
     use super::*;
 
     /// Saves the board open in KiCad to its file, as *File → Save* does.
@@ -202,7 +221,7 @@ pub(crate) mod testing {
         let mut kicad = Kicad::connect(environment)?;
         let document = kicad.open_board()?;
         kicad
-            .call::<_, Empty>(&SaveDocument {
+            .call::<_, ()>(&SaveDocument {
                 document: Some(document),
             })
             .map(drop)
@@ -216,7 +235,7 @@ pub(crate) mod testing {
         let ran: RunActionResponse = kicad.call(&RunAction {
             action: "common.Interactive.undo".into(),
         })?;
-        if ran.status == ACTION_OK {
+        if ran.status == i32::from(RunActionStatus::RasOk) {
             Ok(())
         } else {
             Err(BoardError::Kicad(format!(
@@ -229,11 +248,14 @@ pub(crate) mod testing {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::messages::{
-        Any, ApiRequest, ApiResponse, CreateItemsResponse, DOCUMENT_PCB, GetOpenDocumentsResponse,
-        ItemCreationResult, ItemStatus, Kiid, NetClassBoardSettings, PadStack, PadStackLayer,
-        Project as KicadProject, ResponseStatus, StatusCode, Vector2,
+    use super::messages::board::types::{DrillProperties, PadStack, PadStackLayer};
+    use super::messages::common::commands::{
+        GetOpenDocumentsResponse, ItemCreationResult, ItemStatus,
     };
+    use super::messages::common::project::NetClassBoardSettings;
+    use super::messages::common::types::{DocumentType, Kiid, ProjectSpecifier, Vector2};
+    use super::messages::common::{ApiRequest, ApiResponse, ApiResponseStatus, ApiStatusCode};
+    use super::messages::{Any, Packed};
     use super::*;
     use prost::{Message, Name};
     use std::os::unix::net::UnixListener;
@@ -277,7 +299,7 @@ mod tests {
                 }),
                 track_width: Some(Distance { value_nm: width }),
                 via_stack: Some(PadStack {
-                    drill: Some(messages::Drill {
+                    drill: Some(DrillProperties {
                         diameter: Some(Vector2 {
                             x_nm: drill,
                             y_nm: drill,
@@ -293,16 +315,18 @@ mod tests {
                     }],
                     ..Default::default()
                 }),
+                ..NetClassBoardSettings::default()
             }),
-            class_type: 1,
-            constituents: Vec::new(),
+            r#type: NetClassType::NctExplicit.into(),
+            ..NetClass::default()
         }
     }
 
     fn ok<M: Message + Name>(message: &M) -> Vec<u8> {
         ApiResponse {
-            status: Some(ResponseStatus {
-                status: StatusCode::Ok as i32,
+            header: None,
+            status: Some(ApiResponseStatus {
+                status: ApiStatusCode::AsOk.into(),
                 error_message: String::new(),
             }),
             message: Some(Any::of(message)),
@@ -322,10 +346,10 @@ mod tests {
         state.received.push(name.clone());
         match name.as_str() {
             "GetOpenDocuments" => ok(&GetOpenDocumentsResponse {
-                documents: vec![Document {
-                    document_type: DOCUMENT_PCB,
-                    board_filename: Some(format!("{BOARD}.kicad_pcb")),
-                    project: Some(KicadProject {
+                documents: vec![DocumentSpecifier {
+                    r#type: DocumentType::DoctypePcb.into(),
+                    identifier: Some(Identifier::BoardFilename(format!("{BOARD}.kicad_pcb"))),
+                    project: Some(ProjectSpecifier {
                         name: BOARD.into(),
                         path: fixtures().display().to_string(),
                     }),
@@ -333,6 +357,7 @@ mod tests {
             }),
             "SaveDocumentToString" => ok(&SavedDocumentResponse {
                 contents: state.board.clone(),
+                document: None,
             }),
             "GetNets" => {
                 let design = board::read(&state.board, None, None)
@@ -344,6 +369,7 @@ mod tests {
                         .iter()
                         .map(|n| Net {
                             name: n.name.clone(),
+                            code: None,
                         })
                         .collect(),
                 })
@@ -359,7 +385,7 @@ mod tests {
                 };
                 ok(&NetClassForNetsResponse {
                     classes: asked
-                        .nets
+                        .net
                         .iter()
                         .map(|net| (net.name.clone(), class_of(&net.name)))
                         .collect(),
@@ -372,24 +398,30 @@ mod tests {
             }),
             "CreateItems" => {
                 let asked: CreateItems = message.to().expect("the request");
-                let code = if state.refuse_items { 7 } else { ITEM_OK };
+                let code = if state.refuse_items {
+                    ItemStatusCode::IscInvalidData
+                } else {
+                    ItemStatusCode::IscOk
+                };
                 ok(&CreateItemsResponse {
-                    status: REQUEST_OK,
+                    header: None,
+                    status: ItemRequestStatus::IrsOk.into(),
                     created_items: asked
                         .items
                         .iter()
                         .map(|_| ItemCreationResult {
                             status: Some(ItemStatus {
-                                code,
+                                code: code.into(),
                                 error_message: "off the board".into(),
                             }),
+                            item: None,
                         })
                         .collect(),
                 })
             }
             "EndCommit" => {
                 let asked: EndCommit = message.to().expect("the request");
-                let action = if asked.action == COMMIT_PUSH {
+                let action = if asked.action == i32::from(CommitAction::CmaCommit) {
                     "push"
                 } else {
                     "drop"
@@ -481,7 +513,7 @@ mod tests {
         let (_folder, environment, _) = fake_kicad(|state| {
             let combined = NetClass {
                 name: "HV,Default".into(),
-                class_type: NET_CLASS_IMPLICIT,
+                r#type: NetClassType::NctImplicit.into(),
                 constituents: vec!["HV".into(), "Default".into()],
                 ..default_class()
             };
