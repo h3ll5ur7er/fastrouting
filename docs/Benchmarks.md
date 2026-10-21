@@ -60,6 +60,23 @@ Stack samples of Issue110-RelayModule showed nearly all of its time in checking 
 | Issue015-StackOverflow, complete | 46 s | **40 s** |
 | keyboard-tkl, complete | 1.8 s | **1.9 s** |
 
+## Off-grid pins left along their axis (M5, TRX-54)
+
+A pin of a fine-pitch chip whose centre lies off the 0.1 mm grid could not be left: between its neighbours a track fits only on the pin's axis, and every grid node in or next to the pin lies off it ([[Corpus-analysis#off-grid-fine-pitch-pins]]). A search now also leaves every pad along its eight axes, off the grid, to where the stub first crosses a grid line beyond the copper around it, and joins the grid there by a short jog square to that line. Measured on this machine with `traxide route` and `traxide check`, unrouted connections and those reported hemmed in; every session breaks no rule the board did not already break:
+
+| Board | Before | **After** | Hemmed in | Time |
+| --- | --- | --- | --- | --- |
+| Issue508-DAC2020_bm01 | 153 of 195 | **169 of 195** | 42 → **0** | 8.8 s → 94 s |
+| Issue508-DAC2020_bm05 | 85 of 107 | **99 of 107** | 22 → 2 | 0.05 s → 4.8 s |
+| Issue508-DAC2020_bm06 | 94 of 98 | **98 of 98** | 4 → **0** | 0.1 s |
+| Issue102, Issue326 Mars-64 (each) | 81 of 106 | **83 of 106** | 11 → **0** | 126 s → **49 s** |
+| Issue269-caniot-tiny-arm | 3 of 89 | 6 of 89 | 33 → 6 | 17 s → 35 s |
+| Issue297-myboard | 157 of 161 | **160 of 161** | 4 → 1 | 2.6 s → 5.1 s |
+| Issue157-TeamAdapt-LinePCB | 211 of 214 | 211 of 214 | 3 → 3 | 1.3 s |
+| keyboard-tkl, matrix-3x4 | | the same routes | | keyboard 2.05 s → 2.10 s |
+
+bm06 is complete, as Freerouting completes it. The time goes to the connections that now leave their pins: on bm01 and bm05 they negotiate, and those that still find no way search the whole window before they fail, where before they failed at once; a variant that walked the axes only for pads with no other way out routed the same and took as long. On caniot the other unrouted connections end at pads on its power layers ([[TRX-57]]) and now fail with "no way found" on its one routable layer. Issue157's three end at Q1-3 or Q2-3, across which the board's own unlocked track runs ([[TRX-59]]). The keyboard's time is the median of nine runs each (1.95–2.20 s before, 1.98–2.24 s after); the routes are byte for byte the same. The KiCad round trip (`cargo xtask e2e`) could not run: the container had no Docker daemon.
+
 ## A wider window where no way was found (M5, TRX-55)
 
 A search covers the box around its pads grown by 5 mm; the corpus analysis ([[Corpus-analysis#search-window-too-small]]) found ways that run further round. A connection that finds no way now searches again, alone after its batch, in windows four times wider each, up to the whole board. Measured on this machine, every session as clean as before (the violations counted are the boards' own):
