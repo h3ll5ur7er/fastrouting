@@ -64,6 +64,12 @@ impl Grid {
         (self.min.0..=self.max.0).contains(&x) && (self.min.1..=self.max.1).contains(&y)
     }
 
+    /// Whether `point` lies within the nodes of the window, on them or between.
+    pub(crate) fn covers(&self, point: Point) -> bool {
+        let (min, max) = (self.point(self.min), self.point(self.max));
+        (min.x..=max.x).contains(&point.x) && (min.y..=max.y).contains(&point.y)
+    }
+
     /// The nodes inside `area`, and the ring around the node nearest to `centre`,
     /// so that even a pad smaller than the pitch has nodes to leave by.
     pub(crate) fn nodes_near(&self, area: Rect, centre: Point) -> Vec<Node> {

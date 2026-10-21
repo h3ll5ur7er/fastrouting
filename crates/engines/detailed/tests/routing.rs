@@ -547,3 +547,78 @@ fn a_pad_over_the_board_edge_is_left_from_its_copper_on_the_board() {
         "starts on A1's copper: {start:?}"
     );
 }
+
+/// A row of five 0.2 mm pins at 0.4 mm pitch, as on a QFN, with 0.2 mm track and
+/// clearance: a track fits between two neighbours only along a pin's axis.
+/// The pins' centres lie `offset_mm` off the grid; each pin connects to a pad on
+/// the other layer below the row, fanned out.
+fn fine_pitch_row(offset_mm: f64) -> (Design, Vec<(String, String)>) {
+    let mut builder = DesignBuilder::new(20.0, 12.0);
+    let mut pairs = Vec::new();
+    for pin in 0..5 {
+        let net = format!("P{pin}");
+        let (name, target) = (format!("U1.{pin}"), format!("T{pin}"));
+        builder = builder
+            .smd(
+                &name,
+                Some(&net),
+                at(9.2 + offset_mm + 0.4 * f64::from(pin), 5.0 + offset_mm),
+                0.2,
+                0,
+            )
+            .smd(
+                &target,
+                Some(&net),
+                at(6.0 + 2.0 * f64::from(pin), 9.0),
+                0.5,
+                1,
+            );
+        pairs.push((name, target));
+    }
+    (builder.build(), pairs)
+}
+
+fn assert_each_pin_connects_outward(offset_mm: f64) {
+    let (design, pairs) = fine_pitch_row(offset_mm);
+    let pairs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let result = route(&design, &pairs);
+    assert_eq!(result.hemmed_in, []);
+    assert_eq!(result.unrouted, []);
+    assert_legal(&design, &result.routes);
+}
+
+#[test]
+fn pins_of_a_fine_pitch_row_half_a_pitch_off_the_grid_leave_along_their_axis() {
+    assert_each_pin_connects_outward(0.05);
+}
+
+#[test]
+fn pins_of_a_fine_pitch_row_a_hair_off_the_grid_leave_along_their_axis() {
+    assert_each_pin_connects_outward(0.001);
+}
+
+#[test]
+fn a_pin_off_the_grid_is_left_by_an_octilinear_stub_along_its_axis() {
+    let (design, pairs) = fine_pitch_row(0.05);
+    let (pin, target) = (&pairs[2].0, &pairs[2].1);
+    let routes = route(&design, &[(pin, target)]).routes;
+    let centre = design.pad(design.pad_named(pin)).position;
+    let track = routes
+        .tracks
+        .iter()
+        .find(|t| t.path.first() == Some(&centre) || t.path.last() == Some(&centre))
+        .expect("a track leaves the pin's centre");
+    let mut path = track.path.clone();
+    if path[0] != centre {
+        path.reverse();
+    }
+    assert_eq!(path[1].x, centre.x, "first along the axis: {path:?}");
+    assert!(
+        path.windows(2).all(|p| is_octilinear(p[0], p[1])),
+        "{path:?}"
+    );
+    assert_legal(&design, &routes);
+}
