@@ -33,6 +33,22 @@ Tried in October 2026, on top of [[TRX-55]]: negotiation in rounds (every connec
 | Issue015 (61) | **61**, 18 s, 130 vias | 61, 33 s, 121 vias | 61, 36 s | 61, 35 s |
 | Issue029 (91) | 87, 149 s | | over 300 s | 83, 116 s |
 
-No variant beats rip-up without losing a complete board or taking far longer, so none was kept. Rounds settle congested boards much better (Issue039, RelayModule, fewer vias everywhere), but the last few overlaps never resolve, and the routes taken out then no longer fit; rip-up afterwards finishes them on easy boards but churns without end on hard ones. Worth trying next: the overlaps of the last rounds by place rather than by count (they may sit at a few pins, where escaping fine-pitch pins first would help), and finishing with rip-up only for the connections that were taken out, the rest locked.
+No variant beats rip-up without losing a complete board or taking far longer, so none was kept. The code of all of them is in [[docs/Research/experiments/trx-56-rounds.patch]] (applies to the commit that recorded it; `TRAXIDE_ROUNDS=1` switches the rounds on, `TRAXIDE_LOCKED=1` finishes as below). Rounds settle congested boards much better (Issue039, RelayModule, fewer vias everywhere), but the last few overlaps never resolve, and the routes taken out then no longer fit; rip-up afterwards finishes them on easy boards but churns without end on hard ones. Worth trying next: the overlaps of the last rounds by place rather than by count (they may sit at a few pins, where escaping fine-pitch pins first would help), and finishing with rip-up only for the connections that were taken out, the rest locked.
+
+Tried next, after [[TRX-60]]: rounds, then rip-up and reroute for the leftovers only, every route the rounds settled locked (connections routed, time; same machine, 300 s limit):
+
+| Board | Rip-up (today) | Rounds, then the leftovers ripping up only each other |
+| --- | --- | --- |
+| keyboard-tkl (315) | **315**, 1.5 s | 314, 4.0 s |
+| matrix-6x17 (306) | **306**, 0.2 s | **306**, 0.2 s |
+| Issue034 (147) | **147**, 28 s | 146, 12 s |
+| Issue015 (61) | **61**, 19 s, 130 vias | **61**, 38 s, 121 vias |
+| Issue110-RelayModule (88) | 84, 91 s | **87**, 24 s, 79 vias instead of 108 |
+| Issue039 (204) | **157**, 72 s | over 300 s |
+| Issue102 Mars-64 (106) | 83, 39 s | **87**, 110 s |
+| Issue283 (200) | 182, 93 s, 396 vias | **188**, 84 s, 305 vias |
+| Issue029 (91) | **87**, 167 s | 86, 203 s |
+
+Rejected for the same reason as the others: the keyboard and Issue034 lose the one connection whose route the rounds took out last, which no longer fits between locked routes; on Issue039 the leftovers churn. Every rounds variant so far loses exactly that one connection on those two boards, so the next thing to look at is which connection it is and where its overlap sits, before another way of finishing.
 
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.

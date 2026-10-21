@@ -1,0 +1,206 @@
+diff --git a/crates/engines/detailed/src/lib.rs b/crates/engines/detailed/src/lib.rs
+index c379474..e7db7b2 100644
+--- a/crates/engines/detailed/src/lib.rs
++++ b/crates/engines/detailed/src/lib.rs
+@@ -32,6 +32,9 @@ const SCANNED_PER_BATCH_SLOT: usize = 4;
+ /// churning boards in all, though they take longer.
+ const STALLED_ROUNDS: usize = 4;
+ 
++/// Negotiating in rounds ends after this many rounds without fewer overlaps.
++const ROUNDS_WITHOUT_GAIN: usize = 4;
++
+ /// How much wider each window of a search that found no way grows.
+ const WIDER_WINDOW: i32 = 4;
+ 
+@@ -95,9 +98,13 @@ impl<'a> Router<'a> {
+             may_rip_up: self.finder.profile.max_rip_ups > 0,
+             most_routed: 0,
+             rip_ups_since_most: 0,
++            rip_up_budget: STALLED_ROUNDS * total,
+         };
+         let mut unrouted = Vec::new();
+         let (mut hemmed_in, mut exits_taken, mut cut_off) = (Vec::new(), Vec::new(), Vec::new());
++        if std::env::var_os("TRAXIDE_ROUNDS").is_some() {
++            self.settle_in_rounds(&mut state, plan, corridors, layout, cancel, events);
++        }
+         while !state.queue.is_empty() {
+             if cancel.is_cancelled() {
+                 unrouted.extend(state.queue.drain(..));
+@@ -159,6 +166,127 @@ impl<'a> Router<'a> {
+         }
+     }
+ 
++    /// Negotiated congestion in rounds, PathFinder's way: every connection takes
++    /// a route each round, overlapping others at a price that rises from round
++    /// to round, and history builds up where they meet; the connections that
++    /// overlap are routed again in the next round. When no round brings fewer
++    /// overlaps for ROUNDS_WITHOUT_GAIN rounds, the most overlapping routes are
++    /// taken out until the rest is legal, and left in the queue, with those
++    /// that found no way, for rip-up and reroute to finish.
++    fn settle_in_rounds(
++        &mut self,
++        state: &mut Negotiated,
++        plan: &Plan,
++        corridors: Option<&Corridors>,
++        layout: &mut (impl LayoutAccess + Sync),
++        cancel: &CancelToken,
++        events: &impl Publisher<Event>,
++    ) {
++        let design = self.finder.design;
++        let total = plan.connections.len();
++        let no_rip_ups = vec![0_u32; total];
++        let mut present = self.finder.profile.rip_up_cost;
++        let mut failed = Vec::new();
++        let (mut fewest_overlapping, mut rounds_without_gain) = (usize::MAX, 0);
++        loop {
++            while !state.queue.is_empty() && !cancel.is_cancelled() {
++                let batch = self.next_batch(&mut state.queue, plan, corridors);
++                let negotiation = search::Negotiation {
++                    rip_ups: &no_rip_ups,
++                    history: &state.history,
++                    present: Some(present),
++                };
++                let found = self.find_all(&batch, plan, corridors, layout, Some(negotiation));
++                for (id, found) in batch.iter().copied().zip(found) {
++                    let found = match found {
++                        Ok(found) => Some(found),
++                        Err(NoRoute::Blocked { .. }) => None,
++                        Err(NoRoute::NotFound) => {
++                            let connection = plan.connections[id.index()];
++                            self.find_wider(connection, layout, Some(negotiation))
++                        }
++                    };
++                    match found {
++                        Some(found) => {
++                            layout.add_route(id, &found);
++                            state.routed[id.index()] = Some(found);
++                            let done = state.routed.iter().filter(|r| r.is_some()).count();
++                            events.publish(Event::ConnectionRouted { done, total });
++                        }
++                        None => failed.push(id),
++                    }
++                }
++            }
++            if cancel.is_cancelled() {
++                break;
++            }
++            let overlapping: Vec<ConnectionId> = (0..total)
++                .map(ConnectionId::from_index)
++                .filter(|c| {
++                    state.routed[c.index()]
++                        .as_ref()
++                        .is_some_and(|r| !routed_obstructions(layout, r).is_empty())
++                })
++                .collect();
++            if overlapping.is_empty() {
++                break;
++            }
++            if overlapping.len() < fewest_overlapping {
++                (fewest_overlapping, rounds_without_gain) = (overlapping.len(), 0);
++            } else {
++                rounds_without_gain += 1;
++                if rounds_without_gain >= ROUNDS_WITHOUT_GAIN {
++                    break;
++                }
++            }
++            for &id in &overlapping {
++                if let Some(found) = &state.routed[id.index()] {
++                    record_collisions(&mut state.history, design, layout, found);
++                }
++            }
++            for &id in &overlapping {
++                layout.remove_route(id);
++                state.routed[id.index()] = None;
++                state.queue.push_back(id);
++            }
++            present = present.saturating_mul(3) / 2;
++        }
++        // Legal at last: the routes that overlap most go, the rest stay.
++        let mut left = failed;
++        left.extend(state.queue.drain(..));
++        loop {
++            let worst = (0..total)
++                .map(ConnectionId::from_index)
++                .filter_map(|c| {
++                    let overlaps =
++                        routed_obstructions(layout, state.routed[c.index()].as_ref()?).len();
++                    (overlaps > 0).then_some((overlaps, c))
++                })
++                .max();
++            let Some((_, id)) = worst else { break };
++            layout.remove_route(id);
++            state.routed[id.index()] = None;
++            left.push(id);
++        }
++        left.sort_unstable();
++        left.dedup();
++        // Rip-up and reroute only finishes what the rounds left.
++        if std::env::var_os("TRAXIDE_LOCKED").is_some() {
++            // The routes the rounds settled stay; the leftovers rip up only each other.
++            let max = self.finder.profile.max_rip_ups;
++            for (rip_ups, routed) in state.rip_ups.iter_mut().zip(&state.routed) {
++                if routed.is_some() {
++                    *rip_ups = max;
++                }
++            }
++            state.rip_up_budget = STALLED_ROUNDS * total;
++        } else {
++            state.rip_up_budget = STALLED_ROUNDS * left.len().max(1);
++        }
++        state.most_routed = state.routed.iter().filter(|r| r.is_some()).count();
++        state.queue.extend(left);
++    }
++
+     /// A search in windows grown WIDER_WINDOW times wider each, alone, until one
+     /// finds a way or the last covered the whole board: the way round a row of
+     /// headers or the board's own wiring is often longer than the margin.
+@@ -415,6 +543,8 @@ struct Negotiated {
+     may_rip_up: bool,
+     most_routed: usize,
+     rip_ups_since_most: usize,
++    /// How many rip-ups without more connections routed end negotiation.
++    rip_up_budget: usize,
+ }
+ 
+ impl Negotiated {
+@@ -422,6 +552,7 @@ impl Negotiated {
+         self.may_rip_up.then_some(search::Negotiation {
+             rip_ups: &self.rip_ups,
+             history: &self.history,
++            present: None,
+         })
+     }
+ 
+@@ -457,7 +588,7 @@ impl Negotiated {
+         let done = self.routed.iter().filter(|r| r.is_some()).count();
+         if done > self.most_routed {
+             (self.most_routed, self.rip_ups_since_most) = (done, 0);
+-        } else if self.rip_ups_since_most >= STALLED_ROUNDS * total {
++        } else if self.rip_ups_since_most >= self.rip_up_budget {
+             self.may_rip_up = false;
+         }
+         events.publish(Event::ConnectionRouted { done, total });
+diff --git a/crates/engines/detailed/src/search.rs b/crates/engines/detailed/src/search.rs
+index b3207e4..b54050e 100644
+--- a/crates/engines/detailed/src/search.rs
++++ b/crates/engines/detailed/src/search.rs
+@@ -153,6 +153,9 @@ pub(crate) struct Negotiation<'a> {
+     /// How often each connection has been ripped up.
+     pub(crate) rip_ups: &'a [u32],
+     pub(crate) history: &'a History,
++    /// Negotiating in rounds: what overlapping a routed connection costs this
++    /// round, for each connection overlapped, which may then stay.
++    pub(crate) present: Option<i64>,
+ }
+ 
+ pub(crate) struct Search<'a, L> {
+@@ -493,6 +496,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
+         match obstruction {
+             Obstruction::None => Some(0),
+             Obstruction::Fixed => None,
++            Obstruction::Routed(connections) if negotiation.present.is_some() => {
++                Some(negotiation.present? * connections.len() as i64)
++            }
+             Obstruction::Routed(connections) => {
+                 let rip_ups = negotiation.rip_ups;
+                 connections
