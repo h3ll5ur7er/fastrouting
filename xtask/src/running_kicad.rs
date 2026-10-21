@@ -171,7 +171,7 @@ fn write_configuration(image: &str, config: &Path) -> Result<()> {
             "sh",
             "-c",
             "cp -r ~/.config/kicad/. /out/ && for version in /out/*/; do cp /seed/* \"$version\"; done \
-             && chmod -R a+rwX /out",
+             && chmod -R a+rwX /out/*",
         ]))?;
     Ok(())
 }
