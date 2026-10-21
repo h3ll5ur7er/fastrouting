@@ -2,7 +2,7 @@
 id: TRX-15
 title: Assemble the benchmark corpus and Freerouting baselines
 type: research
-status: in-progress
+status: todo
 priority: high
 labels: [benchmark]
 estimate: 3

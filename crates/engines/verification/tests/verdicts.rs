@@ -102,6 +102,47 @@ fn copper_near_the_edge_is_reported() {
 }
 
 #[test]
+fn copper_near_a_cutout_inside_the_board_is_reported() {
+    use traxide_contracts::geometry::{Polygon, Rect};
+    // A cutout from (9, 6) to (11, 9) mm, as a footprint may draw on Edge.Cuts;
+    // the track passes 0.1 mm below it, closer than the 0.2 mm edge clearance.
+    let mut design = board();
+    let cutout = Polygon::rectangle(Rect {
+        min: at(9.0, 6.0),
+        max: at(11.0, 9.0),
+    });
+    design.outline = design.outline.clone().with_holes(vec![cutout]);
+    let routes = Routes {
+        tracks: vec![track(&design, "A", 0, &[at(2.0, 5.0), at(18.0, 5.0)])],
+        vias: vec![],
+    };
+    assert!(
+        check(&design, routes.clone()).is_clean(),
+        "5 mm is clear of it"
+    );
+    let close = Routes {
+        tracks: vec![track(
+            &design,
+            "A",
+            0,
+            &[
+                at(2.0, 5.0),
+                at(8.0, 5.0),
+                at(8.0, 5.8),
+                at(12.0, 5.8),
+                at(12.0, 5.0),
+                at(18.0, 5.0),
+            ],
+        )],
+        vias: vec![],
+    };
+    assert!(check(&design, close).violations.contains(&Violation::Edge {
+        layer: LayerId(0),
+        item: CopperItem::Track(0)
+    }));
+}
+
+#[test]
 fn vias_connect_the_layers_they_span() {
     let design = board();
     let a = design.net_named("A");

@@ -2,7 +2,7 @@
 id: TRX-19
 title: Check designs independently in the Verification Engine
 type: feature
-status: in-progress
+status: todo
 priority: high
 labels: [verification, drc]
 estimate: 5

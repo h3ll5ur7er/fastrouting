@@ -2,8 +2,9 @@
 id: TRX-58
 title: Join pads through their net's planes
 type: feature
-status: todo
+status: in-progress
 priority: medium
+assignee: claude-planes
 labels: [board-access, planning]
 estimate: 3
 layer: engine

@@ -2,8 +2,9 @@
 id: TRX-33
 title: Route inside KiCad with a native plugin
 type: feature
-status: todo
+status: in-progress
 priority: high
+assignee: claude-release
 labels: [kicad, client]
 estimate: 3
 layer: client

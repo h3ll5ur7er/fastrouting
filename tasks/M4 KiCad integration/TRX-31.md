@@ -2,7 +2,7 @@
 id: TRX-31
 title: Talk to a running KiCad through the IPC API in Board Access
 type: feature
-status: review
+status: done
 priority: high
 labels: [board-access, kicad]
 estimate: 5
@@ -15,7 +15,7 @@ The `kicad-ipc` adapter, built on what [[TRX-17]] proved ([[Research/KiCad-integ
 - [x] Socket from `KICAD_API_SOCKET` (an `ipc://` address) else the default `api.sock` in the temporary directory; token from `KICAD_API_TOKEN`; retry on `AS_BUSY` and `AS_NOT_READY` with a time limit (10 s)
 - [x] Read the board: layers and stackup, outline, footprints and pads, nets, net classes, tracks, arcs and vias, zones and rule areas as keepouts. Not item by item with `GetPadShapeAsPolygon` as planned: KiCad hands over the whole board as the text of its file (`SaveDocumentToString`), which the board-file reader reads, so the design is the board file's by construction ([[Research/KiCad-integration#the-kicad-ipc-adapter]])
 - [x] Rules: net classes over IPC (`GetNetClassForNets`); board minimums from `.kicad_pro` and custom rules from `.kicad_dru` in the project folder (`KIPRJMOD`, else the project path of `GetOpenDocuments`), reusing the `kicad` module
-- [ ] `GetBoardDesignRules` and `GetCustomDesignRules` on KiCad 11: left until KiCad 11 is released
+Moved to [[TRX-61]]: `GetBoardDesignRules` and `GetCustomDesignRules` on KiCad 11, once it is released.
 - [x] Hold the result to the board-file reader on the same boards: same design from IPC as from `.kicad_pcb`, against a fake KiCad in the unit tests and against KiCad 10.0.7 in `cargo xtask e2e`
 - [x] Store routes as one commit (`BeginCommit`, `CreateItems`, `EndCommit` with the message "traxide: route"), so one undo removes them; drop the commit when creating fails; refuse if the board changed since it was read
 - [x] `RefillZones` after the routes' commit, on boards with copper zones: the board is clean in KiCad's DRC as it stands. The fill is an undo step of its own, so such a board takes two undos to remove the routes, which the maintainer accepted; inside the commit KiCad would fill around the board as it was before it (49 DRC violations on a test board) ([[Research/KiCad-integration#the-kicad-ipc-adapter]])

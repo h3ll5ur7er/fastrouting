@@ -2,7 +2,7 @@
 id: TRX-17
 title: "Spike: KiCad IPC API from a native exec plugin"
 type: research
-status: review
+status: done
 priority: medium
 labels: [kicad, spike]
 estimate: 1.5
@@ -14,7 +14,7 @@ Prove the in-editor path before building it ([[Research/KiCad-integration]]). Pr
 - [x] Create a track and a via in one commit; check one undo removes both
 - [x] Run KiCad 10 without a person: `pcbnew` in `kicad/kicad:10.0` under `xvfb-run`, first-run wizard suppressed (`run-headless.sh`, about 5 s)
 - [x] Install through PCM's *Install from File* on Linux: executable bit kept, toolbar icons shown, the action commits through the API
-- [ ] Install on Windows and macOS; check the named pipe, the toolbar icon and macOS quarantine (moved to [[TRX-33]], which builds those packages)
+Moved to [[TRX-33]], which builds those packages: install on Windows and macOS; check the named pipe, the toolbar icon and macOS quarantine.
 - [x] Note what KiCad 11 (master) changes: design rules over IPC, headless mode
 - [x] Settle the licence question: the spike defined messages from field numbers, so no `.proto` text entered traxide; the maintainer then decided to generate them from KiCad's `.proto` files after all ([[TRX-31]])
 

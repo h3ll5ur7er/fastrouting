@@ -2,7 +2,7 @@
 id: TRX-55
 title: Widen the search window when no way is found
 type: improvement
-status: in-progress
+status: todo
 priority: high
 labels: [detailed-routing]
 estimate: 1
