@@ -99,7 +99,7 @@ In CI (commit 0640dce): traxide completes 50 boards, 17 incomplete, 6 stopped, 3
 | Issue145-smoothieboard (792) | 782, 127 s | 776, 91 s |
 | Issue219-LogicBoard_smt (991) | 991, 124 s | 945, 103 s |
 
-Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone still takes 130 s. The corpus runs without a limit, so its numbers stay comparable with the earlier ones.
+Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone still takes 100–130 s: 365 of its connections are committed within 20 s, but only 34 more by 100 s, as single searches there take 0.5–2 s each, most of them failing ones that flood their whole window. The limit cannot bound such a board short of leaving the rest unrouted outright; faster failing searches would ([[TRX-48]]). The corpus runs without a limit, so its numbers stay comparable with the earlier ones.
 
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
