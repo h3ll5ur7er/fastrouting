@@ -20,6 +20,7 @@ fn job(input: &str, output: &std::path::Path) -> RouteJob {
         threads: None,
         unrouted_net_classes: Vec::new(),
         drc_report: None,
+        time_limit: None,
     }
 }
 
@@ -325,4 +326,17 @@ fn the_pins_of_a_fine_pitch_chip_escape_by_stubs_that_the_session_keeps() {
     assert_eq!((report.connections, report.unrouted.len()), (16, 0));
     assert!(report.verdict.is_clean(), "{:?}", report.verdict);
     assert!(report.tracks >= 2 * 16, "a stub and a route per pin");
+}
+
+#[test]
+fn a_job_past_its_time_limit_still_stores_what_routes_without_rip_up() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let output = folder.path().join("board.ses");
+    let job = RouteJob {
+        time_limit: Some(std::time::Duration::ZERO),
+        ..job("two-nets.dsn", &output)
+    };
+    let report = route(&job, &Silent, &CancelToken::new()).expect("routable");
+    assert_eq!((report.connections, report.unrouted.len()), (2, 0));
+    assert!(output.exists());
 }

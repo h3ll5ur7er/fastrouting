@@ -8,6 +8,7 @@ use std::io::Write;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 use traxide_contracts::{Event, Stage, Violation};
 use traxide_events::CancelToken;
 use traxide_inspection::CheckJob;
@@ -57,6 +58,10 @@ enum Command {
         /// `kicad-cli pcb drc --format json`.
         #[arg(long, value_name = "REPORT.json")]
         drc: Option<PathBuf>,
+        /// Stop negotiating after this many seconds and route what is left once
+        /// more without ripping anything up; routing ends a little later.
+        #[arg(long, value_name = "SECONDS", value_parser = seconds)]
+        time_limit: Option<Duration>,
     },
     /// Check a board: how many of its nets are complete and which rules its
     /// copper breaks, with the routes of a session if one is given.
@@ -108,7 +113,7 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    let (input, output, profile, config, threads, quiet, drc) = match cli.command {
+    let (input, output, profile, config, threads, quiet, drc, time_limit) = match cli.command {
         Command::Freerouting { args } => return run_as_freerouting(&args),
         Command::Check {
             board,
@@ -135,9 +140,12 @@ fn run(cli: Cli) -> Result<ExitCode> {
             threads,
             quiet,
             drc,
+            time_limit,
         } => {
             let input = input.unwrap_or_else(|| PathBuf::from(traxide_routing::RUNNING_KICAD));
-            (input, output, profile, config, threads, quiet, drc)
+            (
+                input, output, profile, config, threads, quiet, drc, time_limit,
+            )
         }
     };
     let job = RouteJob {
@@ -148,6 +156,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         threads,
         unrouted_net_classes: Vec::new(),
         drc_report: drc,
+        time_limit,
     };
     let progress = |event: Event| {
         if !quiet {
@@ -242,6 +251,11 @@ fn show(event: &Event) {
         Event::ConnectionRouted { done, total } => write!(stderr, "\r\x1b[KRouting {done}/{total}"),
         Event::RippedUp { .. } => Ok(()),
     };
+}
+
+fn seconds(text: &str) -> Result<Duration, String> {
+    let seconds: f64 = text.parse().map_err(|e| format!("{e}"))?;
+    Duration::try_from_secs_f64(seconds).map_err(|_| format!("{text} is no number of seconds"))
 }
 
 fn reason(why: &Unroutable) -> String {

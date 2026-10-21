@@ -72,6 +72,7 @@ pub fn run(args: &[String]) -> Result<()> {
         threads: None,
         unrouted_net_classes: Vec::new(),
         drc_report: None,
+        time_limit: None,
     };
     let log = RefCell::new(Log::default());
     let report = traxide_routing::route(&job, &|e| log.borrow_mut().take(e), &CancelToken::new())?;

@@ -34,6 +34,9 @@ pub struct RouteJob {
     /// Where to write a DRC report of the stored copper, the board's own
     /// included, in KiCad's JSON format, if anywhere.
     pub drc_report: Option<PathBuf>,
+    /// How long negotiation may go on, counted from the start of the job;
+    /// what is still queued then routes once more without ripping anything up.
+    pub time_limit: Option<Duration>,
 }
 
 /// What a finished route job achieved.
@@ -217,6 +220,9 @@ pub fn route(
         .or_else(|| std::thread::available_parallelism().ok())
         .map_or(1, NonZeroUsize::get);
     let mut router = Router::new(&escaped.design, &rules, &profile).with_threads(threads);
+    if let Some(limit) = job.time_limit {
+        router = router.with_deadline(started + limit);
+    }
     let RoutingResult {
         routes: routed,
         unrouted,

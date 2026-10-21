@@ -16,6 +16,7 @@ use search::NoRoute;
 use std::cmp::Reverse;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
     Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, Obstruction,
@@ -40,6 +41,8 @@ pub struct Router<'a> {
     finder: Finder<'a>,
     /// One per thread: each search needs its own memory.
     scratches: Vec<search::Scratch>,
+    /// When negotiation stops ripping up, whatever it would still gain.
+    deadline: Option<Instant>,
 }
 
 impl std::fmt::Debug for Router<'_> {
@@ -60,11 +63,19 @@ impl<'a> Router<'a> {
                 profile,
             },
             scratches: vec![search::Scratch::default()],
+            deadline: None,
         }
     }
 
     /// Searches the connections of a batch on up to `threads` threads. The
     /// routes are the same on any number of them.
+    /// Stops negotiation at `deadline`: what is still queued then routes
+    /// once more without crossing anything, so routing ends a little later.
+    pub fn with_deadline(mut self, deadline: Instant) -> Self {
+        self.deadline = Some(deadline);
+        self
+    }
+
     pub fn with_threads(mut self, threads: usize) -> Self {
         self.scratches
             .resize_with(threads.max(1), search::Scratch::default);
@@ -103,6 +114,12 @@ impl<'a> Router<'a> {
             if cancel.is_cancelled() {
                 unrouted.extend(state.queue.drain(..));
                 break;
+            }
+            if self
+                .deadline
+                .is_some_and(|deadline| Instant::now() >= deadline)
+            {
+                state.may_rip_up = false;
             }
             let batch = self.next_batch(&mut state.queue, plan, corridors);
             let found = self.find_all(&batch, plan, corridors, layout, state.negotiation());

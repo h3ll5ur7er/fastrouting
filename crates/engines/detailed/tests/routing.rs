@@ -400,6 +400,38 @@ fn says_which_connection_ripped_up_which_and_where_they_met() {
 }
 
 #[test]
+fn past_its_deadline_routing_rips_nothing_up_but_routes_what_still_fits() {
+    // X and Y need the same only way; before the deadline they would take it
+    // from each other in turn.
+    let design = one_way_for_two();
+    let rules = traxide_rules::compile(
+        &design,
+        Purpose::Routing {
+            grid_pitch: 100_000,
+        },
+    );
+    let mut layout = Layout::build(&design, &rules);
+    let plan = Plan {
+        connections: vec![
+            connection(&design, "X1", "X2"),
+            connection(&design, "Y1", "Y2"),
+        ],
+    };
+    let ripped_up = std::cell::Cell::new(false);
+    let watch = |event: Event| {
+        if matches!(event, Event::RippedUp { .. }) {
+            ripped_up.set(true);
+        }
+    };
+    let result = Router::new(&design, &rules, &profile())
+        .with_deadline(std::time::Instant::now())
+        .route_plan(&plan, None, &mut layout, &CancelToken::new(), &watch);
+    assert!(!ripped_up.get());
+    assert_eq!(result.unrouted, [connection(&design, "Y1", "Y2")]);
+    assert_legal(&design, &result.routes);
+}
+
+#[test]
 fn a_connection_whose_only_way_runs_further_round_than_its_window_routes() {
     // The wall's end lies 15 mm beyond the pads, three times the margin.
     let design = DesignBuilder::new(40.0, 20.0)

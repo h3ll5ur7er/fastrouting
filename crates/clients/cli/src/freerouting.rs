@@ -97,6 +97,7 @@ pub(crate) fn parse(args: &[String]) -> Result<Invocation> {
             threads,
             unrouted_net_classes,
             drc_report,
+            time_limit: None,
         }),
         warnings,
     })
