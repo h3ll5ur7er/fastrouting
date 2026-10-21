@@ -76,4 +76,20 @@ Measured with `xtask negotiation` and with the rounds patch, before merging (esc
 
 Tried after the merge, for Mars-64: no escape for a pin whose connections all lead to another escaped pin, as SPI_CLK and SPI_MOSI run between U101 and U102. Rejected: Mars-64 routes 80 instead of 81 (in 50 s instead of 85 s), Issue297 loses its completeness (160 of 161), caniot one connection, Issue039 gains one; the keyboard, RelayModule and bm01 route the same. Next to try for Mars-64: stubs that negotiation may move, held as the start of their connection's route rather than as fixed copper.
 
+Measured again on 331073f (fine-pitch pins escaped, two rounds without gain; [[docs/Research/experiments/trx-56-rounds.patch]] applies cleanly), connections routed and time:
+
+| Board | Rip-up (main) | Rounds | Rounds, settled routes locked |
+| --- | --- | --- | --- |
+| Mars-64 Issue102 (106) | 81, 26 s | 89, 76 s | **93**, 147 s |
+| Issue039 (204) | 166, 36 s | 166, 67 s | **177**, 135 s |
+| Issue508-bm01 (195) | 178, 56 s | 180, 158 s | **184**, 223 s |
+| Issue283 (200) | 182, 84 s | 176, 40 s | **188**, 71 s |
+| Issue269-caniot (89) | 71, 10 s | 73, 30 s | **75**, 43 s |
+| Issue029 (91) | 85, 114 s | 84, 107 s | **86**, 182 s |
+| Issue034 (147) | **147**, 23 s | 146, 11 s | 146, 12 s |
+| Issue110-RelayModule (88) | **88**, 18 s | 87, 15 s | 86, 14 s |
+| keyboard-tkl, matrix-6x17, Issue015 | complete | complete | complete (keyboard 1.6 s instead of 0.8 s) |
+
+Locked rounds route the most on every congested board, but lose a connection on two boards rip-up completes and take two to four times as long. So they cannot replace rip-up; next to try: run them only where rip-up leaves connections unrouted, as a second attempt, and keep the result that routes more (a board rip-up completes never pays for it), within the time limit.
+
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.

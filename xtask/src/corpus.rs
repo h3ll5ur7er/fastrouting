@@ -4,8 +4,11 @@
 //! Freerouting; `traxide check` judges both sessions alike, against the rules
 //! the board itself already breaks. The boards are downloaded at run time into
 //! `target/corpus`, never committed. Prints a Markdown table, and appends it to
-//! `$GITHUB_STEP_SUMMARY` in CI.
+//! `$GITHUB_STEP_SUMMARY` in CI. traxide's results land in
+//! `target/corpus/results-K-of-N.json`, for `cargo xtask gate` to compare
+//! with the baseline.
 
+use crate::gate::{Outcome, Record};
 use crate::kicad;
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
@@ -68,6 +71,16 @@ pub fn run(args: &[String]) -> Result<()> {
         eprintln!("{}", row.cells());
         rows.push(row);
     }
+    let record = Record {
+        timeout_seconds: timeout.as_secs(),
+        boards: rows
+            .iter()
+            .map(|row| (row.board.clone(), row.outcome()))
+            .collect(),
+    };
+    let results = folder.join(format!("results-{}-of-{}.json", shard.0, shard.1));
+    std::fs::write(&results, serde_json::to_string_pretty(&record)? + "\n")?;
+    eprintln!("wrote {}", results.display());
     let table = table(&rows, freerouting.is_some());
     println!("{table}");
     if let Ok(summary) = std::env::var("GITHUB_STEP_SUMMARY") {
@@ -237,6 +250,25 @@ fn first_line(text: &str) -> String {
 }
 
 impl Row {
+    /// traxide's attempt, as the gate compares it.
+    fn outcome(&self) -> Outcome {
+        let tenths = |seconds: f64| (seconds * 10.0).round() / 10.0;
+        match &self.traxide {
+            Attempt::Judged { seconds, judgement } => Outcome::Finished {
+                seconds: tenths(*seconds),
+                nets: judgement.nets,
+                routed: judgement.nets - judgement.incomplete_nets,
+                rules_broken: judgement
+                    .violations
+                    .saturating_sub(self.before.map_or(0, |b| b.violations)),
+            },
+            Attempt::Stopped { seconds } => Outcome::Stopped {
+                seconds: tenths(*seconds),
+            },
+            Attempt::Failed { why } => Outcome::Failed { why: why.clone() },
+        }
+    }
+
     fn cells(&self) -> String {
         let mut cells = vec![self.board.clone(), self.describe(&self.traxide)];
         if let Some(freerouting) = &self.freerouting {
@@ -381,5 +413,14 @@ mod tests {
             freerouting: None,
         };
         assert_eq!(row.cells(), "| b | 1.0 s, 4 of 4 nets, 0 rules broken |");
+        assert_eq!(
+            row.outcome(),
+            Outcome::Finished {
+                seconds: 1.0,
+                nets: 4,
+                routed: 4,
+                rules_broken: 0
+            }
+        );
     }
 }

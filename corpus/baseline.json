@@ -1,0 +1,504 @@
+{
+  "timeout_seconds": 120,
+  "boards": {
+    "fixtures_Issue006-LPC18XX_43XX_SCH": {
+      "outcome": "failed",
+      "why": "line 1: not a Specctra design: expected (pcb …)"
+    },
+    "fixtures_Issue015-StackOverflow": {
+      "outcome": "finished",
+      "seconds": 27.2,
+      "nets": 186,
+      "routed": 186,
+      "rules_broken": 0
+    },
+    "fixtures_Issue022-AutoRouter_interrupted": {
+      "outcome": "finished",
+      "seconds": 50.8,
+      "nets": 205,
+      "routed": 205,
+      "rules_broken": 0
+    },
+    "fixtures_Issue026-J2_reference": {
+      "outcome": "finished",
+      "seconds": 0.2,
+      "nets": 24,
+      "routed": 24,
+      "rules_broken": 0
+    },
+    "fixtures_Issue027-zMRETestFixture": {
+      "outcome": "finished",
+      "seconds": 33.3,
+      "nets": 168,
+      "routed": 168,
+      "rules_broken": 0
+    },
+    "fixtures_Issue029-hw48na": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue034-Green14SegLED": {
+      "outcome": "finished",
+      "seconds": 32.6,
+      "nets": 101,
+      "routed": 101,
+      "rules_broken": 0
+    },
+    "fixtures_Issue035-ReadPlaceScope": {
+      "outcome": "finished",
+      "seconds": 2.8,
+      "nets": 101,
+      "routed": 101,
+      "rules_broken": 0
+    },
+    "fixtures_Issue039-bug-design": {
+      "outcome": "finished",
+      "seconds": 59.7,
+      "nets": 74,
+      "routed": 44,
+      "rules_broken": 0
+    },
+    "fixtures_Issue054-tairakb": {
+      "outcome": "finished",
+      "seconds": 2.9,
+      "nets": 57,
+      "routed": 57,
+      "rules_broken": 0
+    },
+    "fixtures_Issue066-Project_GP8B": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue069-TestSensel_TestSensel": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 4,
+      "routed": 3,
+      "rules_broken": 0
+    },
+    "fixtures_Issue069-TestSensel_TestSensel-KiCad6": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 4,
+      "routed": 3,
+      "rules_broken": 0
+    },
+    "fixtures_Issue070-Autorouter_FQ101_PCB_2022-05-13": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 75,
+      "routed": 75,
+      "rules_broken": 0
+    },
+    "fixtures_Issue093-interf_u": {
+      "outcome": "finished",
+      "seconds": 0.3,
+      "nets": 173,
+      "routed": 173,
+      "rules_broken": 0
+    },
+    "fixtures_Issue102-Mars-64-revE-rot00": {
+      "outcome": "finished",
+      "seconds": 38.7,
+      "nets": 94,
+      "routed": 70,
+      "rules_broken": 0
+    },
+    "fixtures_Issue103-Board-Routed": {
+      "outcome": "finished",
+      "seconds": 0.2,
+      "nets": 282,
+      "routed": 282,
+      "rules_broken": 0
+    },
+    "fixtures_Issue103-Board-Unrouted": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue107-freq_teiler_200kHz_kicad": {
+      "outcome": "finished",
+      "seconds": 0.4,
+      "nets": 77,
+      "routed": 77,
+      "rules_broken": 0
+    },
+    "fixtures_Issue107-freq_teiler_200kHz_kicad_bad": {
+      "outcome": "finished",
+      "seconds": 0.4,
+      "nets": 59,
+      "routed": 59,
+      "rules_broken": 0
+    },
+    "fixtures_Issue110-Pajalnaja_stancija": {
+      "outcome": "finished",
+      "seconds": 4.4,
+      "nets": 64,
+      "routed": 63,
+      "rules_broken": 0
+    },
+    "fixtures_Issue110-RelayModule": {
+      "outcome": "finished",
+      "seconds": 32.6,
+      "nets": 64,
+      "routed": 64,
+      "rules_broken": 0
+    },
+    "fixtures_Issue110-testPCBSpecctraFile": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 25,
+      "routed": 23,
+      "rules_broken": 0
+    },
+    "fixtures_Issue110-testProjectFromFreeroutingBugTest": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 20,
+      "routed": 20,
+      "rules_broken": 0
+    },
+    "fixtures_Issue110-testProjectFromFreeroutingBugTest01": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 20,
+      "routed": 20,
+      "rules_broken": 0
+    },
+    "fixtures_Issue113-Protein": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue143-rpi_splitter": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 5,
+      "routed": 5,
+      "rules_broken": 0
+    },
+    "fixtures_Issue143-rpi_splitter_mod": {
+      "outcome": "failed",
+      "why": "line 104: unknown pin J3--D+"
+    },
+    "fixtures_Issue145-smoothieboard": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue153-wavefolder": {
+      "outcome": "finished",
+      "seconds": 0.3,
+      "nets": 31,
+      "routed": 31,
+      "rules_broken": 0
+    },
+    "fixtures_Issue155-CH376_MCP795_Module": {
+      "outcome": "finished",
+      "seconds": 1.7,
+      "nets": 34,
+      "routed": 34,
+      "rules_broken": 0
+    },
+    "fixtures_Issue157-TeamAdapt-LinePCB": {
+      "outcome": "finished",
+      "seconds": 1.4,
+      "nets": 65,
+      "routed": 63,
+      "rules_broken": 0
+    },
+    "fixtures_Issue159-setonix_2hp-pcb": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 9,
+      "routed": 9,
+      "rules_broken": 0
+    },
+    "fixtures_Issue163-pic_programmer": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 111,
+      "routed": 111,
+      "rules_broken": 0
+    },
+    "fixtures_Issue178-KeebMaker_Sofle_Choc": {
+      "outcome": "finished",
+      "seconds": 23.3,
+      "nets": 176,
+      "routed": 176,
+      "rules_broken": 0
+    },
+    "fixtures_Issue179-Autorouter_PCB1_2023-3-24": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 24,
+      "routed": 24,
+      "rules_broken": 0
+    },
+    "fixtures_Issue187-processor.Z80": {
+      "outcome": "finished",
+      "seconds": 0.2,
+      "nets": 529,
+      "routed": 529,
+      "rules_broken": 0
+    },
+    "fixtures_Issue190-processor.Z80": {
+      "outcome": "finished",
+      "seconds": 0.2,
+      "nets": 529,
+      "routed": 529,
+      "rules_broken": 0
+    },
+    "fixtures_Issue191-processor.Z80_processor.Z80": {
+      "outcome": "finished",
+      "seconds": 0.3,
+      "nets": 529,
+      "routed": 529,
+      "rules_broken": 0
+    },
+    "fixtures_Issue199-StackOverflow_Signale_Vor+Block": {
+      "outcome": "finished",
+      "seconds": 0.3,
+      "nets": 28,
+      "routed": 28,
+      "rules_broken": 0
+    },
+    "fixtures_Issue208-freerouting": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue209-split05": {
+      "outcome": "finished",
+      "seconds": 2.0,
+      "nets": 45,
+      "routed": 45,
+      "rules_broken": 0
+    },
+    "fixtures_Issue209-split10": {
+      "outcome": "finished",
+      "seconds": 1.7,
+      "nets": 45,
+      "routed": 45,
+      "rules_broken": 0
+    },
+    "fixtures_Issue214-freerouting": {
+      "outcome": "finished",
+      "seconds": 1.3,
+      "nets": 140,
+      "routed": 140,
+      "rules_broken": 0
+    },
+    "fixtures_Issue217-8088sbc": {
+      "outcome": "finished",
+      "seconds": 7.3,
+      "nets": 104,
+      "routed": 104,
+      "rules_broken": 0
+    },
+    "fixtures_Issue219-LogicBoard_smt": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue229-display-8-digit-hc595": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 30,
+      "routed": 30,
+      "rules_broken": 0
+    },
+    "fixtures_Issue230-CNH_Functional_Tester_1": {
+      "outcome": "finished",
+      "seconds": 17.6,
+      "nets": 764,
+      "routed": 764,
+      "rules_broken": 0
+    },
+    "fixtures_Issue230-CNH_Functional_Tester_CNH_Functional_Tester_1": {
+      "outcome": "finished",
+      "seconds": 16.4,
+      "nets": 764,
+      "routed": 764,
+      "rules_broken": 0
+    },
+    "fixtures_Issue269-NoViasOnPowerPlanes_Issue269-NoViasOnPowerPlanes": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 12,
+      "routed": 12,
+      "rules_broken": 0
+    },
+    "fixtures_Issue269-caniot-tiny-arm": {
+      "outcome": "finished",
+      "seconds": 15.9,
+      "nets": 94,
+      "routed": 79,
+      "rules_broken": 0
+    },
+    "fixtures_Issue269-min_fr_test_min_fr_test": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 2,
+      "routed": 2,
+      "rules_broken": 0
+    },
+    "fixtures_Issue269-min_fr_test_min_fr_test_no_quotes": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 2,
+      "routed": 2,
+      "rules_broken": 0
+    },
+    "fixtures_Issue269-z10_module": {
+      "outcome": "finished",
+      "seconds": 26.1,
+      "nets": 83,
+      "routed": 81,
+      "rules_broken": 0
+    },
+    "fixtures_Issue270-non-ansi_bracket": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 5,
+      "routed": 5,
+      "rules_broken": 0
+    },
+    "fixtures_Issue283-UnconnectedTracesUnderPads_Natural_Tone_Preamp": {
+      "outcome": "finished",
+      "seconds": 101.7,
+      "nets": 58,
+      "routed": 44,
+      "rules_broken": 0
+    },
+    "fixtures_Issue289-Autorouter_PCB_FHT-8086_2024-03-08": {
+      "outcome": "finished",
+      "seconds": 93.9,
+      "nets": 142,
+      "routed": 69,
+      "rules_broken": 0
+    },
+    "fixtures_Issue289-Autorouter_PCB_FHT-VGA_2024-03-25": {
+      "outcome": "stopped",
+      "seconds": 120.0
+    },
+    "fixtures_Issue297-myboard": {
+      "outcome": "finished",
+      "seconds": 4.7,
+      "nets": 67,
+      "routed": 67,
+      "rules_broken": 0
+    },
+    "fixtures_Issue313-FastTest": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 20,
+      "routed": 18,
+      "rules_broken": 0
+    },
+    "fixtures_Issue326-Mars-64-revE": {
+      "outcome": "finished",
+      "seconds": 36.0,
+      "nets": 94,
+      "routed": 70,
+      "rules_broken": 0
+    },
+    "fixtures_Issue367-Charger": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 31,
+      "routed": 31,
+      "rules_broken": 0
+    },
+    "fixtures_Issue367-UltraFlactyl_UltraFlactyl": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 75,
+      "routed": 75,
+      "rules_broken": 0
+    },
+    "fixtures_Issue368-CorneyIslandWireless_corney_island_wireless": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 5,
+      "routed": 5,
+      "rules_broken": 0
+    },
+    "fixtures_Issue368-CorneyIslandWireless_input_design": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 5,
+      "routed": 5,
+      "rules_broken": 0
+    },
+    "fixtures_Issue413-test": {
+      "outcome": "finished",
+      "seconds": 0.2,
+      "nets": 5,
+      "routed": 5,
+      "rules_broken": 0
+    },
+    "fixtures_Issue420-contribution-board": {
+      "outcome": "failed",
+      "why": "line 2006: unknown pin C_LED1_source_component_3-2"
+    },
+    "fixtures_Issue433-my-board": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 24,
+      "routed": 24,
+      "rules_broken": 0
+    },
+    "fixtures_Issue508-DAC2020_bm01": {
+      "outcome": "finished",
+      "seconds": 72.2,
+      "nets": 99,
+      "routed": 83,
+      "rules_broken": 0
+    },
+    "fixtures_Issue508-DAC2020_bm02": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 34,
+      "routed": 34,
+      "rules_broken": 0
+    },
+    "fixtures_Issue508-DAC2020_bm04": {
+      "outcome": "finished",
+      "seconds": 2.8,
+      "nets": 80,
+      "routed": 80,
+      "rules_broken": 0
+    },
+    "fixtures_Issue508-DAC2020_bm05": {
+      "outcome": "finished",
+      "seconds": 2.7,
+      "nets": 54,
+      "routed": 50,
+      "rules_broken": 0
+    },
+    "fixtures_Issue508-DAC2020_bm06": {
+      "outcome": "finished",
+      "seconds": 0.3,
+      "nets": 38,
+      "routed": 38,
+      "rules_broken": 0
+    },
+    "fixtures_Issue508-DAC2020_bm07": {
+      "outcome": "finished",
+      "seconds": 0.3,
+      "nets": 52,
+      "routed": 52,
+      "rules_broken": 0
+    },
+    "fixtures_Issue632-MiniAutoPilot_Mini_Auto_Pilot": {
+      "outcome": "finished",
+      "seconds": 0.2,
+      "nets": 211,
+      "routed": 124,
+      "rules_broken": 0
+    },
+    "fixtures_Issue742-tastexx-pcb_tastexx-pcb": {
+      "outcome": "finished",
+      "seconds": 0.1,
+      "nets": 28,
+      "routed": 28,
+      "rules_broken": 0
+    }
+  }
+}
