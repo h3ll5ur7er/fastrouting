@@ -1,9 +1,11 @@
 name: Binaries
 
-# Builds traxide for every platform and keeps the archives as artifacts of the
-# run, to download and try. Publishing releases comes later (TRX-35).
+# Builds traxide for every platform and the KiCad plugin's packages, and keeps
+# them as artifacts of the run, to download and try. The Release workflow runs
+# it on a version tag and publishes what it built.
 on:
   workflow_dispatch:
+  workflow_call:
   push:
     paths:
       - "crates/**"
@@ -78,6 +80,11 @@ jobs:
           lipo -create -output dist/traxide-macos-universal/traxide \
             target/aarch64-apple-darwin/release/traxide target/x86_64-apple-darwin/release/traxide
           lipo -info dist/traxide-macos-universal/traxide
+          # Apple silicon runs only signed code; lipo and strip leave the
+          # linker's signatures in doubt, so sign anew, ad hoc. Signing with a
+          # Developer ID and notarising need the maintainer's Apple account (TRX-35).
+          codesign --force --sign - dist/traxide-macos-universal/traxide
+          codesign --verify --verbose dist/traxide-macos-universal/traxide
           cp README.md LICENSE-MIT LICENSE-APACHE dist/traxide-macos-universal/
       - name: Smoke test
         run: dist/traxide-macos-universal/traxide route fixtures/boards/matrix-3x4.dsn -o smoke.ses

@@ -6,7 +6,7 @@
 
 ## Try it
 
-Every push builds traxide for Linux, Windows (x86-64 and ARM64) and macOS: open the latest run of the **Binaries** workflow under the repository's *Actions* tab and download the archive for your platform. Or build it:
+Download traxide and its KiCad plugin from the repository's **Releases**: archives for Linux, Windows (x86-64 and ARM64 each) and macOS (universal), with nothing else to install, and a KiCad package for each. Between releases, every push builds the same in the **Binaries** workflow under the *Actions* tab. Or build it:
 
 ```bash
 cargo build --release
@@ -29,7 +29,7 @@ target/release/traxide freerouting -de board.dsn -do board.ses
 traxide's KiCad plugin adds a **Route board** button to the PCB editor's toolbar (KiCad 9 and 10). It routes every unrouted connection of the open board and adds the routes as one step: *Edit → Undo traxide: route* takes them all back. The rules come from KiCad's net classes and the project's files. On a board with copper zones traxide then refills them around the routes, a step of its own, so taking the routes back takes two undos.
 
 1. **Enable KiCad's API first**: *Preferences → Preferences… → Plugins → Enable KiCad API*. It is off by default, and **without it KiCad shows no traxide button at all**.
-2. Download the package for your platform (`traxide-kicad-<platform>.zip`) and install it with *Plugin and Content Manager → Install from File…*.
+2. Download the KiCad package for your platform (`traxide-kicad-<version>-<platform>.zip`) from the Releases and install it with *Plugin and Content Manager → Install from File…*.
 3. Restart the PCB editor: the button appears in its top toolbar. What traxide reports appears in KiCad's message panel (KiCad 10.0.1 and later).
 
 The package carries the traxide binary itself; there is no Python. From a terminal, `traxide route --kicad` does what the button does.
