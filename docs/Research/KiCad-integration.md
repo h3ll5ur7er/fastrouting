@@ -40,7 +40,7 @@ What [[TRX-17]] verified against KiCad 10.0.7 (the `kicad/kicad:10.0` image) wit
 | Outline | `GetItems` with `KOT_PCB_SHAPE` on `Edge.Cuts` | No |
 | The whole board as the text of its file | `SaveDocumentToString` | Yes ([[TRX-31]]) |
 | Write routes | `BeginCommit`, `CreateItems`, `EndCommit` | Yes |
-| Refill zones | `RefillZones` | Yes ([[TRX-31]]): inside an open commit it fills around the board as it was before the commit; after `EndCommit` it fills correctly but is an undo step of its own |
+| Refill zones | `RefillZones` | Yes ([[TRX-31]]): inside an open commit it fills around the board as it was before the commit; after `EndCommit` it fills correctly but is an undo step of its own, which is how traxide uses it |
 | Save the board | `SaveDocument` | Yes ([[TRX-31]]) |
 
 - **Design rules are not served by 10.0**: its `BoardDesignRules` message is empty and has no command; `GetBoardDesignRules` and `GetCustomDesignRules` exist on master (KiCad 11). Net-class values do come over IPC, so on KiCad 10 the `kicad-ipc` adapter reads from the project files (`KIPRJMOD`) only what net classes do not carry: the board minimums of `.kicad_pro` (`min_clearance`, copper to edge, hole clearance) and the custom rules of `.kicad_dru`. Board Access hides this mix; nothing above it knows.
@@ -54,7 +54,7 @@ What [[TRX-31]] built in Board Access (`kicad/ipc/`), verified against KiCad 10.
 - **Reading**: KiCad hands over the open board as the text of its file (`SaveDocumentToString`, the editor's state, saved or not), and the board-file reader reads it, so the design is the one the board file gives: same shapes, same approximations, already checked against KiCad's DRC. The items one by one (`GetItems`, `GetPadShapeAsPolygon`) would need a second reader of every item and padstack kind, and KiCad's pad polygons may lie inside the true copper, where the file reader's shapes are never smaller.
 - **Rules**: each net's class and the class's width, clearance and via come from `GetNetClassForNets`, as the editor holds them, over the project file's; the board's minimums (raising them) and the custom rules come from the project's `.kicad_pro` and `.kicad_dru` in `KIPRJMOD`, else in the project folder `GetOpenDocuments` names. A net of several classes gets an implicit class from KiCad; traxide takes its first constituent, as it does from the project file.
 - **Storing**: Board Access reads the board again and refuses to store if it is no longer the design that was routed (`kicad://current changed since it was read; route it again`). Then one commit: `BeginCommit`, `CreateItems` with a track per straight piece and the vias, `EndCommit` with the message `traxide: route`; if KiCad refuses any item, the commit is dropped (`CMA_DROP`) and nothing changes. No routes, no commit.
-- **Zones are not refilled**, so that one undo always takes the routes back. Measured on `matrix-3x4` with a zone of one net over the back: `RefillZones` inside the open commit filled the zone around the pads only, and KiCad's DRC found 49 clearance violations between the fill and the new tracks (none after `kicad-cli pcb drc --refill-zones`); after `EndCommit` the fill would be right, but the designer's first undo would take back the fill instead of the routes. KiCad refills before its DRC (by default) and on *B*. If refilling matters more than one undo, refill after the commit on boards with copper zones only.
+- **Zones are refilled after the commit**, on boards with copper zones (rule areas do not count), so the board is clean in KiCad's DRC as it stands: `RefillZones` for every zone once `EndCommit` has pushed the routes. The fill is an undo step of its own, after the routes', so **on a board with copper zones the designer undoes twice** to take the routes back (the first undo takes back the fill); on a board without, once. The maintainer accepted this. Refilling inside the open commit would keep one undo but is wrong: measured on `matrix-3x4` with a zone of one net over the back, it filled the zone around the pads only, and KiCad's DRC found 49 clearance violations between the fill and the new tracks. If the refill fails, the routes stay and traxide says so.
 - **Connecting**: `KICAD_API_SOCKET` (an `ipc://` address or a path), else `kicad/api.sock` in the temporary folder; `KICAD_API_TOKEN` in every request. `AS_BUSY` and `AS_NOT_READY` are retried for 10 s, then traxide asks to close KiCad's open dialog; a refused token means the KiCad that started traxide has closed. Without a socket, the error says how to enable the API.
 - **Windows**: NNG serves `ipc://NAME` as the named pipe `\\.\pipe\NAME`; the client opens it as a file. Written, linted, untested; a pipe opened as a file cannot time out.
 - **Tests without KiCad**: framing, the envelope and retries against an in-process REP peer; reading and storing against a fake KiCad that serves a fixture board, held to the board-file reader.
@@ -63,16 +63,16 @@ What [[TRX-31]] built in Board Access (`kicad/ipc/`), verified against KiCad 10.
 
 | | Hand-written (`spikes/kicad-ipc`) | `kicad-ipc-rs` 0.5.1 |
 | --- | --- | --- |
-| Licence of what enters the binary | prost, prost-types: Apache-2.0 | MIT and Apache-2.0 throughout (kicad-ipc-rs, nng, nng-sys with the bundled C libnng, tokio, prost) |
-| Build | Pure Rust | Builds libnng (C) with CMake through `nng-sys` 1.4.0-rc.0, a release candidate; a C toolchain per target |
+| Licence of what enters the binary | prost, prost-types: Apache-2.0 (protox and prost-build, MIT and Apache-2.0, only build) | MIT and Apache-2.0 throughout (kicad-ipc-rs, nng, nng-sys with the bundled C libnng, tokio, prost) |
+| Build | Pure Rust, `protox` instead of `protoc` | Builds libnng (C) with CMake through `nng-sys` 1.4.0-rc.0, a release candidate; a C toolchain per target |
 | Size | About 100 lines of transport plus the messages used; spike binary 0.8 MB | 21 crates with tokio; 0.7 MB for a bare connect |
 | Coverage | What traxide needs, added per message | All of 10.0.1's commands, typed wrappers |
-| KiCad's text in it | None: messages defined from field numbers and types | The generated code carries the `.proto` files' comments (GPL-3.0-or-later headers) |
+| KiCad's text in it | The `.proto` files it needs, unchanged, generated without their comments | The generated code carries the `.proto` files' comments (GPL-3.0-or-later headers) |
 | Maintenance | Ours; the API is stable by protobuf rules (fields are added, never changed) | One maintainer, releases since February 2026, pinned to 10.0.1 |
 
 Both worked against KiCad 10.0.7. The recommendation is the hand-written client: no C build in the cross-compiled release binaries ([[TRX-35]]), no async runtime, and the licence question below does not arise.
 
-**Licence**: KiCad's `.proto` files carry GPL-3.0-or-later headers. The KiCad developers themselves publish `kicad-python`, generated from those files, under MIT (relicensed in its 0.2.0, February 2025), which suggests they do not treat the API definitions as making clients GPL; no explicit statement was found in the documentation. Defining our own messages from the field numbers keeps traxide clear of the question either way: field numbers and types are the interface, not KiCad's text.
+**Licence**: KiCad's `.proto` files carry GPL-3.0-or-later headers. The KiCad developers themselves publish `kicad-python`, generated from those files, under MIT (relicensed in its 0.2.0, February 2025), which suggests they do not treat the API definitions as making clients GPL; no explicit statement was found in the documentation. [[TRX-17]] first defined traxide's messages by hand from the field numbers to stay clear of the question; the maintainer then decided to accept the small risk, as many MIT and Apache projects do, and generate them from KiCad's files: `crates/access/board/proto/kicad/` holds the nine files traxide needs from KiCad 10.0.7, headers intact, and the build script compiles them with `protox` and `prost-build`, leaving their comments out. It is the one exception to the clean-room rules ([[Development#clean-room-rules]]).
 
 ## The plugin
 
@@ -182,7 +182,7 @@ Not followed: the other constraints (`disallow`, `physical_clearance`, `annular_
 
 - DSN path: a SES file with wires and vias, imported by the user (or by Freerouting-style tools).
 - File path: new `segment`, `arc` and `via` nodes in `.kicad_pcb`, every other byte kept; refuse to write while the board file changed since it was read.
-- IPC path: one commit with all new items, so one undo removes the routing; zones stay as they were until the designer refills them.
+- IPC path: one commit with all new items, then a refill of the copper zones as an undo step of its own: one undo removes the routing on a board without copper zones, two on a board with them.
 
 ## DRC reports
 
