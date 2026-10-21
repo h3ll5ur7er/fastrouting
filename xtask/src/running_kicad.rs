@@ -67,7 +67,14 @@ impl RunningKicad {
             .arg(format!("{}:/tmp/kicad", socket_folder.display()))
             .arg("-v")
             .arg(format!("{}:/project", project.display()))
-            .args([image, "pcbnew", &format!("/project/{board_name}")])
+            // umask 000: the image's user creates the API's socket, which the
+            // host's user, who may be another, must be able to connect to.
+            .args([
+                image,
+                "sh",
+                "-c",
+                &format!("umask 000 && exec pcbnew '/project/{board_name}'"),
+            ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
