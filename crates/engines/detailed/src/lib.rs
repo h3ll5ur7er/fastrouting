@@ -27,10 +27,11 @@ use traxide_events::{CancelToken, Publisher};
 const SCANNED_PER_BATCH_SLOT: usize = 4;
 
 /// Measured on the corpus: one round left Issue034 3 connections short of
-/// complete; two left the Mars-64 boards at 72 connections of 106, where four
-/// route 78, as many as negotiating without end; four route the most of the
-/// churning boards in all, though they take longer.
-const STALLED_ROUNDS: usize = 4;
+/// complete. Two cost the Mars-64 boards 6 connections until fine-pitch pins
+/// escaped before routing; since, two route as many boards completely as
+/// four and 4 connections more in all, in a tenth less time, half on the
+/// churning boards (TRX-56).
+const STALLED_ROUNDS: usize = 2;
 
 /// How much wider each window of a search that found no way grows.
 const WIDER_WINDOW: i32 = 4;

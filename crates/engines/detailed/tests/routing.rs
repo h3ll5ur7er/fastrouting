@@ -473,8 +473,8 @@ fn stops_ripping_up_once_rounds_of_rip_ups_route_no_more_connections() {
     );
     assert_eq!(result.unrouted.len(), 1);
     // Each taking the gap from the other until both were ripped up ten times
-    // committed 21 routes; four rounds of two rip-ups without gain end at 9.
-    assert!(commits.get() <= 9, "{} routes committed", commits.get());
+    // committed 21 routes; two rounds of two rip-ups without gain end at 5.
+    assert!(commits.get() <= 5, "{} routes committed", commits.get());
 }
 
 #[test]

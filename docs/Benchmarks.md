@@ -69,6 +69,18 @@ In CI (commit 7768025, 120 s per board, the same setup as the corpus runs above)
 
 Against 264cb19: Issue110-RelayModule (17 s) and Issue297 complete; Issue145-smoothieboard finishes in 78 s instead of stopping, with 236 of 245 nets; bm05 routes 50 of 54 nets instead of 47, Issue039 41 of 74 instead of 37, caniot 80 of 94 instead of 78, bm01 79 of 99 instead of 78; both Mars-64 boards 69 of 94 instead of 72. KiCad's DRC finds the keyboard, routed in 0.5 s, and the matrix clean; Freerouting leaves the keyboard with one unconnected item and 199 track widths broken after 148 s.
 
+With the pins escaped, negotiation no longer needs four rounds without gain before it ends: two route as much. All 76 boards, 120 s each, on this machine (connections routed, time; every other board routes the same in about the same time):
+
+| Board | Four rounds | **Two rounds** |
+| --- | --- | --- |
+| Issue039-bug-design (204) | 164, 81 s | **166, 42 s** |
+| Issue102, Issue326 Mars-64 (106 each) | 81, 86 s | 81, **30 s** |
+| Issue508-DAC2020_bm01 (195) | 173, 117 s | **178, 63 s** |
+| Issue269-caniot-tiny-arm (89) | **74**, 19 s | 71, 13 s |
+| In all | 49 complete, 6314 connections, 2145 s | 49 complete, **6318** connections, **1934 s** |
+
+Issue029 stops at 120 s here either way (with no limit, 87 of 91 in 177 s with four, 85 in 132 s with two); three rounds route fewer than either. The keyboard routes the same in 0.72 s with four and 0.78 s with two (medians of seven).
+
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
 Two changes with byte for byte the same routes: an edge of the grid is checked once for both directions instead of once from each end, and a query for copper near a track or via looks as far as the largest clearance between copper, no longer as far as the board's edge clearance, which KiCad sets to 0.5 mm and the outline check covers on its own.
@@ -149,7 +161,7 @@ Two turned out too few for the Mars-64 boards of the corpus (62 of 94 nets inste
 | Issue110-RelayModule | 37 s, 81 of 88 | **74 s, 77 of 88** |
 | Issue029-hw48na | 46 s, 83 of 91 | **46 s, 83 of 91** |
 
-Four route the most in all (398 connections against 391) and stay within the corpus's 120 s, so negotiation now ends after four rounds without gain. The counts move unevenly between settings: where negotiation churns, which connection wins a contested place decides much. The boards stay slow for another reason: single searches of up to half a second each where the board is crowded ([[TRX-48]]).
+Four route the most in all (398 connections against 391) and stay within the corpus's 120 s, so negotiation then ended after four rounds without gain; since fine-pitch pins escape first, it ends after two ([[#fine-pitch-pins-escaped-first-m5-trx-56]]). The counts move unevenly between settings: where negotiation churns, which connection wins a contested place decides much. The boards stay slow for another reason: single searches of up to half a second each where the board is crowded ([[TRX-48]]).
 
 ## Real boards: the corpus against Freerouting (M2, TRX-15)
 
