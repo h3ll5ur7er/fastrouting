@@ -560,3 +560,28 @@ fn parts_placed_wholly_outside_the_outline_are_named() {
         ["the parts R1, R2 lie outside the board's outline"]
     );
 }
+
+#[test]
+fn reads_planes_with_their_net_layer_and_outline() {
+    let plane = "(plane A (polygon B.Cu 0  1000 -1000  29000 -1000  29000 -19000  1000 -19000))";
+    let design = with_power_bottom(&two_resistors_text(), plane);
+    let [plane] = &design.planes[..] else {
+        panic!("one plane: {:?}", design.planes);
+    };
+    assert_eq!(design.net(plane.net).name, "A");
+    assert_eq!(plane.layer, layer(&design, "B.Cu"));
+    assert_eq!(
+        plane.outline.bounds(),
+        Rect {
+            min: Point::new(mm(1.0), mm(1.0)),
+            max: Point::new(mm(29.0), mm(19.0)),
+        }
+    );
+}
+
+#[test]
+fn a_plane_of_a_net_the_network_does_not_list_is_left_out() {
+    let plane = "(plane GND (polygon B.Cu 0  30000 -20000  0 -20000  0 0  30000 0))";
+    let design = with_power_bottom(&two_resistors_text(), plane);
+    assert!(design.planes.is_empty(), "{:?}", design.planes);
+}

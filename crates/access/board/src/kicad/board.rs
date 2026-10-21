@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use traxide_contracts::geometry::{Point, Polygon, Rect, Region, Segment, Shape, Transform};
 use traxide_contracts::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerId, LayerShape, Net, NetClass,
-    NetClassId, NetId, Pad, Routes, Track, Via, ViaKind, ViaKindId,
+    NetClassId, NetId, Pad, Plane, Routes, Track, Via, ViaKind, ViaKindId,
 };
 
 /// A board as read, with what storing routes into its file needs beyond the
@@ -64,6 +64,8 @@ struct Reader<'a> {
     /// The drawings on the Edge.Cuts layer, each open or closed.
     edges: Vec<(Vec<Point>, bool)>,
     has_copper_zones: bool,
+    /// The copper zones read so far: net name, layer, outline.
+    zones: Vec<(&'a str, LayerId, Polygon)>,
 }
 
 impl<'a> Reader<'a> {
@@ -119,6 +121,7 @@ impl<'a> Reader<'a> {
             keepouts: Vec::new(),
             edges: Vec::new(),
             has_copper_zones: false,
+            zones: Vec::new(),
         })
     }
 
@@ -170,8 +173,16 @@ impl<'a> Reader<'a> {
                 .map(|(number, name)| ((*name).to_owned(), (*number).to_owned()))
                 .collect()
         });
+        let planes = self.planes();
+        // KiCad routes on a layer of type power like on any other unless a
+        // zone fills it.
+        for (index, layer) in self.layers.iter_mut().enumerate() {
+            let holds_a_zone = self.zones.iter().any(|zone| zone.1.index() == index);
+            layer.routable |= !holds_a_zone;
+        }
         Ok(Board {
             design: Design {
+                planes,
                 layers: self.layers,
                 outline,
                 nets: self.nets,
@@ -238,6 +249,11 @@ impl<'a> Reader<'a> {
     /// The net `item` belongs to: `(net "name")` in KiCad 10, `(net 3)` or
     /// `(net 3 "name")` in KiCad 9. `None` for copper of no net.
     fn net_of(&mut self, item: &'a Sexp) -> Option<NetId> {
+        let name = self.net_name_of(item)?;
+        Some(self.net(name))
+    }
+
+    fn net_name_of(&self, item: &'a Sexp) -> Option<&'a str> {
         let net = item.child("net")?;
         let first = net.args().first()?.atom()?;
         let name = match (net.args().get(1).and_then(Sexp::atom), &self.numbered_nets) {
@@ -245,7 +261,7 @@ impl<'a> Reader<'a> {
             (None, Some(numbers)) => numbers.get(first).copied()?,
             (None, None) => first,
         };
-        (!name.is_empty()).then(|| self.net(name))
+        (!name.is_empty()).then_some(name)
     }
 
     /// The copper layers among the layer names of `item`.
@@ -436,7 +452,7 @@ impl<'a> Reader<'a> {
     fn zone(&mut self, zone: &'a Sexp) -> Result<(), BoardError> {
         let Some(rules) = zone.child("keepout") else {
             self.has_copper_zones = true;
-            return Ok(());
+            return self.copper_zone(zone);
         };
         let forbids =
             |what: &str| rules.child(what).and_then(|c| c.atoms().next()) == Some("not_allowed");
@@ -454,6 +470,40 @@ impl<'a> Reader<'a> {
             self.keepouts_on(&layers, Shape::Polygon(polygon), scope);
         }
         Ok(())
+    }
+
+    /// A copper zone of a net, as a plane on each of its layers; the net is
+    /// known by name until every pad is read.
+    fn copper_zone(&mut self, zone: &'a Sexp) -> Result<(), BoardError> {
+        let Some(net) = self.net_name_of(zone) else {
+            return Ok(());
+        };
+        let layers = self.copper_layers(zone);
+        for outline in zone.children("polygon") {
+            let points = points(outline.required_child("pts")?)?;
+            let Some(polygon) = Polygon::new(distinct(points)) else {
+                continue;
+            };
+            for &layer in &layers {
+                self.zones.push((net, layer, polygon.clone()));
+            }
+        }
+        Ok(())
+    }
+
+    /// The zones of nets that pads are in, as planes.
+    fn planes(&self) -> Vec<Plane> {
+        self.zones
+            .iter()
+            .filter_map(|&(name, layer, ref outline)| {
+                let net = *self.net_by_name.get(name)?;
+                (!self.nets[net.index()].pads.is_empty()).then(|| Plane {
+                    net,
+                    layer,
+                    outline: outline.clone(),
+                })
+            })
+            .collect()
     }
 
     /// The board's own tracks and vias. Copper of no net cannot be a route and
@@ -1041,6 +1091,58 @@ mod tests {
         );
         assert!(read_board(copper).has_copper_zones);
         assert!(read_board(&in_a_footprint).has_copper_zones);
+    }
+
+    #[test]
+    fn copper_zones_are_planes_of_their_net_on_each_of_their_layers() {
+        let design = board(
+            r#"(footprint "J" (at 5 5) (property "Reference" "J1")
+                 (pad "1" thru_hole circle (at 0 0) (size 1.6 1.6) (drill 0.8) (layers "*.Cu") (net "GND")))
+               (zone (net "GND") (net_name "GND") (layers "F.Cu" "B.Cu")
+                 (polygon (pts (xy 1 1) (xy 9 1) (xy 9 9) (xy 1 9))))"#,
+        );
+        let gnd = NetId::from_index(0);
+        let on: Vec<(NetId, LayerId)> = design.planes.iter().map(|p| (p.net, p.layer)).collect();
+        assert_eq!(on, [(gnd, LayerId(0)), (gnd, LayerId(1))]);
+        assert_eq!(
+            design.planes[0].outline.bounds(),
+            Rect {
+                min: Point::new(MM, MM),
+                max: Point::new(9 * MM, 9 * MM)
+            }
+        );
+    }
+
+    #[test]
+    fn a_zone_of_a_net_no_pad_is_in_is_no_plane() {
+        let design = board(
+            r#"(zone (net "GND") (net_name "GND") (layer "B.Cu")
+                 (polygon (pts (xy 1 1) (xy 9 1) (xy 9 9) (xy 1 9))))"#,
+        );
+        assert!(design.planes.is_empty());
+        assert!(design.nets.is_empty(), "{:?}", design.nets);
+    }
+
+    /// A 4-layer board whose inner layers are of type power, with `items`.
+    fn four_layers_of_power_inside(items: &str) -> Design {
+        let text = format!(
+            r#"(kicad_pcb (version 20260206)
+                (layers (0 "F.Cu" signal) (4 "In1.Cu" power) (6 "In2.Cu" power) (2 "B.Cu" signal)
+                        (25 "Edge.Cuts" user))
+                (gr_rect (start 0 0) (end 10 10) (layer "Edge.Cuts"))
+                {items})"#
+        );
+        read(&text, None, None).expect("valid board").design
+    }
+
+    #[test]
+    fn a_power_layer_holding_a_copper_zone_takes_no_tracks_and_one_without_does() {
+        let design = four_layers_of_power_inside(
+            r#"(zone (net "GND") (layer "In1.Cu")
+                 (polygon (pts (xy 1 1) (xy 9 1) (xy 9 9) (xy 1 9))))"#,
+        );
+        let routable: Vec<bool> = design.layers.iter().map(|l| l.routable).collect();
+        assert_eq!(routable, [true, false, true, true]);
     }
 
     #[test]
