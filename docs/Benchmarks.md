@@ -58,7 +58,16 @@ Freerouting's log shows a fan-out stage that escapes most SMD pins before anythi
 
 On the keyboard 36 pins escape. A via at the end of each stub made the keyboard slower and cost Mars-64 four connections: at 0.5 mm pitch, 0.6 mm vias do not fit beside each other, so only half the pins of each TQFP got one, and those vias stood in the way of the rest. With `cargo xtask bench`, KiCad 10's DRC finds the keyboard (1.0 s, 101 vias) and the matrix clean, with nothing unconnected.
 
-The whole corpus, 120 s per board: 49 boards complete instead of 47 (Issue110-RelayModule and Issue297-myboard), none less complete except Mars-64, 18 connections more in all (Issue508-bm05 99 → 103 of 107 in 2.4 s instead of 5.1 s), and no session breaks a rule the board did not already break. Mars-64 loses 2 connections of 106 and takes twice as long, for reasons not yet known.
+The whole corpus, 120 s per board: 49 boards complete instead of 47 (Issue110-RelayModule and Issue297-myboard), none less complete except Mars-64, 18 connections more in all (Issue508-bm05 99 → 103 of 107 in 2.4 s instead of 5.1 s), and no session breaks a rule the board did not already break. Mars-64 loses 2 connections of 106 and takes twice as long: its stubs at U101's pins 18 and 19, fixed copper, sharpen the fight between SPI_CLK and SPI_MOSI there ([[TRX-56]]).
+
+In CI (commit 7768025, 120 s per board, the same setup as the corpus runs above):
+
+| Router | Complete | Incomplete | Breaking rules | Stopped at 120 s | Failed | Time in all |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **traxide** | **50** | 17 | **0** | 6 | 3 | 1415 s |
+| Freerouting 2.5.0 | 18 | 7 | 19 | 30 | 2 | 4627 s |
+
+Against 264cb19: Issue110-RelayModule (17 s) and Issue297 complete; Issue145-smoothieboard finishes in 78 s instead of stopping, with 236 of 245 nets; bm05 routes 50 of 54 nets instead of 47, Issue039 41 of 74 instead of 37, caniot 80 of 94 instead of 78, bm01 79 of 99 instead of 78; both Mars-64 boards 69 of 94 instead of 72. KiCad's DRC finds the keyboard, routed in 0.5 s, and the matrix clean; Freerouting leaves the keyboard with one unconnected item and 199 track widths broken after 148 s.
 
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 
