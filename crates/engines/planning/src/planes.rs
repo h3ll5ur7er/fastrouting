@@ -2,7 +2,7 @@
 //! reach gets a short track to a via onto it, before anything is routed, so
 //! that its net needs no track across the board.
 
-use traxide_contracts::geometry::{Point, Segment, Shape};
+use traxide_contracts::geometry::{Point, Rect, Segment, Shape};
 use traxide_contracts::{
     ConnectionId, ConstraintSet, Design, LayerId, LayoutAccess, NetId, Pad, PadId, Routes, Track,
     Via,
@@ -71,6 +71,17 @@ fn has_a_plane_to_join(design: &Design, pad: &Pad) -> bool {
             .any(|c| design.layers[c.layer.index()].routable)
 }
 
+fn pad_bounds(pad: &Pad) -> Rect {
+    pad.copper
+        .iter()
+        .map(|c| c.shape.bounds())
+        .reduce(Rect::union)
+        .unwrap_or(Rect {
+            min: pad.position,
+            max: pad.position,
+        })
+}
+
 /// How far from its centre a via may join `pad` to a plane.
 fn reach(pad: &Pad) -> i64 {
     let radius = pad
@@ -116,6 +127,29 @@ fn join_of(
         .filter(|c| design.layers[c.layer.index()].routable)
         .collect();
     let reach = reach(pad);
+    // Wide enough for the via and the room beside it at the farthest place.
+    let neighbourhood = pad_bounds(pad).inflated(
+        i32::try_from(reach)
+            .unwrap_or(i32::MAX)
+            .saturating_add(LONGEST_REACH),
+    );
+    let neighbours: Vec<_> = design
+        .pads
+        .iter()
+        .filter(|other| other.net != pad.net)
+        .flat_map(|other| other.copper.iter().map(move |c| (other.net, c)))
+        .filter(|(_, c)| c.shape.bounds().intersects(neighbourhood))
+        .collect();
+    // A via squeezed in beside the pads of other nets takes their ways out,
+    // as at the pins of a fine-pitch chip: it leaves room for a track.
+    let leaves_room = |via: &Via| {
+        via_copper(design, via).all(|(layer, shape)| {
+            neighbours.iter().all(|(other, theirs)| {
+                let clearance = rules.clearance(Some(net), *other);
+                theirs.layer != layer || !shape.is_closer_than(&theirs.shape, width + 2 * clearance)
+            })
+        })
+    };
     places
         .iter()
         .take_while(|&&(distance, _)| distance <= reach)
@@ -128,6 +162,7 @@ fn join_of(
                 });
                 let track = Segment::new(pad.position, at);
                 (beside_the_pad
+                    && leaves_room(&via)
                     && layout.is_via_clear(&via)
                     && layout.is_track_clear(net, start.layer, track, width))
                 .then(|| Routes {
@@ -267,6 +302,30 @@ mod tests {
         let joins = joined(&design);
         assert_eq!(joins.copper.vias.len(), 1);
         assert_eq!(broken_rules(&design, &joins.copper), []);
+    }
+
+    #[test]
+    fn a_via_leaves_room_for_a_track_beside_the_pads_of_other_nets() {
+        // G1 between two pins 0.5 mm away, as on a fine-pitch chip: a via
+        // squeezed in beside them would take their ways out.
+        let design = four_layers()
+            .smd("U1-1", Some("A"), at(5.0, 4.5), 0.25, 0)
+            .smd("U1-2", Some("GND"), at(5.0, 5.0), 0.25, 0)
+            .smd("U1-3", Some("B"), at(5.0, 5.5), 0.25, 0)
+            .tht("J1", Some("GND"), at(25.0, 15.0), 1.6)
+            .build();
+        let joins = joined(&design);
+        let [via] = &joins.copper.vias[..] else {
+            panic!("one via: {:?}", joins.copper.vias);
+        };
+        let room = mm(0.3 + 0.2 + 0.2 + 0.2);
+        for pin in ["U1-1", "U1-3"] {
+            let centre = design.pad(design.pad_named(pin)).position;
+            assert!(
+                via.position.distance(centre) >= i64::from(room + mm(0.125)),
+                "{via:?}"
+            );
+        }
     }
 
     #[test]
