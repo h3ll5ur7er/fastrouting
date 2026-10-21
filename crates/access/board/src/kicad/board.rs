@@ -18,6 +18,8 @@ pub(crate) struct Board {
     /// KiCad 9 refers to nets by number: each net's number by its name. KiCad
     /// 10 refers to them by name.
     pub net_numbers: Option<HashMap<String, String>>,
+    /// Whether the board has zones of copper, which KiCad fills around routes.
+    pub has_copper_zones: bool,
 }
 
 /// The board in `text`, with the rules of its project and its custom rules.
@@ -61,6 +63,7 @@ struct Reader<'a> {
     keepouts: Vec<Keepout>,
     /// The drawings on the Edge.Cuts layer, each open or closed.
     edges: Vec<(Vec<Point>, bool)>,
+    has_copper_zones: bool,
 }
 
 impl<'a> Reader<'a> {
@@ -115,6 +118,7 @@ impl<'a> Reader<'a> {
             via_kinds: ViaKinds::default(),
             keepouts: Vec::new(),
             edges: Vec::new(),
+            has_copper_zones: false,
         })
     }
 
@@ -134,7 +138,7 @@ impl<'a> Reader<'a> {
         }
         let existing = self.existing()?;
         for zone in self.root.children("zone") {
-            self.keepout_zone(zone)?;
+            self.zone(zone)?;
         }
         for item in self.root.args() {
             if let Some(drawing) = drawing(item, "gr_", &Transform::IDENTITY)? {
@@ -184,6 +188,7 @@ impl<'a> Reader<'a> {
             },
             via_sizes: self.via_kinds.sizes,
             net_numbers,
+            has_copper_zones: self.has_copper_zones,
         })
     }
 
@@ -318,7 +323,7 @@ impl<'a> Reader<'a> {
             }
         }
         for zone in footprint.children("zone") {
-            self.keepout_zone(zone)?;
+            self.zone(zone)?;
         }
         Ok(())
     }
@@ -428,8 +433,11 @@ impl<'a> Reader<'a> {
         }))
     }
 
-    fn keepout_zone(&mut self, zone: &'a Sexp) -> Result<(), BoardError> {
+    /// A rule area becomes keepouts; copper zones are left out, as KiCad
+    /// refills them around the routes.
+    fn zone(&mut self, zone: &'a Sexp) -> Result<(), BoardError> {
         let Some(rules) = zone.child("keepout") else {
+            self.has_copper_zones = true;
             return Ok(());
         };
         let forbids =
@@ -1009,6 +1017,32 @@ mod tests {
         );
         assert_eq!(design.keepouts[0].layer, Some(LayerId::from_index(1)));
         assert_eq!(design.keepouts[0].scope, KeepoutScope::TracksOnly);
+    }
+
+    fn read_board(items: &str) -> Board {
+        let text = format!(
+            r#"(kicad_pcb (version 20260206)
+                (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (25 "Edge.Cuts" user))
+                (gr_rect (start 0 0) (end 10 10) (layer "Edge.Cuts"))
+                {items})"#
+        );
+        read(&text, None, None).expect("valid board")
+    }
+
+    #[test]
+    fn knows_whether_the_board_has_copper_zones_to_fill() {
+        let rule_area = r#"(zone (net "") (layer "B.Cu")
+              (keepout (tracks not_allowed) (vias allowed) (pads allowed) (copperpour not_allowed) (footprints allowed))
+              (polygon (pts (xy 1 1) (xy 3 1) (xy 3 3))))"#;
+        let copper = r#"(zone (net "GND") (layer "B.Cu")
+              (polygon (pts (xy 1 1) (xy 9 1) (xy 9 9))))"#;
+        let in_a_footprint = format!(r#"(footprint "Logo" (at 5 5) {copper})"#);
+        assert!(
+            !read_board(rule_area).has_copper_zones,
+            "a rule area is no copper"
+        );
+        assert!(read_board(copper).has_copper_zones);
+        assert!(read_board(&in_a_footprint).has_copper_zones);
     }
 
     #[test]

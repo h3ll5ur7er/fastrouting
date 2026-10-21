@@ -114,6 +114,17 @@ class BoardBuilder:
             footprint.Flip(footprint.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
         return footprint
 
+    def zone(self, net: str, layer, corners) -> None:
+        """A copper zone of `net`, left unfilled, as a board fresh from a script is."""
+        zone = pcbnew.ZONE(self.board)
+        zone.SetLayer(layer)
+        zone.SetNet(self._net(net))
+        outline = zone.Outline()
+        outline.NewOutline()
+        for x, y in corners:
+            outline.Append(MM(x), MM(y))
+        self.board.Add(zone)
+
     def _pad(self, footprint, spec):
         pad = pcbnew.PAD(footprint)
         pad.SetNumber(spec.number)
@@ -166,6 +177,22 @@ def crossing() -> pcbnew.BOARD:
     builder.footprint("TP2", 25, 15, pad("ACROSS"))
     builder.footprint("TP3", 15, 5, pad("DOWN"))
     builder.footprint("TP4", 15, 25, pad("DOWN"))
+    return builder.board
+
+
+def ground_pour() -> pcbnew.BOARD:
+    """Two crossing signals over a ground zone that covers the back: the zone
+    must be refilled around the routes, the via included."""
+    builder = BoardBuilder(30, 30)
+    pad = lambda net: [Smd("1", 0, 0, 1.2, 1.2, net)]
+    builder.footprint("TP1", 5, 15, pad("ACROSS"))
+    builder.footprint("TP2", 25, 15, pad("ACROSS"))
+    builder.footprint("TP3", 15, 5, pad("DOWN"))
+    builder.footprint("TP4", 15, 25, pad("DOWN"))
+    ground = lambda: [Tht("1", 0, 0, 1.7, 1.0, "GND")]
+    builder.footprint("J1", 5, 5, ground())
+    builder.footprint("J2", 25, 25, ground())
+    builder.zone("GND", pcbnew.B_Cu, [(0, 0), (30, 0), (30, 30), (0, 30)])
     return builder.board
 
 
@@ -342,6 +369,7 @@ RECIPES = {
     "keyboard-tkl": Recipe(keyboard_tkl, track=0.2, clearance=0.15),
     "placements": Recipe(placements),
     "crossing": Recipe(crossing),
+    "ground-pour": Recipe(ground_pour),
     "isolation": Recipe(
         isolation,
         classes=(NetClass("HV", "HV", track=0.5, clearance=0.3),),

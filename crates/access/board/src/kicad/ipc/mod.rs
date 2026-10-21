@@ -17,7 +17,7 @@ use super::project::{ClassValues, LiveClass, Project};
 use crate::{Beside, BoardError, RUNNING_KICAD};
 use client::Kicad;
 use messages::board::commands::{
-    GetNetClassForNets, GetNets, NetClassForNetsResponse, NetsResponse,
+    GetNetClassForNets, GetNets, NetClassForNetsResponse, NetsResponse, RefillZones,
 };
 use messages::board::types::Net;
 use messages::common::commands::{
@@ -41,13 +41,12 @@ pub(crate) fn load_design(environment: &Environment) -> Result<Design, BoardErro
 }
 
 /// Adds `routes`, routed on `design`, to the board open in KiCad as one commit,
-/// which one undo removes; refuses if the board is no longer the one `design`
-/// was read from.
+/// then refills the board's copper zones around them; refuses if the board is
+/// no longer the one `design` was read from.
 ///
-/// Zones are left as they are: refilling them inside the commit fills them
-/// around the board as it was before it, and after the commit KiCad records the
-/// fill as an undo step of its own, which the designer's first undo would take
-/// back instead of the routes. KiCad refills before its DRC and on *B*.
+/// The fill is an undo step of its own after the routes': refilling inside the
+/// commit would fill around the board as it was before it. So on a board with
+/// copper zones the first undo takes back the fill and the second the routes.
 pub(crate) fn store_routes(
     environment: &Environment,
     design: &Design,
@@ -79,7 +78,24 @@ pub(crate) fn store_routes(
         header: None,
     });
     added?;
-    ended.map(drop)
+    ended?;
+    if board.has_copper_zones {
+        refill_zones(&mut kicad, &document)?;
+    }
+    Ok(())
+}
+
+fn refill_zones(kicad: &mut Kicad, document: &DocumentSpecifier) -> Result<(), BoardError> {
+    kicad
+        .call::<_, ()>(&RefillZones {
+            board: Some(document.clone()),
+            zones: Vec::new(),
+        })
+        .map_err(|error| {
+            BoardError::Kicad(format!(
+                "the routes are stored, but the zones were not refilled: {error}"
+            ))
+        })
 }
 
 fn create(
@@ -430,6 +446,7 @@ mod tests {
                     format!("EndCommit {action} {}", asked.message);
                 ok(&EndCommitResponse {})
             }
+            "RefillZones" => ok(&()),
             other => panic!("the fake KiCad does not know {other}"),
         }
     }
@@ -457,6 +474,14 @@ mod tests {
             project_folder: None,
         };
         (folder, environment, state)
+    }
+
+    fn with_a_copper_zone(board: &str) -> String {
+        let end = board.rfind(')').expect("a board");
+        format!(
+            "{}  (zone (net \"ROW0\") (layer \"B.Cu\") (polygon (pts (xy 0 0) (xy 50 0) (xy 50 50))))\n)\n",
+            &board[..end]
+        )
     }
 
     fn some_routes() -> Routes {
@@ -544,6 +569,24 @@ mod tests {
                 "CreateItems",
                 "EndCommit push traxide: route"
             ]
+        );
+    }
+
+    #[test]
+    fn refills_the_zones_after_the_routes_commit() {
+        let zoned = with_a_copper_zone(&board_text());
+        let copy = tempfile::tempdir().expect("a temporary folder");
+        let project = format!("{BOARD}.kicad_pro");
+        std::fs::copy(fixtures().join(&project), copy.path().join(&project)).expect("copied");
+        let board = copy.path().join(format!("{BOARD}.kicad_pcb"));
+        std::fs::write(&board, &zoned).expect("written");
+        let design = crate::load_design(&board).expect("a valid board");
+        let (_folder, environment, state) = fake_kicad(|state| state.board = zoned);
+        store_routes(&environment, &design, &some_routes()).expect("stored");
+        let received = received(&state);
+        assert_eq!(
+            received[received.len() - 2..],
+            ["EndCommit push traxide: route", "RefillZones"]
         );
     }
 
