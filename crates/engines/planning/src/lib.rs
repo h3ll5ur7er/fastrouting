@@ -1,8 +1,12 @@
 //! Planning Engine: how the work is planned (volatility V5 of
 //! docs/Architecture/Volatilities.md). For now: a minimum spanning tree per net,
-//! connections from hemmed-in pads first, then shortest first.
+//! connections from hemmed-in pads first, then shortest first; and stubs that
+//! escape the pins of fine-pitch parts before anything is routed.
 
+mod escape;
 mod existing;
+
+pub use escape::{Escaped, escape};
 
 use traxide_contracts::geometry::Point;
 use traxide_contracts::{Connection, Design, NetId, Pad, PadId, Plan};
