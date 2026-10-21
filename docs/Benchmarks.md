@@ -77,6 +77,8 @@ A pin of a fine-pitch chip whose centre lies off the 0.1 mm grid could not be le
 
 bm06 is complete, as Freerouting completes it. The time goes to the connections that now leave their pins: on bm01 and bm05 they negotiate, and those that still find no way search the whole window before they fail, where before they failed at once; a variant that walked the axes only for pads with no other way out routed the same and took as long. On caniot the other unrouted connections end at pads on its power layers ([[TRX-57]]) and now fail with "no way found" on its one routable layer. Issue157's three end at Q1-3 or Q2-3, across which the board's own unlocked track runs ([[TRX-59]]). The keyboard's time is the median of nine runs each (1.95–2.20 s before, 1.98–2.24 s after); the routes are byte for byte the same. The KiCad round trip (`cargo xtask e2e`) could not run: the container had no Docker daemon.
 
+The whole corpus, before and after, each board stopped after 300 s: no board routes fewer connections, none breaks a rule it did not already break, and the times of the others stay within the noise. One more board gains: Issue110-RelayModule routes 84 of 88 connections instead of 77 (one pad was hemmed in), in 106 s instead of 94 s.
+
 ## A wider window where no way was found (M5, TRX-55)
 
 A search covers the box around its pads grown by 5 mm; the corpus analysis ([[Corpus-analysis#search-window-too-small]]) found ways that run further round. A connection that finds no way now searches again, alone after its batch, in windows four times wider each, up to the whole board. Measured on this machine, every session as clean as before (the violations counted are the boards' own):
