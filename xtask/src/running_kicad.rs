@@ -29,7 +29,7 @@ impl RunningKicad {
     /// Starts KiCad from `image` on a copy of the board `board` and its project
     /// files, all placed in `folder`, and waits until it serves the board.
     pub fn open(image: &str, board: &Path, folder: &Path) -> Result<Self> {
-        let config = folder.join("config/10.0");
+        let config = folder.join("config");
         let socket_folder = folder.join("socket");
         let project = folder.join("project");
         if folder.exists() {
@@ -47,10 +47,8 @@ impl RunningKicad {
         }
         // The image runs KiCad as its own user, who must write the
         // configuration, the socket and the saved board.
-        let open_to_kicad = || run(Command::new("chmod").arg("-R").arg("a+rwX").arg(folder));
-        open_to_kicad()?;
+        run(Command::new("chmod").arg("-R").arg("a+rwX").arg(folder))?;
         write_configuration(image, &config)?;
-        open_to_kicad()?;
 
         let container = format!("traxide-e2e-kicad-{}", std::process::id());
         let board_name = board.file_name().context("a board file")?.to_string_lossy();
@@ -64,10 +62,7 @@ impl RunningKicad {
             ])
             .args(["-v", "/tmp/.X11-unix:/tmp/.X11-unix"])
             .arg("-v")
-            .arg(format!(
-                "{}:/home/kicad/.config/kicad",
-                folder.join("config").display()
-            ))
+            .arg(format!("{}:/home/kicad/.config/kicad", config.display()))
             .arg("-v")
             .arg(format!("{}:/tmp/kicad", socket_folder.display()))
             .arg("-v")
@@ -143,30 +138,41 @@ impl Drop for RunningKicad {
 /// KiCad greets a new user with a wizard, a modal dialog that keeps the API
 /// busy until someone closes it, unless all three global library tables exist
 /// and the wizard's two questions count as answered.
+///
+/// The image's own configuration holds two of the tables, in a folder named
+/// after its KiCad version. Its user copies them, and the files written here
+/// beside them, and opens them all to everyone: KiCad rewrites its settings,
+/// and only the owner of a file may change its mode, while the host's user
+/// may be another.
 fn write_configuration(image: &str, config: &Path) -> Result<()> {
-    run(Command::new("docker")
-        .args(["run", "--rm", "-v"])
-        .arg(format!("{}:/out", config.display()))
-        .args([
-            image,
-            "sh",
-            "-c",
-            "cp ~/.config/kicad/10.0/fp-lib-table ~/.config/kicad/10.0/sym-lib-table /out/",
-        ]))?;
+    let seed = config.with_file_name("seed");
+    std::fs::create_dir_all(&seed)?;
     std::fs::write(
-        config.join("design-block-lib-table"),
+        seed.join("design-block-lib-table"),
         "(design_block_lib_table\n\t(version 7)\n\t(lib (name \"KiCad\") (type \"Table\") \
          (uri \"/usr/share/kicad/template/design-block-lib-table\") (options \"\") \
          (descr \"KiCad Default Libraries\"))\n)\n",
     )?;
     std::fs::write(
-        config.join("kicad_common.json"),
+        seed.join("kicad_common.json"),
         r#"{
   "api": { "enable_server": true },
   "do_not_show_again": { "data_collection_prompt": true, "update_check_prompt": true }
 }
 "#,
     )?;
+    run(Command::new("docker")
+        .args(["run", "--rm", "-v"])
+        .arg(format!("{}:/out", config.display()))
+        .arg("-v")
+        .arg(format!("{}:/seed:ro", seed.display()))
+        .args([
+            image,
+            "sh",
+            "-c",
+            "cp -r ~/.config/kicad/. /out/ && for version in /out/*/; do cp /seed/* \"$version\"; done \
+             && chmod -R a+rwX /out",
+        ]))?;
     Ok(())
 }
 
