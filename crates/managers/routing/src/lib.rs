@@ -84,6 +84,9 @@ pub enum Unroutable {
     /// The tracks of other connections took every way out of this pad; routed
     /// in another order, it may have been left.
     ExitsTaken(String),
+    /// The board's own copper, keepouts and edge leave no way between the
+    /// pads, whatever routing does.
+    CutOff,
     /// Both pads can be left, but no way between them was found.
     NoWayFound,
 }
@@ -103,6 +106,7 @@ fn why_unrouted(
     connection: &Connection,
     hemmed_in: &[PadId],
     exits_taken: &[PadId],
+    cut_off: &[Connection],
 ) -> Vec<Unroutable> {
     let blocked: Vec<Unroutable> = [connection.from, connection.to]
         .into_iter()
@@ -116,10 +120,12 @@ fn why_unrouted(
             }
         })
         .collect();
-    if blocked.is_empty() {
-        vec![Unroutable::NoWayFound]
-    } else {
+    if !blocked.is_empty() {
         blocked
+    } else if cut_off.contains(connection) {
+        vec![Unroutable::CutOff]
+    } else {
+        vec![Unroutable::NoWayFound]
     }
 }
 
@@ -212,6 +218,7 @@ pub fn route(
         unrouted,
         hemmed_in,
         exits_taken,
+        cut_off,
     } = router.route_plan(&plan, corridors.as_ref(), &mut layout, cancel, events);
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
@@ -242,7 +249,7 @@ pub fn route(
         net: design.net(c.net).name.clone(),
         from: design.pad(c.from).name.clone(),
         to: design.pad(c.to).name.clone(),
-        why: why_unrouted(&design, c, &hemmed_in, &exits_taken),
+        why: why_unrouted(&design, c, &hemmed_in, &exits_taken, &cut_off),
     };
     Ok(RouteReport {
         connections: total,

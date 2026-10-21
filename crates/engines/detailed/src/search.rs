@@ -211,6 +211,16 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         }
     }
 
+    /// The same search, looking through routed copper: what it cannot find,
+    /// the board's own copper, keepouts and edge leave no way for.
+    pub(crate) fn through_routed_copper(&self) -> Self {
+        Self {
+            ignores_routed_copper: true,
+            negotiation: None,
+            ..*self
+        }
+    }
+
     pub(crate) fn run(self, scratch: &mut Scratch) -> Result<Vec<Step>, NoRoute> {
         if let Some(direct) = self.direct_line() {
             return Ok(direct);
@@ -241,10 +251,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     /// Which of the connection's pads with no way out fixed copper hems in, and
     /// which only routed copper does, which may move.
     fn blocked(self, from_blocked: bool, to_blocked: bool) -> NoRoute {
-        let fixed_only = Search {
-            ignores_routed_copper: true,
-            ..self
-        };
+        let fixed_only = self.through_routed_copper();
         let (mut hemmed_in, mut exits_taken) = (Vec::new(), Vec::new());
         for (blocked, id, pad) in [
             (from_blocked, self.connection.from, self.from),
@@ -459,6 +466,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     }
 
     fn via_extra(&self, via: &Via) -> Option<i64> {
+        if self.ignores_routed_copper {
+            return (self.layout.via_obstruction(via) != Obstruction::Fixed).then_some(0);
+        }
         match self.negotiation {
             None => self.layout.is_via_clear(via).then_some(0),
             Some(negotiation) => {

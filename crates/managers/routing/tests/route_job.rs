@@ -298,3 +298,17 @@ fn warns_of_pads_of_different_nets_closer_than_their_clearance() {
         ["the pads R1-2 (net Across) and R3-1 (net Short) are closer than their clearance"]
     );
 }
+
+#[test]
+fn says_when_the_board_itself_leaves_no_way_between_two_pads() {
+    // R1 lies inside a closed ring of keepout on both layers, R2 outside it.
+    let folder = tempfile::tempdir().expect("temp dir");
+    let report = route(
+        &job("enclosed-pad.dsn", &folder.path().join("board.ses")),
+        &Silent,
+        &CancelToken::new(),
+    )
+    .expect("routable");
+    let reasons: Vec<&[Unroutable]> = report.unrouted.iter().map(|u| u.why.as_slice()).collect();
+    assert_eq!(reasons, [&[Unroutable::CutOff][..]]);
+}

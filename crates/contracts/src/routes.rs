@@ -40,4 +40,7 @@ pub struct RoutingResult {
     /// Pads every way out of which the routed copper of other connections took,
     /// in id order; routed in another order, they may have been left.
     pub exits_taken: Vec<PadId>,
+    /// The unrouted connections between whose pads the board's own copper,
+    /// keepouts and edge leave no way at all, in the order they failed.
+    pub cut_off: Vec<Connection>,
 }

@@ -97,7 +97,7 @@ impl<'a> Router<'a> {
             rip_ups_since_most: 0,
         };
         let mut unrouted = Vec::new();
-        let (mut hemmed_in, mut exits_taken) = (Vec::new(), Vec::new());
+        let (mut hemmed_in, mut exits_taken, mut cut_off) = (Vec::new(), Vec::new(), Vec::new());
         while !state.queue.is_empty() {
             if cancel.is_cancelled() {
                 unrouted.extend(state.queue.drain(..));
@@ -128,7 +128,12 @@ impl<'a> Router<'a> {
                 let connection = plan.connections[id.index()];
                 match self.find_wider(connection, layout, state.negotiation()) {
                     Some(found) => state.commit(self.finder.design, layout, id, found, &[], events),
-                    None => unrouted.push(id),
+                    None => {
+                        if self.is_cut_off(connection, layout) {
+                            cut_off.push(connection);
+                        }
+                        unrouted.push(id);
+                    }
                 }
             }
         }
@@ -150,6 +155,7 @@ impl<'a> Router<'a> {
                 .collect(),
             hemmed_in,
             exits_taken,
+            cut_off,
         }
     }
 
@@ -183,6 +189,28 @@ impl<'a> Router<'a> {
             }
         }
         None
+    }
+
+    /// Whether the board's own copper, keepouts and edge leave no way at all
+    /// between the pads of `connection`, whatever was routed.
+    fn is_cut_off(&mut self, connection: Connection, layout: &impl LayoutAccess) -> bool {
+        let board = self.finder.design.outline.bounds();
+        let whole_board = Profile {
+            detour_margin: (board.max.x - board.min.x).max(board.max.y - board.min.y),
+            ..self.finder.profile.clone()
+        };
+        search::Search::new(
+            self.finder.design,
+            self.finder.rules,
+            &whole_board,
+            connection,
+            layout,
+            None,
+            None,
+        )
+        .through_routed_copper()
+        .run(&mut self.scratches[0])
+        .is_err()
     }
 
     /// Takes up to the profile's `batch_size` connections from the front of

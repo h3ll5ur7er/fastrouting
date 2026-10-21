@@ -589,6 +589,49 @@ fn a_pad_whose_ways_out_routed_copper_took_is_not_hemmed_in() {
 }
 
 #[test]
+fn a_connection_that_fixed_copper_cuts_off_is_named() {
+    // B1 sits inside a closed ring of keepout with room around it, B2 outside;
+    // one layer, so no via can hop over the ring.
+    let ring = [
+        wall(at(7.0, 2.0), at(13.0, 2.5)),
+        wall(at(7.0, 7.5), at(13.0, 8.0)),
+        wall(at(7.0, 2.0), at(7.5, 8.0)),
+        wall(at(12.5, 2.0), at(13.0, 8.0)),
+    ];
+    let mut builder = DesignBuilder::new(20.0, 10.0).layers(1);
+    for side in ring {
+        builder = builder.keepout(side, None, KeepoutScope::Everything);
+    }
+    let design = builder
+        .smd("B1", Some("B"), at(10.0, 5.0), 0.5, 0)
+        .smd("B2", Some("B"), at(17.0, 5.0), 0.5, 0)
+        .build();
+    let result = route(&design, &[("B1", "B2")]);
+    assert_eq!(result.hemmed_in, []);
+    assert_eq!(result.cut_off, [connection(&design, "B1", "B2")]);
+}
+
+#[test]
+fn a_connection_only_routed_copper_cuts_off_is_not_named_cut_off() {
+    // A's track crosses the one-layer board from edge to edge before B is
+    // routed, with no rip-up: B1 lies below it, B2 above.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .layers(1)
+        .smd("A1", Some("A"), at(0.5, 5.0), 0.5, 0)
+        .smd("A2", Some("A"), at(19.5, 5.0), 0.5, 0)
+        .smd("B1", Some("B"), at(10.0, 2.0), 0.5, 0)
+        .smd("B2", Some("B"), at(10.0, 8.0), 0.5, 0)
+        .build();
+    let no_rip_up = Profile {
+        max_rip_ups: 0,
+        ..profile()
+    };
+    let result = route_with(&design, &no_rip_up, &[("A1", "A2"), ("B1", "B2")]);
+    assert_eq!(result.unrouted, [connection(&design, "B1", "B2")]);
+    assert_eq!(result.cut_off, []);
+}
+
+#[test]
 fn a_pad_over_the_board_edge_is_left_from_its_copper_on_the_board() {
     // A1's centre lies on the board's left edge, as an edge connector's might.
     let design = DesignBuilder::new(20.0, 10.0)

@@ -255,6 +255,9 @@ fn reason(why: &Unroutable) -> String {
         Unroutable::ExitsTaken(pad) => {
             format!("the tracks of other nets took every way out of {pad}")
         }
+        Unroutable::CutOff => {
+            "the board's own copper, keepouts or edge leave no way between them".to_owned()
+        }
         Unroutable::NoWayFound => "no way found".to_owned(),
     }
 }
