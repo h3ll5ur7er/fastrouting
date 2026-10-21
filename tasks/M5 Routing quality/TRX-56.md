@@ -2,7 +2,7 @@
 id: TRX-56
 title: Negotiate congestion until it settles
 type: improvement
-status: todo
+status: in-progress
 priority: high
 labels: [detailed-routing]
 estimate: 4
@@ -20,5 +20,19 @@ The routes traxide leaves on these boards wander and use many vias (Mars-64: 199
 - [ ] A stopping rule from progress across rounds and the time budget, not a fixed count of rip-ups
 - [ ] Try escaping fine-pitch SMD pins first (a short stub and a via, planned before the long connections, as [[TRX-24]] plans hemmed-in pads first) and measure it separately
 - [ ] Corpus, unrouted connections before → after: Issue039-bug-design (49), Issue102 and Issue326 Mars-64 (23 each, with [[TRX-54]]'s 11), Issue283-UnconnectedTracesUnderPads (22), Issue508-DAC2020_bm01 (3), Issue269-caniot-tiny-arm (1); the keyboard and the key matrices as before ([[Benchmarks]])
+
+Tried in October 2026, on top of [[TRX-55]]: negotiation in rounds (every connection routed each round, crossing others at a present price for each connection crossed, from `rip_up_cost` up by half each round, history recorded where they overlap, only the overlapping ones routed again; ending when four rounds bring no fewer overlaps, then the most overlapping routes taken out until the rest is legal), in three ways of finishing (connections routed, measured on this machine):
+
+| Board | Rip-up (today) | Rounds, then the leftovers routed strictly | Rounds, then rip-up | Rounds, then rip-up within a budget of the leftovers |
+| --- | --- | --- | --- | --- |
+| keyboard-tkl (315) | **315**, 1.4 s | 314, 3.2 s | **315**, 4.5 s | 314, 3.8 s |
+| Issue034 (147) | **147**, 23 s | 146, 11 s | **147**, 24 s | 146, 11 s |
+| Issue039 (204) | 157, 63 s | **180**, 153 s (53 of 74 nets instead of 37) | over 300 s | 158, 177 s |
+| Issue102 Mars-64 (106) | 81, 90 s | **85**, 60 s, 200 vias instead of 284 | over 300 s | 80, 81 s |
+| Issue110-RelayModule (88) | 77, 68 s | 86, 27 s | **88**, 64 s | 86, 36 s |
+| Issue015 (61) | **61**, 18 s, 130 vias | 61, 33 s, 121 vias | 61, 36 s | 61, 35 s |
+| Issue029 (91) | 87, 149 s | | over 300 s | 83, 116 s |
+
+No variant beats rip-up without losing a complete board or taking far longer, so none was kept. Rounds settle congested boards much better (Issue039, RelayModule, fewer vias everywhere), but the last few overlaps never resolve, and the routes taken out then no longer fit; rip-up afterwards finishes them on easy boards but churns without end on hard ones. Worth trying next: the overlaps of the last rounds by place rather than by count (they may sit at a few pins, where escaping fine-pitch pins first would help), and finishing with rip-up only for the connections that were taken out, the rest locked.
 
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.
