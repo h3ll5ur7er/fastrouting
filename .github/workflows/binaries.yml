@@ -10,6 +10,7 @@ on:
       - "Cargo.*"
       - "rust-toolchain.toml"
       - "kicad-plugin/**"
+      - "xtask/**"
       - ".github/workflows/binaries.yml"
 
 env:
@@ -95,25 +96,21 @@ jobs:
         with:
           path: built
           merge-multiple: true
-      # One package per platform, each with its traxide in plugins/bin, to
-      # install with KiCad's Plugin and Content Manager → Install from File.
+      - run: rustup show active-toolchain || rustup toolchain install
+      # One package per platform, with its traxide as the plugin's entry point,
+      # to install with KiCad's Plugin and Content Manager → Install from File.
       - name: Assemble
         run: |
-          package() { # target, platform
-            folder="packages/$1"
-            mkdir -p "$folder/plugins/bin"
-            cp kicad-plugin/plugins/*.py "$folder/plugins/"
-            cp built/traxide-$1/traxide built/traxide-$1/traxide.exe "$folder/plugins/bin/" 2>/dev/null || true
-            chmod +x "$folder"/plugins/bin/*
-            jq --arg platform "$2" '.versions[0].platforms = [$platform]' kicad-plugin/metadata.json > "$folder/metadata.json"
-            (cd "$folder" && zip -qr "../traxide-kicad-$1.zip" .)
+          package() { # target, platform, executable
+            cargo xtask kicad-package "$2" "built/traxide-$1/$3" "packages/traxide-kicad-$1.zip"
           }
-          package x86_64-unknown-linux-musl linux
-          package aarch64-unknown-linux-musl linux
-          package x86_64-pc-windows-msvc windows
-          package aarch64-pc-windows-msvc windows
-          package macos-universal macos
-          for zip in packages/*.zip; do unzip -l "$zip" | grep -q "plugins/bin/traxide" || { echo "no traxide in $zip"; exit 1; }; done
+          mkdir -p packages
+          package x86_64-unknown-linux-musl linux traxide
+          package aarch64-unknown-linux-musl linux traxide
+          package x86_64-pc-windows-msvc windows traxide.exe
+          package aarch64-pc-windows-msvc windows traxide.exe
+          package macos-universal macos traxide
+          for zip in packages/*.zip; do unzip -l "$zip"; done
       - uses: actions/upload-artifact@v4
         with:
           name: traxide-kicad-packages

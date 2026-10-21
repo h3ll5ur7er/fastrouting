@@ -1070,6 +1070,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "tempfile",
  "traxide-board-access",
  "traxide-contracts",
  "traxide-events",

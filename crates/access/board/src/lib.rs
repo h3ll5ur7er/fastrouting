@@ -82,6 +82,14 @@ pub fn default_routes_path(board: &Path) -> PathBuf {
     }
 }
 
+/// What storing routes did besides adding them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Stored {
+    /// The running KiCad refilled the board's copper zones around the routes,
+    /// an undo step of its own: taking the routes back takes two undos.
+    pub zones_refilled: bool,
+}
+
 /// Stores `routes`, the copper routing added to `design`, which was read from
 /// `board`, into `path`.
 pub fn store_routes(
@@ -89,7 +97,7 @@ pub fn store_routes(
     board: &Path,
     design: &Design,
     routes: &Routes,
-) -> Result<(), BoardError> {
+) -> Result<Stored, BoardError> {
     if is_running_kicad(path) && is_running_kicad(board) {
         return kicad::ipc::store_routes(&kicad::ipc::Environment::of_process(), design, routes);
     }
@@ -131,7 +139,8 @@ pub fn store_routes(
             });
         }
     };
-    write(path, &text)
+    write(path, &text)?;
+    Ok(Stored::default())
 }
 
 /// Stores `verdict`, found on `routes` of `design` in the file `source`, into
@@ -236,6 +245,11 @@ pub mod testing {
     /// Undoes the last change to the board open in KiCad, as *Edit → Undo* does.
     pub fn undo_in_kicad(socket: &Path) -> Result<(), BoardError> {
         ipc::testing::undo(&environment(socket, None))
+    }
+
+    /// Runs the PCB editor's action named `action`, as pressing its button does.
+    pub fn run_action_in_kicad(socket: &Path, action: &str) -> Result<(), BoardError> {
+        ipc::testing::run_action(&environment(socket, None), action)
     }
 }
 

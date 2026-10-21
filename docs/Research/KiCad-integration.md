@@ -107,6 +107,16 @@ KiCad's `plugin.json` (schema `https://go.kicad.org/api/schemas/v1`) allows `run
 - **What the user must do**: tick *Preferences → Preferences… → Plugins → Enable KiCad API* (stored as `api.enable_server` in `kicad_common.json`; off by default) and restart the PCB editor. Verified: with the API off there is no socket **and the plugin's buttons are not shown at all**, so the plugin cannot explain it itself; the PCM description, the README and a standalone `traxide` must. Ticking it starts the API at once, but the buttons appear only after the PCB editor restarts.
 - KiCad 11 nightlies reportedly stop bundling Python, which makes Python plugins such as Freerouting's (which installs a JRE on demand) and OrthoRoute's (which builds a virtual environment) more fragile, an advantage for a native plugin. Konnect, a Rust KiCad plugin, already ships this way.
 
+### traxide's plugin
+
+What [[TRX-33]] built on these facts, and verified with KiCad 10.0.7 and 9.0 in Docker:
+
+- **The `traxide` binary is the entry point.** Started with no arguments and `KICAD_API_SOCKET` in the environment, as KiCad starts a plugin, it routes the board open in KiCad, as `traxide route --kicad --quiet` does; started with no arguments elsewhere it prints its usage. One action for now, *Route board*: further actions will need a link or copy per action, told apart by `argv[0]`.
+- `kicad-plugin/` holds `plugin.json`, the PCM `metadata.json` and the icons (24 px for the toolbar, light and dark; 64 px for the package manager). `cargo xtask kicad-package PLATFORM TRAXIDE OUT.zip` lays the package out with the platform's binary (`traxide.exe` as the entry point on Windows), its version and `platforms`, and zips it with Info-ZIP, which keeps the executable bit.
+- **KiCad 9 loads exec plugins from `3rdparty/plugins` too**, starts them from the plugin's folder with the same environment (`KICAD_API_SOCKET`, `KICAD_API_TOKEN`, `KIPRJMOD`) and shows their toolbar buttons, so the package asks for KiCad 9.0 or later. KiCad 9 shows nothing of what the plugin prints.
+- `RunAction` did not know the plugin's action by any name tried (`api.plugin.<identifier>.<action>`, `<identifier>.<action>` and others), so the end-to-end test presses the button as a person does: it finds the icon on a screenshot by its fill colour and clicks it with `xdotool`.
+- The plugin waits for `RefillZones` to answer, so once its process has exited the board is final: the end-to-end test waits for the board to change and the process to end.
+
 ## Testing without a person
 
 KiCad 9 and 10 serve the API only from the GUI, but the GUI runs without a screen: `spikes/kicad-ipc/run-headless.sh BOARD.kicad_pcb` starts `pcbnew` from the `kicad/kicad:10.0` image on an `xvfb-run` display (the image has no X server; the host's is shared through `/tmp/.X11-unix`, with `-ac` because the container's host name does not match the cookie), shares `/tmp/kicad` with the host for the socket, and runs the spike against it: from nothing to a verified commit and undo in about 5 seconds.

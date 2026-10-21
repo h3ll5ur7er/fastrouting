@@ -92,14 +92,23 @@ const FAILED: u8 = 1;
 const INCOMPLETE: u8 = 2;
 const BROKE_A_RULE: u8 = 3;
 
+/// What the KiCad plugin's *Route board* button does: KiCad starts the
+/// plugin's entry point with no arguments and only says which board through
+/// the environment, and shows what it prints in its message panel, which has no
+/// use for a progress line rewritten in place.
+const ROUTE_THE_BOARD_OPEN_IN_KICAD: [&str; 4] = ["traxide", "route", "--kicad", "--quiet"];
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let called_as_freerouting = args
         .first()
         .and_then(|program| Path::new(program).file_stem())
         .is_some_and(|name| name == "freerouting");
+    let started_by_kicad = args.len() == 1 && std::env::var_os("KICAD_API_SOCKET").is_some();
     let outcome = if called_as_freerouting {
         run_as_freerouting(&args[1..])
+    } else if started_by_kicad {
+        run(Cli::parse_from(ROUTE_THE_BOARD_OPEN_IN_KICAD))
     } else {
         run(Cli::parse_from(args))
     };
@@ -277,6 +286,15 @@ fn reason(why: &Unroutable) -> String {
     }
 }
 
+/// KiCad refills zones as a step of its own after the routes', which the
+/// designer meets when undoing them.
+fn undo_note(report: &RouteReport) -> Option<&'static str> {
+    report.zones_refilled.then_some(
+        "traxide refilled the board's copper zones around the routes. \
+         Edit → Undo takes back the refill first; a second undo takes back the routes.",
+    )
+}
+
 fn summarise(report: &RouteReport) -> ExitCode {
     let routed = report.connections - report.unrouted.len();
     println!(
@@ -287,6 +305,9 @@ fn summarise(report: &RouteReport) -> ExitCode {
         report.elapsed.as_secs_f64(),
         report.output.display()
     );
+    if let Some(note) = undo_note(report) {
+        println!("{note}");
+    }
     for warning in &report.warnings {
         println!("Warning: {warning}");
     }
@@ -330,5 +351,38 @@ fn summarise(report: &RouteReport) -> ExitCode {
         ExitCode::from(INCOMPLETE)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::Duration;
+    use traxide_contracts::Verdict;
+
+    fn report(zones_refilled: bool) -> RouteReport {
+        RouteReport {
+            connections: 1,
+            unrouted: Vec::new(),
+            tracks: 1,
+            vias: 0,
+            verdict: Verdict::default(),
+            violations_before_routing: 0,
+            cancelled: false,
+            elapsed: Duration::ZERO,
+            output: PathBuf::from(traxide_routing::RUNNING_KICAD),
+            zones_refilled,
+            planes: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn tells_the_designer_that_refilled_zones_take_an_undo_of_their_own() {
+        let note = undo_note(&report(true)).expect("a note");
+        assert!(note.contains("refilled"), "{note}");
+        assert!(note.contains("second undo"), "{note}");
+        assert_eq!(undo_note(&report(false)), None);
     }
 }
