@@ -57,4 +57,20 @@ Rejected for the same reason as the others: the keyboard and Issue034 lose the o
 
 Escaping fine-pitch pins first, measured in October 2026 ([[Benchmarks#fine-pitch-pins-escaped-first-m5-trx-56]]): the pins of parts with at least 8 pins that another net's copper hems in, and that connect to another part, get a stub straight away from their part before any connection is routed, held as fixed copper of their net; the connections leaving the part start at the stub's end (`traxide_planning::escape`, [[crates/engines/planning/src/escape.rs]]). Kept: the keyboard routes in 0.82 s instead of 1.64 s with 101 vias instead of 113, and over the whole corpus 49 boards complete instead of 47, with 18 connections more; only Mars-64 loses, 2 connections each, taking twice as long, for reasons not yet known. A via at each stub's end, as the checklist proposed, was rejected: it made the keyboard slower (2.1 s) and cost Mars-64 four connections, as 0.6 mm vias do not fit beside each other at 0.5 mm pitch.
 
+Measured with `xtask negotiation` and with the rounds patch, before merging (escape alone, then with `TRAXIDE_ROUNDS=1`):
+
+| Board | Without escape | With escape | Rounds alone | Rounds + escape |
+| --- | --- | --- | --- | --- |
+| keyboard-tkl (315) | 315, 1.5 s, 47 rip-ups | 315, 0.8 s, **18 rip-ups** | 314, 3.9 s | **315**, 1.5 s |
+| Issue034 (147) | **147** | **147** | 146, 13 s | 146, 13 s |
+| Issue039 (204) | 157, 72 s, 880 rip-ups | 164, 83 s, 941 rip-ups | 160, 153 s | **168**, 108 s |
+| Mars-64 (106) | 83, 44 s, 618 rip-ups | 81, 88 s, 946 rip-ups | 82, 61 s | **85**, 95 s |
+| RelayModule (88) | 84 | **88** | 85, 24 s | 87, 18 s |
+| Issue029 (91) | 87 | | 83, 128 s | 83, 131 s |
+
+- Escaping ends the churn at the keyboard's RP2350, and with it the rounds patch keeps the keyboard complete: COL15 at U1-12 escapes.
+- On Issue039 the churn moves from U1's pins 20 and 21 to the GND, GNDA and resistor-network connections; it does not get smaller.
+- On Mars-64 the stubs make the fight at U101's pins 18 and 19 worse (SPI_CLK and SPI_MOSI trade places 13 times instead of 5): the stubs are fixed copper there, which rip-up cannot move. That is the likely cause of its 2 lost connections.
+- Rounds with the escape route the most yet on Issue039 and Mars-64, but still lose Issue034's /M from U4-3 to U5-3, where no pin is fine-pitch by the escape's rule. Merged: the escape alone ([[docs/Benchmarks.md]]); the rounds stay out until Issue034 keeps its last connection.
+
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.
