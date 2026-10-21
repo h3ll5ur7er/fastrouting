@@ -12,6 +12,7 @@ layer: engine
 
 The detailed search walks a 0.1 mm grid: millions of states on a large board, most of them in open space where nothing needs deciding. Searching a graph of the places where something does change — corners of obstacles inflated by their clearance, the corridor's crossing points, a coarse grid in between — needs far fewer states for the same paths ([[Research/Algorithms#classical-baselines]]).
 
+- [x] Profile the boards that stop at the corpus's limit (gdb stack samples of a release build with line tables; no perf in the container): Issue289's two boards spent their time scanning the 242 × 242 clearance table on every copper query, now worked out once, so both finish ([[Benchmarks#the-largest-clearance-worked-out-once-m2-trx-48]]). Issue066 has no such hot spot: its samples spread over the open list's heap, copper queries and history lookups, so it simply expands too many states, which only a coarser graph, below, can change. Issue103-Board-Unrouted and Issue113 are not profiled yet
 - [ ] Implicit octilinear graph from corners of inflated obstacles plus a fallback grid
 - [ ] Same results as the grid search on the end-to-end boards, measured in [[Benchmarks]]
 - [ ] Decide after [[TRX-26]]: corridors may shrink the grid search enough

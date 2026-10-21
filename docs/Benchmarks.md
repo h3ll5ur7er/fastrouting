@@ -1,6 +1,6 @@
 # Benchmarks
 
-Measurements of traxide on the end-to-end boards, newest first; the comparison with Freerouting runs in CI, the rest by hand until the benchmark gate of [[TRX-22]]. Every board traxide routed below was imported into KiCad 10.0.7 and passed its DRC with no violations.
+Measurements of traxide on the end-to-end boards, newest first; the comparison with Freerouting runs in CI, the rest by hand; the gate of [[TRX-22]] fails the Benchmark workflow when a corpus board regresses against `corpus/baseline.json`. Every board traxide routed below was imported into KiCad 10.0.7 and passed its DRC with no violations.
 
 [TOC]
 
@@ -9,6 +9,7 @@ Measurements of traxide on the end-to-end boards, newest first; the comparison w
 ```bash
 cargo xtask corpus --timeout 60   # 76 real boards from Freerouting's bug reports, downloaded at run time
 cargo xtask corpus --freerouting "java -jar freerouting.jar" --shard 1/6   # the same, against Freerouting; CI runs 6 shards
+cargo xtask gate target/corpus/results-*.json   # against corpus/baseline.json: fails on a regression, lists improvements
 cargo xtask e2e placements crossing matrix-3x4 matrix-6x17   # builds, routes and checks the recipes
 time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 ```
@@ -95,6 +96,8 @@ Every copper query of the layout looked up the largest clearance between any two
 | Issue039, Mars-64, bm01, Issue219, Issue208, Issue113 | | the same within a few per cent |
 
 Issue066 and Issue103-Board-Unrouted still take more than 300 s.
+
+In CI (commit 91b6981, 120 s per board): traxide stops on 3 boards instead of 6, as Issue208 (224 of 415 nets, 93 s), Issue289-VGA (100 of 242, 95 s) and Issue289-8086 (69 of 142, 69 s) now finish; 50 complete, 20 incomplete, 3 failed, 1267 s in all instead of 1379 s, and still no rule broken. Freerouting 2.5.0: 18 complete, 17 breaking rules, 32 stopped, 4784 s. KiCad's DRC finds the keyboard (0.7 s) and the matrix (0.2 s) clean.
 
 ## A time limit (M5, TRX-56)
 
