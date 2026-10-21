@@ -539,3 +539,24 @@ fn a_pin_listed_twice_in_one_net_stays_in_it_without_a_word() {
         "A"
     );
 }
+
+#[test]
+fn parts_placed_wholly_outside_the_outline_are_named() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let path = folder.path().join("outside.dsn");
+    let text = two_resistors_text()
+        .replace(
+            "(place R2 25000.000000 -15000.000000",
+            "(place R2 55000.000000 -15000.000000",
+        )
+        .replace(
+            "(place R1 5000.000000 -5000.000000",
+            "(place R1 45000.000000 -5000.000000",
+        );
+    std::fs::write(&path, text).expect("written");
+    let design = load_design(&path).expect("valid");
+    assert_eq!(
+        design.warnings,
+        ["the parts R1, R2 lie outside the board's outline"]
+    );
+}

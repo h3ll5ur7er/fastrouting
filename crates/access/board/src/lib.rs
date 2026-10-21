@@ -9,11 +9,44 @@ pub mod specctra;
 
 pub use error::BoardError;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use traxide_contracts::{Design, Routes, Verdict};
 
 pub fn load_design(path: &Path) -> Result<Design, BoardError> {
+    let mut design = read_design(path)?;
+    design.warnings.extend(parts_outside(&design));
+    Ok(design)
+}
+
+/// Says which parts lie wholly outside the board's outline, whose pads no
+/// track can reach: whole boards of the corpus were exported so.
+fn parts_outside(design: &Design) -> Option<String> {
+    let mut inside_or_not: BTreeMap<&str, bool> = BTreeMap::new();
+    for pad in &design.pads {
+        let part = pad
+            .name
+            .rsplit_once('-')
+            .map_or(pad.name.as_str(), |(part, _)| part);
+        *inside_or_not.entry(part).or_insert(false) |= design.outline.contains(pad.position);
+    }
+    let outside: Vec<&str> = inside_or_not
+        .into_iter()
+        .filter(|&(_, inside)| !inside)
+        .map(|(part, _)| part)
+        .collect();
+    match outside.as_slice() {
+        [] => None,
+        [part] => Some(format!("the part {part} lies outside the board's outline")),
+        parts => Some(format!(
+            "the parts {} lie outside the board's outline",
+            parts.join(", ")
+        )),
+    }
+}
+
+fn read_design(path: &Path) -> Result<Design, BoardError> {
     match extension(path) {
         Some("dsn") => specctra::parse_dsn(&read(path)?),
         Some("kicad_pcb") => {
