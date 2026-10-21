@@ -61,6 +61,8 @@ Then the remedies were tried on whole boards where a profile can express them (`
 
 A 0.05 mm grid routes 90 of them alone; for the other 30 (Issue508-bm05 and bm06, Issue297) no practical grid passes through the axis. The fix belongs where the search leaves a pad: a stub along the pad's axis to the first node beyond its neighbours, off the grid ([[TRX-54]], in [[crates/engines/detailed/src/search.rs]]). Freerouting routes bm06 completely and cleanly.
 
+Since this analysis, a search also leaves every pad along its axes, off the grid ([[Benchmarks#off-grid-pins-left-along-their-axis-m5-trx-54]]): of the 130 connections these boards reported hemmed in, 12 still are; bm06 is complete, bm01 routes 169 connections of 195, bm05 99 of 107, Issue297 160 of 161, the Mars-64 boards 83 of 106.
+
 ## Search window too small
 
 23 connections route alone only when the search may cover the whole board: each search sees the box around its pads grown by `detour_margin`, 5 mm, and the way round a header or the board's wiring is longer. In the full run the window also cost connections that collided with them. Whole boards with `detour_margin = 100`, every session clean:

@@ -38,11 +38,11 @@ pub(crate) struct Scratch {
     /// Whether nothing is within reach of any edge out of a node, by layer and
     /// node: then no edge out of it needs a check of its own.
     open_around: Stamped<bool>,
-    /// Where on its pad the way through a start state begins, by state.
-    start_anchor: Stamped<Point>,
-    /// Where on its pad the way through a node into the target ends, by layer
-    /// and node.
-    finish_anchor: Stamped<Point>,
+    /// How the way through a start state leaves its pad, by state.
+    start_stub: Stamped<Stub>,
+    /// How the way through a node into the target reaches its pad, by layer and
+    /// node.
+    finish_stub: Stamped<Stub>,
     /// Every state expanded, in order, for tests to look into a search.
     #[cfg(test)]
     expanded: Vec<u32>,
@@ -116,12 +116,21 @@ pub(crate) fn window(
 }
 
 /// A way onto a pad from a grid node: what reaching the node from the pad
-/// costs, and the point of the pad's copper where it begins.
+/// costs, and the stub that joins them.
 #[derive(Debug, Clone, Copy)]
 struct Way {
     state: State,
     cost: i64,
+    stub: Stub,
+}
+
+/// The track between a pad and the grid: from a point of the pad's copper, the
+/// anchor, straight to a node, or along an axis of the pad to a bend and from
+/// there onto the grid.
+#[derive(Debug, Clone, Copy, Default)]
+struct Stub {
     anchor: Point,
+    bend: Option<Point>,
 }
 
 /// Why a search found no route.
@@ -235,34 +244,24 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         scratch.via_extra.reset(nodes * self.via_kinds.len());
         scratch.finish.reset(nodes * layers);
         scratch.open_around.reset(nodes * layers);
-        scratch.start_anchor.reset(nodes * layers);
-        scratch.finish_anchor.reset(nodes * layers);
-        for Way {
-            state,
-            cost,
-            anchor,
-        } in target
-        {
+        scratch.start_stub.reset(nodes * layers);
+        scratch.finish_stub.reset(nodes * layers);
+        for Way { state, cost, stub } in target {
             let layer_node = self.layer_node(state);
             if cost < scratch.finish.get(layer_node).unwrap_or(i64::MAX) {
                 scratch.finish.set(layer_node, cost);
-                scratch.finish_anchor.set(layer_node, anchor);
+                scratch.finish_stub.set(layer_node, stub);
             }
         }
 
         let mut best_target = i64::MAX;
         let mut target_came = None;
         let mut open = BinaryHeap::new();
-        for Way {
-            state,
-            cost,
-            anchor,
-        } in start
-        {
+        for Way { state, cost, stub } in start {
             let slot = self.slot(state);
             if cost < scratch.best.get(slot as usize).unwrap_or(i64::MAX) {
                 scratch.best.set(slot as usize, cost);
-                scratch.start_anchor.set(slot as usize, anchor);
+                scratch.start_stub.set(slot as usize, stub);
                 scratch.came.set(
                     slot as usize,
                     Came {
@@ -553,11 +552,10 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             .filter(|l| self.design.layers[l.index()].routable)
     }
 
-    /// The grid states a track from the pad's centre can reach in a straight line,
-    /// and what that track costs.
     /// The ways from grid nodes onto `pad`: straight to its centre, the pin's
     /// position, where that is clear, else to the nearest point of its copper,
-    /// as the centre of an edge connector's pad may lie off the board.
+    /// as the centre of an edge connector's pad may lie off the board; and
+    /// along the pad's axes, for a centre off the grid.
     fn access(&self, pad: &Pad) -> Vec<Way> {
         let mut ways = Vec::new();
         for copper in pad
@@ -583,13 +581,69 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     Some(Way {
                         state,
                         cost: anchor.distance(point) + extra,
-                        anchor,
+                        stub: Stub { anchor, bend: None },
                     })
                 });
                 ways.extend(way);
             }
+            for axis_way in DIRECTIONS
+                .iter()
+                .flat_map(|&direction| self.ways_along(pad.position, copper.layer, direction))
+            {
+                match ways.iter_mut().find(|w| w.state == axis_way.state) {
+                    Some(way) if way.cost <= axis_way.cost => {}
+                    Some(way) => *way = axis_way,
+                    None => ways.push(axis_way),
+                }
+            }
         }
         ways
+    }
+
+    /// The ways that leave `centre` straight along `direction` and turn onto
+    /// the grid where the stub first crosses a grid line beyond the copper
+    /// around it. Between the neighbours of a fine-pitch pin a track fits only
+    /// on the pin's axis, which no grid line follows when the pin lies off the
+    /// grid; so the stub runs off the grid, and only its short jog, square to a
+    /// grid line, joins the grid.
+    fn ways_along(&self, centre: Point, layer: LayerId, direction: (i32, i32)) -> Vec<Way> {
+        let pitch = self.profile.grid_pitch;
+        for bend in grid_crossings(centre, direction, pitch) {
+            if !self.grid.covers(bend) {
+                break;
+            }
+            let Some(stub_extra) = self.track_extra(layer, Segment::new(centre, bend)) else {
+                break;
+            };
+            let ways: Vec<Way> = jogs(bend, direction, pitch)
+                .into_iter()
+                .filter(|&node| self.grid.contains(node) && self.in_corridor(node))
+                .filter_map(|node| {
+                    let point = self.grid.point(node);
+                    let jog_extra = if point == bend {
+                        0
+                    } else {
+                        self.track_extra(layer, Segment::new(bend, point))?
+                    };
+                    Some(Way {
+                        state: State {
+                            node,
+                            layer: layer.0,
+                            heading: UNSET,
+                        },
+                        cost: centre.distance(bend) + bend.distance(point) + stub_extra + jog_extra,
+                        stub: Stub {
+                            anchor: centre,
+                            bend: (point != bend).then_some(bend),
+                        },
+                    })
+                })
+                .collect();
+            if !ways.is_empty() {
+                return ways;
+            }
+        }
+        Vec::new()
     }
 
     /// What is left to pay, as if nothing were in the way: the octilinear distance
@@ -618,14 +672,18 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
 
     fn steps(&self, last: u32, scratch: &Scratch) -> Vec<Step> {
         let last_state = self.state(last);
-        let mut reversed = vec![Step {
-            at: scratch
-                .finish_anchor
-                .get(self.layer_node(last_state))
-                .unwrap_or(self.to.position),
-            layer: LayerId(last_state.layer),
-            via: None,
-        }];
+        let last_layer = LayerId(last_state.layer);
+        let finish = scratch
+            .finish_stub
+            .get(self.layer_node(last_state))
+            .expect("the target is reached through a way into it");
+        let mut reversed: Vec<Step> = stub_points(finish)
+            .map(|at| Step {
+                at,
+                layer: last_layer,
+                via: None,
+            })
+            .collect();
         let mut first = last;
         let mut current = Some(last);
         while let Some(slot) = current {
@@ -645,14 +703,15 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             current = came.from;
         }
         let first_layer = reversed.last().map_or(LayerId(0), |s| s.layer);
-        reversed.push(Step {
-            at: scratch
-                .start_anchor
-                .get(first as usize)
-                .unwrap_or(self.from.position),
+        let start = scratch
+            .start_stub
+            .get(first as usize)
+            .expect("every search starts from a way out of its pad");
+        reversed.extend(stub_points(start).map(|at| Step {
+            at,
             layer: first_layer,
             via: None,
-        });
+        }));
         reversed.reverse();
         reversed
     }
@@ -668,6 +727,53 @@ fn octilinear_paths(from: Point, to: Point) -> Vec<Vec<Point>> {
     let diagonal = dx.abs().min(dy.abs());
     let step = Point::new(dx.signum() * diagonal, dy.signum() * diagonal);
     vec![vec![from, from + step, to], vec![from, to - step, to]]
+}
+
+/// The points of a stub from its pad outwards, without the node it reaches,
+/// in the order a path walked backwards meets them.
+fn stub_points(stub: Stub) -> impl Iterator<Item = Point> {
+    stub.bend.into_iter().chain([stub.anchor])
+}
+
+/// The points where a ray from `from` along `direction` crosses a grid line of
+/// `pitch`, nearest first.
+fn grid_crossings(from: Point, (dx, dy): (i32, i32), pitch: i32) -> impl Iterator<Item = Point> {
+    let first = |v: i32, d: i32| {
+        (d != 0).then(|| match (-v * d).rem_euclid(pitch) {
+            0 => pitch,
+            t => t,
+        })
+    };
+    let mut firsts = [first(from.x, dx), first(from.y, dy)];
+    firsts.sort_unstable();
+    if firsts[0] == firsts[1] {
+        firsts[0] = None;
+    }
+    (0..).flat_map(move |k| {
+        firsts
+            .into_iter()
+            .flatten()
+            .map(move |t| t + k * pitch)
+            .map(move |t| Point::new(from.x + t * dx, from.y + t * dy))
+    })
+}
+
+/// The nodes a stub that ran along `direction` to `bend`, on a grid line, may
+/// jog to: `bend` itself if it is a node, else the nearest node on either side
+/// along that grid line, but never back against the stub, as a turn sharper
+/// than 90° leaves an acute angle that traps etchant.
+fn jogs(bend: Point, (dx, dy): (i32, i32), pitch: i32) -> Vec<Node> {
+    let lower = (bend.x.div_euclid(pitch), bend.y.div_euclid(pitch));
+    let (upper, onwards) = match (bend.x.rem_euclid(pitch), bend.y.rem_euclid(pitch)) {
+        (0, 0) => return vec![lower],
+        (_, 0) => ((lower.0 + 1, lower.1), dx),
+        _ => ((lower.0, lower.1 + 1), dy),
+    };
+    [(lower, -1), (upper, 1)]
+        .into_iter()
+        .filter(|&(_, side)| side * onwards >= 0)
+        .map(|(node, _)| node)
+        .collect()
 }
 
 /// How many 45° steps lie between a heading and the next direction.
@@ -689,6 +795,29 @@ mod tests {
 
     fn wall(min: Point, max: Point) -> Shape {
         Shape::Polygon(Polygon::rectangle(Rect { min, max }))
+    }
+
+    #[test]
+    fn a_ray_crosses_the_grid_lines_nearest_first() {
+        let crossings: Vec<Point> = grid_crossings(Point::new(30, 70), (1, 1), 100)
+            .take(4)
+            .collect();
+        assert_eq!(
+            crossings,
+            [
+                Point::new(60, 100),
+                Point::new(100, 140),
+                Point::new(160, 200),
+                Point::new(200, 240)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_stub_jogs_onto_the_grid_square_to_it_and_never_back() {
+        assert_eq!(jogs(Point::new(30, 200), (0, 1), 100), [(0, 2), (1, 2)]);
+        assert_eq!(jogs(Point::new(100, 230), (1, 1), 100), [(1, 3)]);
+        assert_eq!(jogs(Point::new(100, 200), (1, 1), 100), [(1, 2)]);
     }
 
     #[test]
