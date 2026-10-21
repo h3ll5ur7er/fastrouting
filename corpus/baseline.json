@@ -499,6 +499,13 @@
       "nets": 28,
       "routed": 28,
       "rules_broken": 0
+    },
+    "tokenboard-kb": {
+      "outcome": "finished",
+      "seconds": 90.8,
+      "nets": 241,
+      "routed": 236,
+      "rules_broken": 0
     }
   }
 }

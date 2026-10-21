@@ -118,6 +118,14 @@ Three levels, all run by `cargo test` except where noted:
 cargo xtask corpus --shard 1/6 && cargo xtask gate --partial target/corpus/results-1-of-6.json
 ```
 
+**Adding a KiCad project to the corpus** ([[TRX-64]]): add a line to [[corpus/kicad-projects.txt]] naming the GitHub repository, the commit to pin and the board's path in it:
+
+```text
+https://github.com/h3ll5ur7er/tokenboard 478b4f9 kb/kb.kicad_pcb
+```
+
+The corpus downloads the board with the `.kicad_pro` and `.kicad_dru` of the same name into `target/corpus/projects/<repository>-<board>-<commit>/` and never stores them, so add only boards whose licence or author allows them to be used so. A board committed routed is stripped of its unlocked tracks, arcs and vias first; its zones and the copper its author locked stay, and the board as committed is judged too, in the table's column "Routed by its author". traxide routes the stripped `.kicad_pcb` itself, custom rules included, with `--time-limit` at three quarters of `--timeout`, as real boards take longer than the corpus's limit and a stopped board tells the gate nothing. Freerouting routes the DSN that KiCad, in its Docker image as for `cargo xtask e2e` (`--local` for an installed KiCad), exports of the stripped board, and KiCad imports its session; `traxide check` judges all three boards alike. A new board enters the gate when its result is written into `corpus/baseline.json` (`cargo xtask gate --partial --update-baseline` on its results).
+
 The Benchmark workflow runs the gate after its six corpus shards; its `corpus-results` artifact, copied over `corpus/baseline.json`, raises the baseline to that run. Later, with [[TRX-21]], CI keeps the history across commits and comments regressions on the pull request that caused them.
 
 ## Clean-room rules
