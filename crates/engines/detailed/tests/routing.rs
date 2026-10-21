@@ -1,8 +1,8 @@
-use traxide_contracts::geometry::{Point, Polygon, Rect, Shape};
+use traxide_contracts::geometry::{Point, Polygon, Rect, Segment, Shape};
 use traxide_contracts::testing::{DesignBuilder, at, mm};
 use traxide_contracts::{
-    Connection, ConnectionId, Corridors, Design, Event, KeepoutScope, LayerId, Plan, Profile,
-    Routes, RoutingResult, Violation,
+    Connection, ConnectionId, Corridors, Design, Event, KeepoutScope, LayerId, LayoutAccess, NetId,
+    Obstruction, Plan, Profile, Routes, RoutingResult, Violation,
 };
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Silent};
@@ -490,10 +490,10 @@ fn stops_ripping_up_once_rounds_of_rip_ups_route_no_more_connections() {
             connection(&design, "Y1", "Y2"),
         ],
     };
-    let commits = std::cell::Cell::new(0);
+    let rip_ups = std::cell::Cell::new(0);
     let count = |event: Event| {
-        if matches!(event, Event::ConnectionRouted { .. }) {
-            commits.set(commits.get() + 1);
+        if matches!(event, Event::RippedUp { .. }) {
+            rip_ups.set(rip_ups.get() + 1);
         }
     };
     let result = Router::new(&design, &rules, &profile()).route_plan(
@@ -505,8 +505,8 @@ fn stops_ripping_up_once_rounds_of_rip_ups_route_no_more_connections() {
     );
     assert_eq!(result.unrouted.len(), 1);
     // Each taking the gap from the other until both were ripped up ten times
-    // committed 21 routes; two rounds of two rip-ups without gain end at 5.
-    assert!(commits.get() <= 5, "{} routes committed", commits.get());
+    // took 20 rip-ups; two rounds of two rip-ups without gain end at 4.
+    assert!(rip_ups.get() <= 4, "{} rip-ups", rip_ups.get());
 }
 
 #[test]
@@ -827,4 +827,114 @@ fn a_pin_off_the_grid_is_left_by_an_octilinear_stub_along_its_axis() {
         "{path:?}"
     );
     assert_legal(&design, &routes);
+}
+
+/// Ten nets on one layer without vias, pads scattered over a 10 × 10 grid at
+/// 1 mm: rip-up and reroute leaves one connection unrouted.
+fn crowded() -> (Design, Vec<(String, String)>) {
+    let mut builder = DesignBuilder::new(12.0, 12.0).layers(1).without_vias();
+    let mut sites: Vec<(i32, i32)> = (0..10).flat_map(|x| (0..10).map(move |y| (x, y))).collect();
+    let mut seed = 128_u64;
+    let mut pairs = Vec::new();
+    for net in 0..10 {
+        let mut ends = Vec::new();
+        for end in 1..=2 {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            let (x, y) = sites.swap_remove((seed >> 33) as usize % sites.len());
+            let name = format!("N{net}.{end}");
+            builder = builder.smd(
+                &name,
+                Some(&format!("N{net}")),
+                at(1.5 + f64::from(x), 1.5 + f64::from(y)),
+                0.5,
+                0,
+            );
+            ends.push(name);
+        }
+        pairs.push((ends[0].clone(), ends[1].clone()));
+    }
+    (builder.build(), pairs)
+}
+
+/// Routes `pairs` and returns the result with the layout as routing left it.
+fn route_keeping_layout<'d>(
+    design: &'d Design,
+    rules: &'d traxide_contracts::ConstraintSet,
+    pairs: &[(&str, &str)],
+) -> (RoutingResult, Layout<'d>) {
+    let mut layout = Layout::build(design, rules);
+    let plan = Plan {
+        connections: pairs
+            .iter()
+            .map(|&(from, to)| connection(design, from, to))
+            .collect(),
+    };
+    let result = Router::new(design, rules, &profile()).route_plan(
+        &plan,
+        None,
+        &mut layout,
+        &CancelToken::new(),
+        &Silent,
+    );
+    (result, layout)
+}
+
+/// Whether two layouts hold copper at the same places, probed with a short
+/// track of `net` every quarter millimetre.
+fn same_copper(design: &Design, a: &Layout, b: &Layout, net: NetId) -> bool {
+    let bounds = design.outline.bounds();
+    let step = 250_000;
+    (bounds.min.x..bounds.max.x).step_by(step).all(|x| {
+        (bounds.min.y..bounds.max.y).step_by(step).all(|y| {
+            let probe = Segment::new(Point::new(x, y), Point::new(x + 100_000, y));
+            let layer = LayerId::from_index(0);
+            let holds = |layout: &Layout| {
+                layout.track_obstruction(net, layer, probe, 100_000) != Obstruction::None
+            };
+            holds(a) == holds(b)
+        })
+    })
+}
+
+#[test]
+fn a_board_rip_up_leaves_incomplete_is_routed_again_in_rounds_and_the_better_kept() {
+    let (design, pairs) = crowded();
+    let pairs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let result = route(&design, &pairs);
+    assert_eq!(result.unrouted, []);
+    assert_legal(&design, &result.routes);
+}
+
+#[test]
+fn the_layout_holds_the_copper_of_the_attempt_kept_and_no_other() {
+    let (crowded, pairs) = crowded();
+    let crowded_pairs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let one_way = one_way_for_two();
+    // On one_way_for_two both attempts route one connection and the first is
+    // kept; on the crowded board the second routes more.
+    for (design, pairs) in [
+        (&one_way, vec![("X1", "X2"), ("Y1", "Y2")]),
+        (&crowded, crowded_pairs),
+    ] {
+        let rules = traxide_rules::compile(
+            design,
+            Purpose::Routing {
+                grid_pitch: 100_000,
+            },
+        );
+        let (result, layout) = route_keeping_layout(design, &rules, &pairs);
+        let mut kept = Layout::build(design, &rules);
+        kept.add_route(ConnectionId::from_index(0), &result.routes);
+        // A probe meets the copper of every net but its own: two nets see all.
+        for (pad, _) in &pairs[..2] {
+            let net = design.pad(design.pad_named(pad)).net.expect("a net");
+            assert!(same_copper(design, &layout, &kept, net), "{pad}");
+        }
+    }
 }

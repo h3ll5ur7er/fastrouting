@@ -40,6 +40,22 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## A second attempt in rounds where rip-up falls short (M5, TRX-56)
+
+Where rip-up and reroute leaves connections unrouted, the board is routed a second time: in rounds first, PathFinder's way, then rip-up and reroute for the leftovers only, every route the rounds settled locked. The attempt that routes more is kept, and a board rip-up completes never pays for the second ([[TRX-56]]). Measured on this machine, connections routed, vias and time, without a limit and with `--time-limit 90` (the limit covers both attempts):
+
+| Board | Rip-up | **With the second attempt** | Rip-up, 90 s | **With the second attempt, 90 s** |
+| --- | --- | --- | --- | --- |
+| Issue102 Mars-64 (106) | 81, 234 vias, 27 s | **93**, 261 vias, 189 s | 81, 26 s | **85**, 178 vias, 91 s |
+| Issue039 (204) | 166, 327 vias, 37 s | **177**, 337 vias, 192 s | 166, 36 s | **167**, 217 vias, 91 s |
+| Issue508-bm01 (195) | 178, 445 vias, 54 s | **184**, 459 vias, 326 s | 178, 58 s | 178, 92 s |
+| Issue283 (200) | 182, 396 vias, 78 s | **188**, 305 vias, 191 s | 182, 80 s | 182, 91 s |
+| Issue269-caniot (89) | 71, 122 vias, 9 s | **75**, 144 vias, 56 s | 71, 10 s | **75**, 57 s |
+| Issue029 (91) | 85, 175 vias, 110 s | **86**, 184 vias, 310 s | 84, 96 s | 84, 94 s |
+| keyboard-tkl, Issue034, Issue110-RelayModule, Issue015 | complete | the same routes, the same time | | |
+
+On 796 small random boards (one layer, no vias, 8 to 14 nets on a 10 × 10 grid of pads at 1 mm), the second attempt routed more on 138 and fewer on none. On the congested corpus boards it takes three to seven times as long without a limit, as the rounds take two to four times as long as rip-up and come after it. Within 90 s it still gains on three of six boards and never loses, as the attempt that routes more is kept whenever the limit cuts the second short. Rejected before: the rounds in place of rip-up, as they lose a connection on Issue034 and RelayModule, which rip-up completes ([[TRX-56]]).
+
 ## Fine-pitch pins escaped first (M5, TRX-56)
 
 Freerouting's log shows a fan-out stage that escapes most SMD pins before anything else (236 of 242 on Issue039). Planning now does the same for fine-pitch pins: each SMD pin of a part with at least 8 pins that another net's copper hems in, and that connects to another part, gets a stub straight away from its part, or at 45° to either side, to the nearest point off the pin where a track may turn any way. The stubs are planned before any connection is routed, one after the other along each row, and held as fixed copper of their nets, so other connections cannot take a pin's only way out; the connections that leave the part start at the stub's end ([[TRX-56]]). Measured alone on this machine, connections routed and time (the keyboard and matrix: median of nine runs; every session as clean as before):
