@@ -73,4 +73,6 @@ Measured with `xtask negotiation` and with the rounds patch, before merging (esc
 - On Mars-64 the stubs make the fight at U101's pins 18 and 19 worse (SPI_CLK and SPI_MOSI trade places 13 times instead of 5): the stubs are fixed copper there, which rip-up cannot move. That is the likely cause of its 2 lost connections.
 - Rounds with the escape route the most yet on Issue039 and Mars-64, but still lose Issue034's /M from U4-3 to U5-3, where no pin is fine-pitch by the escape's rule. Merged: the escape alone ([[docs/Benchmarks.md]]); the rounds stay out until Issue034 keeps its last connection.
 
+Tried after the merge, for Mars-64: no escape for a pin whose connections all lead to another escaped pin, as SPI_CLK and SPI_MOSI run between U101 and U102. Rejected: Mars-64 routes 80 instead of 81 (in 50 s instead of 85 s), Issue297 loses its completeness (160 of 161), caniot one connection, Issue039 gains one; the keyboard, RelayModule and bm01 route the same. Next to try for Mars-64: stubs that negotiation may move, held as the start of their connection's route rather than as fixed copper.
+
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.
