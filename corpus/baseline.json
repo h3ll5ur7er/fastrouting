@@ -7,14 +7,14 @@
     },
     "fixtures_Issue015-StackOverflow": {
       "outcome": "finished",
-      "seconds": 27.2,
+      "seconds": 23.8,
       "nets": 186,
       "routed": 186,
       "rules_broken": 0
     },
     "fixtures_Issue022-AutoRouter_interrupted": {
       "outcome": "finished",
-      "seconds": 50.8,
+      "seconds": 39.5,
       "nets": 205,
       "routed": 205,
       "rules_broken": 0
@@ -28,46 +28,52 @@
     },
     "fixtures_Issue027-zMRETestFixture": {
       "outcome": "finished",
-      "seconds": 33.3,
+      "seconds": 28.5,
       "nets": 168,
       "routed": 168,
       "rules_broken": 0
     },
     "fixtures_Issue029-hw48na": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 98.8,
+      "nets": 163,
+      "routed": 152,
+      "rules_broken": 0
     },
     "fixtures_Issue034-Green14SegLED": {
       "outcome": "finished",
-      "seconds": 32.6,
+      "seconds": 30.2,
       "nets": 101,
       "routed": 101,
       "rules_broken": 0
     },
     "fixtures_Issue035-ReadPlaceScope": {
       "outcome": "finished",
-      "seconds": 2.8,
+      "seconds": 1.7,
       "nets": 101,
       "routed": 101,
       "rules_broken": 0
     },
     "fixtures_Issue039-bug-design": {
       "outcome": "finished",
-      "seconds": 59.7,
+      "seconds": 91.9,
       "nets": 74,
       "routed": 44,
       "rules_broken": 0
     },
     "fixtures_Issue054-tairakb": {
       "outcome": "finished",
-      "seconds": 2.9,
+      "seconds": 2.6,
       "nets": 57,
       "routed": 57,
       "rules_broken": 0
     },
     "fixtures_Issue066-Project_GP8B": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 109.8,
+      "nets": 266,
+      "routed": 219,
+      "rules_broken": 0
     },
     "fixtures_Issue069-TestSensel_TestSensel": {
       "outcome": "finished",
@@ -92,32 +98,35 @@
     },
     "fixtures_Issue093-interf_u": {
       "outcome": "finished",
-      "seconds": 0.3,
+      "seconds": 0.2,
       "nets": 173,
       "routed": 173,
       "rules_broken": 0
     },
     "fixtures_Issue102-Mars-64-revE-rot00": {
       "outcome": "finished",
-      "seconds": 38.7,
+      "seconds": 90.7,
       "nets": 94,
-      "routed": 70,
+      "routed": 75,
       "rules_broken": 0
     },
     "fixtures_Issue103-Board-Routed": {
       "outcome": "finished",
-      "seconds": 0.2,
+      "seconds": 0.1,
       "nets": 282,
       "routed": 282,
       "rules_broken": 0
     },
     "fixtures_Issue103-Board-Unrouted": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 100.3,
+      "nets": 282,
+      "routed": 159,
+      "rules_broken": 0
     },
     "fixtures_Issue107-freq_teiler_200kHz_kicad": {
       "outcome": "finished",
-      "seconds": 0.4,
+      "seconds": 0.3,
       "nets": 77,
       "routed": 77,
       "rules_broken": 0
@@ -131,14 +140,14 @@
     },
     "fixtures_Issue110-Pajalnaja_stancija": {
       "outcome": "finished",
-      "seconds": 4.4,
+      "seconds": 4.9,
       "nets": 64,
       "routed": 63,
       "rules_broken": 0
     },
     "fixtures_Issue110-RelayModule": {
       "outcome": "finished",
-      "seconds": 32.6,
+      "seconds": 20.9,
       "nets": 64,
       "routed": 64,
       "rules_broken": 0
@@ -165,8 +174,11 @@
       "rules_broken": 0
     },
     "fixtures_Issue113-Protein": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 93.2,
+      "nets": 203,
+      "routed": 150,
+      "rules_broken": 0
     },
     "fixtures_Issue143-rpi_splitter": {
       "outcome": "finished",
@@ -180,26 +192,29 @@
       "why": "line 104: unknown pin J3--D+"
     },
     "fixtures_Issue145-smoothieboard": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 90.7,
+      "nets": 245,
+      "routed": 234,
+      "rules_broken": 0
     },
     "fixtures_Issue153-wavefolder": {
       "outcome": "finished",
-      "seconds": 0.3,
+      "seconds": 0.2,
       "nets": 31,
       "routed": 31,
       "rules_broken": 0
     },
     "fixtures_Issue155-CH376_MCP795_Module": {
       "outcome": "finished",
-      "seconds": 1.7,
+      "seconds": 1.6,
       "nets": 34,
       "routed": 34,
       "rules_broken": 0
     },
     "fixtures_Issue157-TeamAdapt-LinePCB": {
       "outcome": "finished",
-      "seconds": 1.4,
+      "seconds": 2.2,
       "nets": 65,
       "routed": 63,
       "rules_broken": 0
@@ -220,7 +235,7 @@
     },
     "fixtures_Issue178-KeebMaker_Sofle_Choc": {
       "outcome": "finished",
-      "seconds": 23.3,
+      "seconds": 16.4,
       "nets": 176,
       "routed": 176,
       "rules_broken": 0
@@ -241,60 +256,66 @@
     },
     "fixtures_Issue190-processor.Z80": {
       "outcome": "finished",
-      "seconds": 0.2,
+      "seconds": 0.3,
       "nets": 529,
       "routed": 529,
       "rules_broken": 0
     },
     "fixtures_Issue191-processor.Z80_processor.Z80": {
       "outcome": "finished",
-      "seconds": 0.3,
+      "seconds": 0.2,
       "nets": 529,
       "routed": 529,
       "rules_broken": 0
     },
     "fixtures_Issue199-StackOverflow_Signale_Vor+Block": {
       "outcome": "finished",
-      "seconds": 0.3,
+      "seconds": 0.2,
       "nets": 28,
       "routed": 28,
       "rules_broken": 0
     },
     "fixtures_Issue208-freerouting": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 93.4,
+      "nets": 415,
+      "routed": 236,
+      "rules_broken": 0
     },
     "fixtures_Issue209-split05": {
       "outcome": "finished",
-      "seconds": 2.0,
+      "seconds": 1.3,
       "nets": 45,
       "routed": 45,
       "rules_broken": 0
     },
     "fixtures_Issue209-split10": {
       "outcome": "finished",
-      "seconds": 1.7,
+      "seconds": 1.5,
       "nets": 45,
       "routed": 45,
       "rules_broken": 0
     },
     "fixtures_Issue214-freerouting": {
       "outcome": "finished",
-      "seconds": 1.3,
+      "seconds": 0.8,
       "nets": 140,
       "routed": 140,
       "rules_broken": 0
     },
     "fixtures_Issue217-8088sbc": {
       "outcome": "finished",
-      "seconds": 7.3,
+      "seconds": 6.6,
       "nets": 104,
       "routed": 104,
       "rules_broken": 0
     },
     "fixtures_Issue219-LogicBoard_smt": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 102.6,
+      "nets": 343,
+      "routed": 305,
+      "rules_broken": 0
     },
     "fixtures_Issue229-display-8-digit-hc595": {
       "outcome": "finished",
@@ -305,14 +326,14 @@
     },
     "fixtures_Issue230-CNH_Functional_Tester_1": {
       "outcome": "finished",
-      "seconds": 17.6,
+      "seconds": 7.7,
       "nets": 764,
       "routed": 764,
       "rules_broken": 0
     },
     "fixtures_Issue230-CNH_Functional_Tester_CNH_Functional_Tester_1": {
       "outcome": "finished",
-      "seconds": 16.4,
+      "seconds": 9.3,
       "nets": 764,
       "routed": 764,
       "rules_broken": 0
@@ -326,9 +347,9 @@
     },
     "fixtures_Issue269-caniot-tiny-arm": {
       "outcome": "finished",
-      "seconds": 15.9,
+      "seconds": 68.8,
       "nets": 94,
-      "routed": 79,
+      "routed": 80,
       "rules_broken": 0
     },
     "fixtures_Issue269-min_fr_test_min_fr_test": {
@@ -347,9 +368,9 @@
     },
     "fixtures_Issue269-z10_module": {
       "outcome": "finished",
-      "seconds": 26.1,
+      "seconds": 9.5,
       "nets": 83,
-      "routed": 81,
+      "routed": 82,
       "rules_broken": 0
     },
     "fixtures_Issue270-non-ansi_bracket": {
@@ -361,25 +382,28 @@
     },
     "fixtures_Issue283-UnconnectedTracesUnderPads_Natural_Tone_Preamp": {
       "outcome": "finished",
-      "seconds": 101.7,
+      "seconds": 91.2,
       "nets": 58,
-      "routed": 44,
+      "routed": 38,
       "rules_broken": 0
     },
     "fixtures_Issue289-Autorouter_PCB_FHT-8086_2024-03-08": {
       "outcome": "finished",
-      "seconds": 93.9,
+      "seconds": 90.8,
       "nets": 142,
       "routed": 69,
       "rules_broken": 0
     },
     "fixtures_Issue289-Autorouter_PCB_FHT-VGA_2024-03-25": {
-      "outcome": "stopped",
-      "seconds": 120.0
+      "outcome": "finished",
+      "seconds": 94.8,
+      "nets": 242,
+      "routed": 93,
+      "rules_broken": 0
     },
     "fixtures_Issue297-myboard": {
       "outcome": "finished",
-      "seconds": 4.7,
+      "seconds": 1.9,
       "nets": 67,
       "routed": 67,
       "rules_broken": 0
@@ -393,9 +417,9 @@
     },
     "fixtures_Issue326-Mars-64-revE": {
       "outcome": "finished",
-      "seconds": 36.0,
+      "seconds": 91.4,
       "nets": 94,
-      "routed": 70,
+      "routed": 72,
       "rules_broken": 0
     },
     "fixtures_Issue367-Charger": {
@@ -446,7 +470,7 @@
     },
     "fixtures_Issue508-DAC2020_bm01": {
       "outcome": "finished",
-      "seconds": 72.2,
+      "seconds": 92.4,
       "nets": 99,
       "routed": 83,
       "rules_broken": 0
@@ -460,21 +484,21 @@
     },
     "fixtures_Issue508-DAC2020_bm04": {
       "outcome": "finished",
-      "seconds": 2.8,
+      "seconds": 2.2,
       "nets": 80,
       "routed": 80,
       "rules_broken": 0
     },
     "fixtures_Issue508-DAC2020_bm05": {
       "outcome": "finished",
-      "seconds": 2.7,
+      "seconds": 4.9,
       "nets": 54,
       "routed": 50,
       "rules_broken": 0
     },
     "fixtures_Issue508-DAC2020_bm06": {
       "outcome": "finished",
-      "seconds": 0.3,
+      "seconds": 0.1,
       "nets": 38,
       "routed": 38,
       "rules_broken": 0
@@ -502,9 +526,9 @@
     },
     "tokenboard-kb": {
       "outcome": "finished",
-      "seconds": 92.9,
+      "seconds": 50.1,
       "nets": 241,
-      "routed": 232,
+      "routed": 241,
       "rules_broken": 0
     }
   }

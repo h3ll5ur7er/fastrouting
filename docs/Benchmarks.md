@@ -64,7 +64,7 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 ## A second attempt in rounds where rip-up falls short (M5, TRX-56)
 
-Where rip-up and reroute leaves connections unrouted, the board is routed a second time: in rounds first, PathFinder's way, then rip-up and reroute for the leftovers only, every route the rounds settled locked. The attempt that routes more is kept, and a board rip-up completes never pays for the second ([[TRX-56]]). Measured on this machine, connections routed, vias and time, without a limit and with `--time-limit 90` (the limit covers both attempts):
+Where rip-up and reroute leaves connections unrouted, the board is routed a second time: in rounds first, PathFinder's way, then rip-up and reroute for the leftovers only, every route the rounds settled locked. The attempt that completes more nets is kept, the one that routes more connections where they tie, and a board rip-up completes never pays for the second ([[TRX-56]]). Measured on this machine, connections routed, vias and time, without a limit and with `--time-limit 90` (the limit covers both attempts):
 
 | Board | Rip-up | **With the second attempt** | Rip-up, 90 s | **With the second attempt, 90 s** |
 | --- | --- | --- | --- | --- |
@@ -76,7 +76,9 @@ Where rip-up and reroute leaves connections unrouted, the board is routed a seco
 | Issue029 (91) | 85, 175 vias, 110 s | **86**, 184 vias, 310 s | 84, 96 s | 84, 94 s |
 | keyboard-tkl, Issue034, Issue110-RelayModule, Issue015 | complete | the same routes, the same time | | |
 
-On 796 small random boards (one layer, no vias, 8 to 14 nets on a 10 × 10 grid of pads at 1 mm), the second attempt routed more on 138 and fewer on none. On the congested corpus boards it takes three to seven times as long without a limit, as the rounds take two to four times as long as rip-up and come after it. Within 90 s it still gains on three of six boards and never loses, as the attempt that routes more is kept whenever the limit cuts the second short. Rejected before: the rounds in place of rip-up, as they lose a connection on Issue034 and RelayModule, which rip-up completes ([[TRX-56]]).
+On 796 small random boards (one layer, no vias, 8 to 14 nets on a 10 × 10 grid of pads at 1 mm), the second attempt routed more on 138 and fewer on none. On the congested corpus boards it takes three to seven times as long without a limit, as the rounds take two to four times as long as rip-up and come after it. Within 90 s it still gains on three of six boards and never loses, as the better attempt is kept whenever the limit cuts the second short. Rejected before: the rounds in place of rip-up, as they lose a connection on Issue034 and RelayModule, which rip-up completes ([[TRX-56]]).
+
+The whole corpus, on this machine, with every board now negotiating for 90 s of the corpus's 120 s (KiCad projects did already), against the baseline of [[TRX-22]] (no limit but on projects): no board breaks a rule, the boards complete before stay complete, and 13 boards gain. The eight that stopped at 120 s now finish within it (Issue029, 066, 103-Unrouted, 113, 145, 208, 219 and 289-VGA); Mars-64 (Issue102) completes 75 of 94 nets instead of 70, Issue326's Mars-64 72 instead of 70, caniot 80 instead of 79, z10 82 instead of 81, and TokenBoard all 241 nets instead of 232, in 50 s instead of 93 (with the planes of [[TRX-58]]). The first choice, by connections routed, lost Issue039 five complete nets (39 of 74 instead of 44, with 168 connections routed instead of 166): the attempts now stand by nets completed first. Issue283 completes fewer nets, 38 to 41 of 58 instead of 44, as rip-up alone takes about 94 s there: main does the same within 90 s (41), and without a limit traxide now completes 47 (188 connections, 243 s). The baseline is now this run, every board within the same limit.
 
 ## Pads joined through their net's planes (M5, TRX-58)
 

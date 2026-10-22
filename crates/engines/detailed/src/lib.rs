@@ -102,7 +102,8 @@ impl<'a> Router<'a> {
     ///
     /// Where that leaves connections unrouted, the board is routed a second
     /// time, settled in rounds first (`settle_in_rounds`), and the attempt that
-    /// routes more is kept: rounds route more on congested boards but lose a
+    /// completes more nets is kept (`Attempt::standing`): rounds route more on
+    /// congested boards but lose a
     /// connection on some that rip-up completes, which never pay for them (TRX-56).
     pub fn route_plan(
         &mut self,
