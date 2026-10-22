@@ -21,6 +21,7 @@ classDiagram
     nets: Vec~Net~
     pads: Vec~Pad~
     keepouts: Vec~Keepout~
+    planes: Vec~Plane~
     existing: Vec~Route~
     rules: RuleSource
   }

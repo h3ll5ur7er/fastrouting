@@ -120,6 +120,7 @@ impl Kicad {
             out,
             &format!(
                 "python3 roundtrip.py import {{out}}/{recipe}.kicad_pcb {{out}}/{session} {{out}}/{routed}.kicad_pcb && \
+                 python3 roundtrip.py refill {{out}}/{routed}.kicad_pcb && \
                  kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
@@ -135,6 +136,7 @@ impl Kicad {
             out,
             &format!(
                 "python3 roundtrip.py stats {{out}}/{routed}.kicad_pcb && \
+                 python3 roundtrip.py refill {{out}}/{routed}.kicad_pcb && \
                  kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;

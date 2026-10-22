@@ -21,7 +21,7 @@ pub use constraints::ConstraintSet;
 pub use corridors::Corridors;
 pub use design::{
     Condition, Constraint, CustomRule, Design, DesignRules, Item, Keepout, KeepoutScope, Layer,
-    LayerShape, Limits, Net, NetClass, Pad, ViaKind,
+    LayerShape, Limits, Net, NetClass, Pad, Plane, ViaKind,
 };
 pub use events::{Event, Stage};
 pub use ids::{ConnectionId, LayerId, NetClassId, NetId, PadId, ViaKindId};

@@ -40,6 +40,32 @@ Freerouting's times vary a lot between runners (29–90 s and 105–481 s over t
 
 **What Freerouting's violations are.** In the second run KiCad listed them by kind: all 18 on the matrix and all 199 on the keyboard are `track_width`, with no clearance violation and nothing unconnected. They are tracks narrower than 0.2 mm, the minimum track width of KiCad 10's default board setup, which the recipes keep, and the width the DSN asks for. So they come from Freerouting's own choice of narrower tracks, not from a rule the DSN leaves out; the KiCad edge clearance that tripped traxide early on ([[Research/KiCad-integration#rules-the-dsn-leaves-out]]) did not trip Freerouting here. The Benchmark workflow now keeps the sessions, DRC reports and routed boards as an artifact, to show where those tracks are.
 
+## Pads joined through their net's planes (M5, TRX-58)
+
+traxide now reads planes: DSN's `(plane NET (polygon LAYER …))` and a KiCad board's copper zones. On a layer that takes no tracks (a power layer that a plane fills), the plane joins the through-hole pads and vias of its net on it, and every other pad of the net gets a short track to a via onto the plane beside it, before anything is routed: the nearest place within 2 mm of its edge, on a 0.05 mm grid, where both fit and the via leaves room for a track beside every pad of another net. Pours on layers that take tracks are routed as before: routes of other nets may cut them apart, and only KiCad's refill tells where ([[TRX-58]]). Measured on this machine against commit 8511670, the same `traxide check` judging both (connections the plan holds after the joins, nets complete, time):
+
+| Board | Before | **After** |
+| --- | --- | --- |
+| Issue269-z10_module (68) | 3 unrouted, 81 of 83 nets, 24 s | 14 to route, 2 unrouted, **82 of 83** nets, **4.7 s** |
+| Issue230-CNH_Functional_Tester (both, 193) | complete, 345 tracks, 144 vias, 8 s | 144 to route, complete, **264 tracks, 112 vias**, 7.7 s |
+| Issue269-min_fr_test (both, 2) | complete, 28 mm, no via | 1 to route, complete, 20 mm, 2 vias |
+| Issue145-smoothieboard (792), no limit | 10 unrouted, 236 of 245 nets, 126 s | 582 to route, 7 unrouted, **238** of 245 nets, 197 s |
+| Issue145-smoothieboard, `--time-limit 90` | 228 of 245 nets, 194 pads unconnected | **234** of 245 nets, 23 pads unconnected |
+| keyboard-tkl, matrix-6x17 (medians of 15) | 858 ms, 238 ms | the same routes, 852 ms, 240 ms |
+
+The other boards with planes (Issue015, 022, 027, 029, 054, 093, 113, 153, 163, 208, 214, 219, 367) have them only on layers that take tracks, and route exactly as before. No session breaks a rule the board did not already break. The whole corpus, 120 s per board: 49 complete, 16 incomplete, 8 stopped, 3 failed, as before, 1559 s in all (1548 s before). KiCad 10's and 9's DRC find every e2e recipe clean, among them `inner-plane`, a ground plane on a power-type inner layer, now with the zones refilled before judging.
+
+Rejected, on Issue145 (no limit) and z10:
+
+| Variant | Issue145 | z10 unrouted |
+| --- | --- | --- |
+| A via beside every pad, searched on eight straight lines | — | 2 (IC101-28 has room only off them) |
+| A via beside every pad, on the grid | 15 unrouted, 236 nets, 66 pads unconnected, 176 s: the vias beside the QFP's ground pins took the ways out of the 3.3V pins between them | 1 |
+| No via for pins hemmed in by their neighbours | 12 unrouted, 234 nets, 185 s | 3 |
+| **A via leaves a track's room beside other nets' pads (kept)** | **7 unrouted, 238 nets**, 197 s | 2 |
+
+On Issue145 the vias around the QFP make negotiation go on longer: with no limit it ends later, but further; at any fixed time it is ahead. On z10, IC101-28's only place for a via lies closer than a track's room to another net's pad, and IC101-42 has none within reach.
+
 ## Fine-pitch pins escaped first (M5, TRX-56)
 
 Freerouting's log shows a fan-out stage that escapes most SMD pins before anything else (236 of 242 on Issue039). Planning now does the same for fine-pitch pins: each SMD pin of a part with at least 8 pins that another net's copper hems in, and that connects to another part, gets a stub straight away from its part, or at 45° to either side, to the nearest point off the pin where a track may turn any way. The stubs are planned before any connection is routed, one after the other along each row, and held as fixed copper of their nets, so other connections cannot take a pin's only way out; the connections that leave the part start at the stub's end ([[TRX-56]]). Measured alone on this machine, connections routed and time (the keyboard and matrix: median of nine runs; every session as clean as before):

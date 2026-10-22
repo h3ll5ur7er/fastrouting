@@ -184,6 +184,16 @@ fn net_classes_named(design: &Design, names: &[String]) -> Result<Vec<NetClassId
         .collect()
 }
 
+/// `design` without the planes of nets in `classes`, which get no copper.
+fn without_planes_of(design: &Design, classes: &[NetClassId]) -> Design {
+    let mut design = design.clone();
+    let nets = &design.nets;
+    design
+        .planes
+        .retain(|plane| !classes.contains(&nets[plane.net.index()].class));
+    design
+}
+
 /// Routes every connection of the board in `job`, storing what fits.
 pub fn route(
     job: &RouteJob,
@@ -204,11 +214,14 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::BuildingLayout));
     let mut layout = Layout::build(&design, &rules);
     events.publish(Event::StageStarted(Stage::Planning));
-    let mut plan = traxide_planning::plan(&design);
     let skipped = net_classes_named(&design, &job.unrouted_net_classes)?;
+    let joins =
+        traxide_planning::join_planes(&without_planes_of(&design, &skipped), &rules, &mut layout);
+    let mut layout = Layout::build(&joins.design, &rules);
+    let mut plan = traxide_planning::plan(&joins.design);
     plan.connections
         .retain(|c| !skipped.contains(&design.net(c.net).class));
-    let escaped = traxide_planning::escape(&design, &rules, &plan, &mut layout);
+    let escaped = traxide_planning::escape(&joins.design, &rules, &plan, &mut layout);
     // Built anew, the layout holds the escapes as pads of their nets, which
     // rip-up can never take from them.
     let (plan, mut layout) = (&escaped.plan, Layout::build(&escaped.design, &rules));
@@ -233,7 +246,8 @@ pub fn route(
         exits_taken,
         cut_off,
     } = router.route_plan(plan, corridors.as_ref(), &mut layout, cancel, events);
-    let mut routes = escaped.copper_used(&unrouted);
+    let mut routes = joins.copper.clone();
+    routes.extend(escaped.copper_used(&unrouted));
     routes.extend(routed);
     let at_pins = |connections: Vec<Connection>| -> Vec<Connection> {
         connections

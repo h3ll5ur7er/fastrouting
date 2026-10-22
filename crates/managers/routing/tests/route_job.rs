@@ -340,3 +340,16 @@ fn a_job_past_its_time_limit_still_stores_what_routes_without_rip_up() {
     assert_eq!((report.connections, report.unrouted.len()), (2, 0));
     assert!(output.exists());
 }
+
+#[test]
+fn pads_of_a_net_with_a_plane_join_it_by_vias_beside_them() {
+    // GND is a plane on In1.Cu; its four pads, on both outer layers, lie far
+    // apart, at the corners of the board.
+    let folder = tempfile::tempdir().expect("temp dir");
+    let output = folder.path().join("board.ses");
+    let report =
+        route(&job("gnd-plane.dsn", &output), &Silent, &CancelToken::new()).expect("routable");
+    assert_eq!((report.connections, report.unrouted.len()), (2, 0));
+    assert!(report.verdict.is_clean(), "{:?}", report.verdict);
+    assert_eq!(report.vias, 4, "one beside each GND pad");
+}

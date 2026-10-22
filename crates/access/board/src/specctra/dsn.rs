@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use traxide_contracts::geometry::{Point, Polygon, Rect, Region, Shape, Transform};
 use traxide_contracts::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerId, LayerShape, Net, NetClass,
-    NetClassId, NetId, Pad, PadId, Routes, Track, Via, ViaKind, ViaKindId,
+    NetClassId, NetId, Pad, PadId, Plane, Routes, Track, Via, ViaKind, ViaKindId,
 };
 
 pub fn parse_dsn(text: &str) -> Result<Design, BoardError> {
@@ -189,6 +189,7 @@ impl<'a> DsnReader<'a> {
         Ok(Design {
             outline: self.outline()?,
             keepouts: [self.keepouts()?, footprint_keepouts].concat(),
+            planes: self.planes(&nets)?,
             layers: self.layers,
             nets,
             pads,
@@ -258,6 +259,30 @@ impl<'a> DsnReader<'a> {
             })
             .collect::<Result<Vec<_>, BoardError>>()?;
         Region::new(polygons).ok_or_else(|| first.invalid("empty boundary"))
+    }
+
+    /// `(plane NET (polygon LAYER …))`, as KiCad writes its copper zones. A
+    /// plane of a net the network does not list joins no pin, and is left out.
+    fn planes(&self, nets: &[Net]) -> Result<Vec<Plane>, BoardError> {
+        let mut planes = Vec::new();
+        for plane in self.structure.children("plane") {
+            let name = plane.arg_atom(0, "net name")?;
+            let Some(net) = nets.iter().position(|n| n.name == name) else {
+                continue;
+            };
+            for shape in plane.args().iter().filter(|a| a.keyword().is_some()) {
+                let LayeredShape { layers, shape } = self.shape(shape)?;
+                let Shape::Polygon(outline) = shape else {
+                    continue;
+                };
+                planes.extend(layers.into_iter().map(|layer| Plane {
+                    net: NetId::from_index(net),
+                    layer,
+                    outline: outline.map(to_board),
+                }));
+            }
+        }
+        Ok(planes)
     }
 
     fn keepouts(&self) -> Result<Vec<Keepout>, BoardError> {
