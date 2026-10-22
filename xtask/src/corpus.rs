@@ -222,8 +222,13 @@ fn traxide_route(traxide: &Path, board: &Path, output: &Path, timeout: Duration)
         .arg("-o")
         .arg(output)
         .arg("--time-limit")
-        .arg((timeout * 3 / 4).as_secs().to_string());
+        .arg(negotiation_limit(timeout).as_secs().to_string());
     run
+}
+
+/// How long traxide negotiates on a board of the corpus.
+pub fn negotiation_limit(timeout: Duration) -> Duration {
+    timeout * 3 / 4
 }
 
 fn freerouting_run(command: &str, design: &Path, session: &Path) -> Result<Command> {

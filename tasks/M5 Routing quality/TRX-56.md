@@ -96,5 +96,6 @@ Done: `Router::route_plan` routes a board a second time where rip-up leaves conn
 
 - [x] A second attempt in locked rounds where rip-up leaves connections unrouted, the better kept
 - [x] The corpus routes every board with the 90 s negotiation limit that [[TRX-64]] gives KiCad projects, so that the second attempt cannot push a board past the 120 s timeout, and the baseline raised: 13 boards gain, TokenBoard completes all 241 nets; Issue283 completes 38 to 41 of 58 within the limit instead of 44 without one, as main does within it ([[Benchmarks#a-second-attempt-in-rounds-where-rip-up-falls-short-m5-trx-56]])
+- [x] The gate notes rather than fails fewer nets on a board routed against the clock (taking the negotiation limit in the baseline or now): on CI, Mars-64, Issue326, Issue208 and Issue289-VGA routed 2 to 9 nets fewer than the local baseline within the limit, while Issue219 routed 36 more and Issue283 6 more, on the same commit
 
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.
