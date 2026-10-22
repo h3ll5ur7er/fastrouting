@@ -53,6 +53,42 @@ fn a_board_with_its_routes_is_complete_and_clean() {
 }
 
 #[test]
+fn a_session_is_judged_with_the_locked_wiring_of_the_board_which_kicads_import_keeps() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let board = folder.path().join("locked.dsn");
+    let design = std::fs::read_to_string(fixture("two-nets.dsn")).expect("fixture");
+    std::fs::write(
+        &board,
+        design.replace(
+            "(wiring)",
+            "(wiring (wire (path F.Cu 200 6000 -10000 24000 -10000) (net Across) (type fix)))",
+        ),
+    )
+    .expect("writable");
+    let session = folder.path().join("locked.ses");
+    std::fs::write(
+        &session,
+        "(session locked.ses (base_design locked.dsn)
+           (routes (resolution um 10) (parser)
+             (network_out
+               (net Down
+                 (wire (path F.Cu 2000 150000 -50000 150000 -80000))
+                 (via \"Via[0-1]_600:300_um\" 150000 -80000)
+                 (wire (path B.Cu 2000 150000 -80000 150000 -120000))
+                 (via \"Via[0-1]_600:300_um\" 150000 -120000)
+                 (wire (path F.Cu 2000 150000 -120000 150000 -150000))))))",
+    )
+    .expect("writable");
+    let report = check(&CheckJob {
+        board,
+        session: Some(session),
+        drc_report: None,
+    })
+    .expect("readable");
+    assert_eq!(report.incomplete_nets, 0, "{report:?}");
+}
+
+#[test]
 fn copper_that_breaks_a_rule_is_reported_by_kind() {
     let report = check(&CheckJob {
         board: fixture("existing-violation.dsn"),

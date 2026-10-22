@@ -63,11 +63,16 @@ pub enum CheckError {
 }
 
 /// Checks the board's copper: the session's, which replaces the board's own
-/// as KiCad's session import does, or else the copper the board came with.
+/// but its locked wiring as KiCad's session import does, or else the copper
+/// the board came with.
 pub fn check(job: &CheckJob) -> Result<CheckReport, CheckError> {
     let design = traxide_board_access::load_design(&job.board)?;
     let routes = match &job.session {
-        Some(session) => traxide_board_access::load_routes(session, &design)?,
+        Some(session) => {
+            let mut routes = design.locked.clone();
+            routes.extend(traxide_board_access::load_routes(session, &design)?);
+            routes
+        }
         None => design.existing.clone(),
     };
     let rules = traxide_rules::compile(&design, Purpose::Verification);
