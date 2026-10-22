@@ -76,7 +76,7 @@ impl<'a> Layout<'a> {
         let mut layout = Self {
             design,
             rules,
-            outline: Outline::new(&design.outline, BUCKET_SIZE),
+            outline: Outline::new(&design.outline, rules, BUCKET_SIZE),
             obstacles: Vec::new(),
             layers,
             routed: Vec::new(),
@@ -122,7 +122,7 @@ impl<'a> Layout<'a> {
         item: Item,
         wanted: Wanted,
     ) -> Obstruction {
-        if !self.outline.holds(shape, self.rules.edge_clearance()) {
+        if !self.outline.holds(shape) {
             return Obstruction::Fixed;
         }
         let reach = shape.bounds().inflated(self.rules.largest_clearance());

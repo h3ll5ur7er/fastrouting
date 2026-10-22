@@ -55,6 +55,17 @@ impl Region {
 
     /// Whether `shape` lies inside the region, at least `clearance` from its edges.
     pub fn holds(&self, shape: &Shape, clearance: i32) -> bool {
+        self.holds_apart(shape, clearance, |_| clearance)
+    }
+
+    /// Whether `shape` lies inside the region, at least `clearance` from the
+    /// polygons' edges and `cutout_clearance(i)` from the `i`th hole's.
+    pub fn holds_apart(
+        &self,
+        shape: &Shape,
+        clearance: i32,
+        cutout_clearance: impl Fn(usize) -> i32,
+    ) -> bool {
         let point = match shape {
             Shape::Capsule { segment, .. } => segment.a,
             Shape::Polygon(polygon) => polygon.points()[0],
@@ -62,14 +73,14 @@ impl Region {
         self.polygons
             .iter()
             .any(|polygon| shape.is_inside(polygon, clearance))
-            && self.holes.iter().all(|hole| {
+            && self.holes.iter().enumerate().all(|(i, hole)| {
                 !hole.contains(point)
                     && hole.edges().all(|edge| {
                         !Shape::Capsule {
                             segment: edge,
                             radius: 0,
                         }
-                        .is_closer_than(shape, clearance)
+                        .is_closer_than(shape, cutout_clearance(i))
                     })
             })
     }

@@ -300,3 +300,60 @@ fn a_pour_on_a_layer_that_takes_tracks_joins_nothing() {
         }]
     );
 }
+
+#[test]
+fn a_rule_on_the_footprint_that_draws_a_cutout_sets_the_clearance_from_it() {
+    use traxide_contracts::geometry::{Polygon, Rect};
+    use traxide_contracts::{Condition, Constraint, CustomRule, Item, Limits};
+    // As TokenBoard's rule "LED cutout": 0.05 mm from the cutouts of LED
+    // footprints, the board's 0.2 mm elsewhere. The track passes 0.1 mm below.
+    let with_cutout_of = |footprint: Option<&str>| {
+        let mut design = board();
+        let cutout = Polygon::rectangle(Rect {
+            min: at(9.0, 6.0),
+            max: at(11.0, 9.0),
+        });
+        design.outline = design.outline.clone().with_holes(vec![cutout]);
+        design.cutout_footprints = vec![footprint.map(str::to_owned)];
+        design.rules.custom = vec![CustomRule {
+            name: "LED cutout".into(),
+            condition: Condition::Any(vec![
+                Condition::MemberOfFootprint {
+                    item: Item::A,
+                    footprints: vec!["LED1".into()],
+                },
+                Condition::MemberOfFootprint {
+                    item: Item::B,
+                    footprints: vec!["LED1".into()],
+                },
+            ]),
+            constraint: Constraint::EdgeClearance,
+            limits: Limits {
+                min: Some(mm(0.05)),
+                ..Limits::default()
+            },
+        }];
+        design
+    };
+    let close = |design: &Design| Routes {
+        tracks: vec![track(
+            design,
+            "A",
+            0,
+            &[
+                at(2.0, 5.0),
+                at(8.0, 5.0),
+                at(8.0, 5.8),
+                at(12.0, 5.8),
+                at(12.0, 5.0),
+                at(18.0, 5.0),
+            ],
+        )],
+        vias: vec![],
+    };
+    let led = with_cutout_of(Some("LED1"));
+    assert!(check(&led, close(&led)).is_clean());
+    for other in [with_cutout_of(Some("U1")), with_cutout_of(None)] {
+        assert!(!check(&other, close(&other)).is_clean());
+    }
+}

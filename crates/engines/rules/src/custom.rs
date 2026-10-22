@@ -84,6 +84,7 @@ fn named_nets(condition: &Condition, named: &mut Vec<BTreeSet<Option<NetId>>>) {
         Condition::Always
         | Condition::OnLayers(_)
         | Condition::NetClassIn { .. }
+        | Condition::MemberOfFootprint { .. }
         | Condition::Unknown => {}
     }
 }
@@ -134,6 +135,28 @@ fn within(value: i32, limits: &Limits) -> i32 {
     limits.max.map_or(raised, |max| raised.min(max))
 }
 
+/// One of the two items a rule's condition tests.
+#[derive(Debug, Clone, Copy)]
+enum Side<'g> {
+    /// Copper of a group: routed, or a pad, which belongs to a footprint.
+    Copper(&'g Group),
+    /// Routed copper of a group, which belongs to no footprint.
+    Routed(&'g Group),
+    /// A board edge, drawn by the footprint of this reference or by the board.
+    Edge(Option<&'g str>),
+    /// Nothing to tell: a constraint on one item alone.
+    Unknown,
+}
+
+impl<'g> Side<'g> {
+    fn group(self) -> Option<&'g Group> {
+        match self {
+            Side::Copper(group) | Side::Routed(group) => Some(group),
+            Side::Edge(_) | Side::Unknown => None,
+        }
+    }
+}
+
 pub(crate) struct Rules<'d> {
     design: &'d Design,
     groups: &'d [Group],
@@ -148,24 +171,38 @@ impl<'d> Rules<'d> {
     /// tries a condition both ways round. A clearance rule without a minimum
     /// asks nothing of the distance.
     pub fn between(&self, constraint: Constraint, a: NetClassId, b: NetClassId) -> Applying<'d> {
-        let (a, b) = (&self.groups[a.index()], &self.groups[b.index()]);
+        let (a, b) = (
+            Side::Copper(&self.groups[a.index()]),
+            Side::Copper(&self.groups[b.index()]),
+        );
         self.applying(
             constraint,
             |limits| limits.min.is_some(),
+            |condition| self.holds(condition, a, b).max(self.holds(condition, b, a)),
+        )
+    }
+
+    /// The edge clearance rules between routed copper of group `a` and an
+    /// edge that the footprint `footprint` draws, or the board where `None`.
+    pub fn at_edge(&self, a: NetClassId, footprint: Option<&str>) -> Applying<'d> {
+        let (a, edge) = (Side::Routed(&self.groups[a.index()]), Side::Edge(footprint));
+        self.applying(
+            Constraint::EdgeClearance,
+            |_| true,
             |condition| {
-                self.holds(condition, a, Some(b))
-                    .max(self.holds(condition, b, Some(a)))
+                self.holds(condition, a, edge)
+                    .max(self.holds(condition, edge, a))
             },
         )
     }
 
     /// The rules of `constraint` for copper of group `a` alone.
     pub fn of(&self, constraint: Constraint, a: NetClassId) -> Applying<'d> {
-        let a = &self.groups[a.index()];
+        let a = Side::Copper(&self.groups[a.index()]);
         self.applying(
             constraint,
             |_| true,
-            |condition| self.holds(condition, a, None),
+            |condition| self.holds(condition, a, Side::Unknown),
         )
     }
 
@@ -195,11 +232,10 @@ impl<'d> Rules<'d> {
         }
     }
 
-    /// Whether `condition` holds for copper of `a` against copper of `b`;
-    /// `b` is `None` where a constraint concerns `a` alone.
-    fn holds(&self, condition: &Condition, a: &Group, b: Option<&Group>) -> Truth {
+    /// Whether `condition` holds for item `a` against item `b`.
+    fn holds(&self, condition: &Condition, a: Side, b: Side) -> Truth {
         let item = |item| match item {
-            Item::A => Some(a),
+            Item::A => a,
             Item::B => b,
         };
         match condition {
@@ -208,11 +244,21 @@ impl<'d> Rules<'d> {
             Condition::OnLayers(layers) if layers.len() >= self.design.layers.len() => Truth::Yes,
             Condition::OnLayers(_) | Condition::Unknown => Truth::Maybe,
             Condition::NetClassIn { item: i, classes } => {
-                item(*i).map_or(Truth::Maybe, |g| Truth::of(classes.contains(&g.class)))
+                (item(*i).group()).map_or(Truth::Maybe, |g| Truth::of(classes.contains(&g.class)))
             }
             Condition::NetIn { item: i, nets } => {
-                item(*i).map_or(Truth::Maybe, |g| Truth::of(nets.contains(&g.member)))
+                (item(*i).group()).map_or(Truth::Maybe, |g| Truth::of(nets.contains(&g.member)))
             }
+            Condition::MemberOfFootprint {
+                item: i,
+                footprints,
+            } => match item(*i) {
+                Side::Routed(_) => Truth::No,
+                Side::Edge(footprint) => {
+                    Truth::of(footprint.is_some_and(|f| footprints.iter().any(|n| n == f)))
+                }
+                Side::Copper(_) | Side::Unknown => Truth::Maybe,
+            },
             Condition::Not(inner) => self.holds(inner, a, b).not(),
             Condition::All(all) => all
                 .iter()

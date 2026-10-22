@@ -274,3 +274,39 @@ fn copper_keeps_its_clearance_from_every_edge_of_a_shaped_board() {
         assert!(clear(at(4.0, 7.0), at(8.0, 7.0)));
     });
 }
+
+#[test]
+fn copper_keeps_the_clearance_a_rule_sets_for_the_footprint_that_draws_a_cutout() {
+    use traxide_contracts::{Condition, Constraint, CustomRule, Item, Limits};
+    // A cutout of footprint LED1, whose rule allows 0.05 mm, and one of the
+    // board's own, at the board's 0.2 mm.
+    let mut design = board();
+    let cutout = |x: f64| {
+        Polygon::rectangle(Rect {
+            min: at(x, 6.0),
+            max: at(x + 2.0, 8.0),
+        })
+    };
+    design.outline = design
+        .outline
+        .clone()
+        .with_holes(vec![cutout(2.0), cutout(12.0)]);
+    design.cutout_footprints = vec![Some("LED1".into()), None];
+    design.rules.custom = vec![CustomRule {
+        name: "LED cutout".into(),
+        condition: Condition::MemberOfFootprint {
+            item: Item::B,
+            footprints: vec!["LED1".into()],
+        },
+        constraint: Constraint::EdgeClearance,
+        limits: Limits {
+            min: Some(mm(0.05)),
+            ..Limits::default()
+        },
+    }];
+    check(&design, |layout, a, _| {
+        // 0.1 mm below each cutout: the track's edge at 5.9 mm.
+        assert!(layout.is_track_clear(a, TOP, segment(at(2.5, 5.8), at(3.5, 5.8)), mm(0.2)));
+        assert!(!layout.is_track_clear(a, TOP, segment(at(12.5, 5.8), at(13.5, 5.8)), mm(0.2)));
+    });
+}

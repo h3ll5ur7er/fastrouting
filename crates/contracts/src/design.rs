@@ -8,6 +8,9 @@ pub struct Design {
     pub layers: Vec<Layer>,
     /// The board's outline: one polygon, or one per board of a panel.
     pub outline: Region,
+    /// The footprint that draws each hole of the outline, by reference, in the
+    /// order of its holes; `None` where the board draws it.
+    pub cutout_footprints: Vec<Option<String>>,
     pub nets: Vec<Net>,
     pub pads: Vec<Pad>,
     pub via_kinds: Vec<ViaKind>,
@@ -199,6 +202,12 @@ pub enum Condition {
     NetIn {
         item: Item,
         nets: Vec<Option<NetId>>,
+    },
+    /// The item belongs to one of these footprints, by reference. Routed copper
+    /// belongs to none; a cutout to the footprint that draws it.
+    MemberOfFootprint {
+        item: Item,
+        footprints: Vec<String>,
     },
     Not(Box<Condition>),
     All(Vec<Condition>),
