@@ -204,6 +204,7 @@ impl<'a> Reader<'a> {
                 rules,
                 // KiCad's files are in millimetres to the nanometre.
                 resolution: 1,
+                outline_tolerance: ARC_TOLERANCE as i32,
                 warnings,
             },
             via_sizes: self.via_kinds.sizes,

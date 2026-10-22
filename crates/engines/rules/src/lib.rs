@@ -91,6 +91,7 @@ pub fn compile(design: &Design, purpose: Purpose) -> ConstraintSet {
             .max()
             .unwrap_or(design.rules.edge_clearance)
             + margin
+            + design.outline_tolerance
     };
     let edge_clearance = edge_clearance_of(None);
     let cutout_clearances = (0..design.outline.holes().len())
@@ -209,6 +210,7 @@ mod tests {
                 custom: vec![],
             },
             resolution,
+            outline_tolerance: 0,
             warnings: Vec::new(),
         }
     }

@@ -347,3 +347,10 @@ mod storing {
         assert!(!output.exists());
     }
 }
+
+#[test]
+fn copper_keeps_a_little_more_from_the_edges_of_a_kicad_board_whose_arcs_are_read_as_chords() {
+    let design = board("matrix-3x4.kicad_pcb");
+    // The reader's chords lie within 2 µm of the arcs they stand for.
+    assert_eq!(design.outline_tolerance, 2_000);
+}
