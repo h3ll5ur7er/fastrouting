@@ -8,6 +8,7 @@ What we learned before designing traxide (October 2026), and the decisions it le
 | [Prior art](Research/Prior-art.md) | How Freerouting works and why it is slow, other routers (Rust ports, OrthoRoute, tscircuit, Topola), benchmark corpora |
 | [Tech stack](Research/Tech-stack.md) | Language, crates, GPU, formats, distribution, risks |
 | [KiCad integration](Research/KiCad-integration.md) | DSN/SES, board files and the IPC API; the native plugin |
+| [TokenBoard report](Research/TokenBoard-report.md) | What KiCad's DRC found after a real DSN round trip of TokenBoard through traxide, by finding and task |
 
 ## Findings
 
