@@ -115,6 +115,11 @@ pub struct Plane {
     pub net: NetId,
     pub layer: LayerId,
     pub outline: Polygon,
+    /// How far its fill keeps from other nets' copper where its own setting
+    /// asks more than the rules; 0 where the format keeps none.
+    pub clearance: i32,
+    /// How narrow its fill may get: narrower necks are left out of it.
+    pub min_width: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

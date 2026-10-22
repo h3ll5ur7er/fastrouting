@@ -148,6 +148,8 @@ impl DesignBuilder {
             net,
             layer: LayerId::from_index(layer),
             outline: Polygon::rectangle(Rect { min, max }),
+            clearance: 0,
+            min_width: 0,
         });
         self
     }
