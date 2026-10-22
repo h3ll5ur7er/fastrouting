@@ -2,7 +2,7 @@
 id: TRX-68
 title: Read the windows of DSN planes, keepouts and boundaries
 type: bug
-status: review
+status: done
 assignee: claude
 priority: high
 labels: [dsn, kicad]

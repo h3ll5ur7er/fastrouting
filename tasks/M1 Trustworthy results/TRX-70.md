@@ -2,7 +2,7 @@
 id: TRX-70
 title: Write the fixed wiring a DSN came with as protected, not as new routes
 type: bug
-status: review
+status: done
 assignee: claude
 priority: high
 labels: [dsn, ses]

@@ -165,6 +165,7 @@ pub(crate) struct Search<'a, L> {
     net: NetId,
     width: i32,
     via_kinds: &'a [ViaKindId],
+    hole_to_hole: i32,
     connection: Connection,
     from: &'a Pad,
     to: &'a Pad,
@@ -201,6 +202,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             net: connection.net,
             width: rules.track_width(connection.net),
             via_kinds: rules.via_kinds(connection.net),
+            hole_to_hole: rules.hole_to_hole(),
             from,
             to,
             grid: Grid::covering(window, profile.grid_pitch),
@@ -408,6 +410,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                 }
             }
             for (position, &kind) in self.via_kinds.iter().enumerate() {
+                if self.is_near_a_via_of_its_path(slot, kind, scratch) {
+                    continue;
+                }
                 let spans = self.design.via_kind(kind);
                 let others = self.design.layer_ids().filter(|&l| {
                     l.0 != state.layer
@@ -446,6 +451,44 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             });
         }
         None
+    }
+
+    /// Whether a via of `kind` at `slot`'s node would sit closer than the
+    /// hole-to-hole distance to a via the path to it placed, which the layout
+    /// does not hold yet. The path is walked back only as far as such a via
+    /// could be.
+    fn is_near_a_via_of_its_path(&self, slot: u32, kind: ViaKindId, scratch: &Scratch) -> bool {
+        let apart = i64::from(self.hole_to_hole);
+        let Some(drill) = self.design.via_kind(kind).drill.map(i64::from) else {
+            return false;
+        };
+        if apart <= 0 {
+            return false;
+        }
+        let here = self.grid.point(self.state(slot).node);
+        let reach = apart + 2 * drill;
+        let (mut current, mut previous, mut walked) = (slot, here, 0);
+        while walked <= reach {
+            let Some(packed) = scratch.came.get(current as usize) else {
+                return false;
+            };
+            let came = Came::unpack(packed);
+            let at = self.grid.point(self.state(current).node);
+            walked += previous.distance(at);
+            previous = at;
+            let other = came.via.and_then(|other| self.design.via_kind(other).drill);
+            if let Some(other) = other {
+                let gap = here.distance(at) - drill / 2 - i64::from(other) / 2;
+                if gap < apart {
+                    return true;
+                }
+            }
+            match came.from {
+                Some(from) => current = from,
+                None => return false,
+            }
+        }
+        false
     }
 
     /// The copper of the vias of this net the board came with that lie in the
