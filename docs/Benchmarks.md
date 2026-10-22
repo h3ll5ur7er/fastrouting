@@ -179,7 +179,7 @@ In CI (commit 91b6981, 120 s per board): traxide stops on 3 boards instead of 6,
 | Issue145-smoothieboard (792) | 782, 127 s | 776, 91 s |
 | Issue219-LogicBoard_smt (991) | 991, 124 s | 945, 103 s |
 
-Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone took 100–130 s: 365 of its connections were committed within 20 s, but only 34 more by 100 s, as single searches there took 0.5–2 s each. Sampled with gdb, the time went to working out the largest clearance on every copper query, below. The corpus runs without a limit, so its numbers stay comparable with the earlier ones.
+Before the last pass kept to each window, it took minutes where many connections were still queued (Issue219 290 s, Issue208 216 s, both Issue289 boards over 300 s). Issue289-VGA's last pass alone took 100–130 s: 365 of its connections were committed within 20 s, but only 34 more by 100 s, as single searches there took 0.5–2 s each. Sampled with gdb, the time went to working out the largest clearance on every copper query, below. The corpus ran without a limit then, so that its numbers stayed comparable with the earlier ones; since [[TRX-56]]'s second attempt, it routes every board with `--time-limit` at three quarters of its timeout.
 
 ## Each edge checked once, and copper queries no wider than copper clearances (M2, TRX-48)
 

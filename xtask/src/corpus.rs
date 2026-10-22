@@ -105,14 +105,8 @@ impl Corpus<'_> {
                 quoting_line(&why, &std::fs::read_to_string(session).unwrap_or_default())
             })
         };
-        let mut traxide_run = Command::new(self.traxide);
-        traxide_run
-            .arg("route")
-            .arg("--quiet")
-            .arg(&file)
-            .arg("-o")
-            .arg(session("traxide"));
         let traxide_session = session("traxide");
+        let traxide_run = traxide_route(self.traxide, &file, &traxide_session, self.timeout);
         let mut row = Row {
             board: name.clone(),
             before: judge(self.traxide, &file, None).ok(),
@@ -168,15 +162,7 @@ impl Corpus<'_> {
         let routed = |router: &str| folder.join(format!("{router}.kicad_pcb"));
         let judge_board = |board: &Path| judge(self.traxide, board, None);
         let traxide_board = routed("traxide");
-        let mut traxide_run = Command::new(self.traxide);
-        traxide_run
-            .arg("route")
-            .arg("--quiet")
-            .arg(&stripped)
-            .arg("-o")
-            .arg(&traxide_board)
-            .arg("--time-limit")
-            .arg(negotiation_limit(self.timeout).as_secs().to_string());
+        let traxide_run = traxide_route(self.traxide, &stripped, &traxide_board, self.timeout);
         let mut row = Row {
             board: name,
             before: judge_board(&stripped).ok(),
@@ -223,12 +209,21 @@ impl Corpus<'_> {
     }
 }
 
-/// How long traxide negotiates on a KiCad project: real boards such as
-/// TokenBoard take longer than the corpus's limit, and a board stopped at the
-/// limit tells the gate nothing, so traxide stops negotiating early enough to
-/// finish within it, with what it routed by then.
-fn negotiation_limit(timeout: Duration) -> Duration {
-    timeout * 3 / 4
+/// traxide routing `board` into `output`, negotiating for three quarters of
+/// `timeout`: real boards such as TokenBoard, and congested ones that traxide
+/// routes a second time (TRX-56), take longer than the corpus's limit, and a
+/// board stopped at the limit tells the gate nothing, so traxide stops
+/// negotiating early enough to finish within it, with what it routed by then.
+fn traxide_route(traxide: &Path, board: &Path, output: &Path, timeout: Duration) -> Command {
+    let mut run = Command::new(traxide);
+    run.arg("route")
+        .arg("--quiet")
+        .arg(board)
+        .arg("-o")
+        .arg(output)
+        .arg("--time-limit")
+        .arg((timeout * 3 / 4).as_secs().to_string());
+    run
 }
 
 fn freerouting_run(command: &str, design: &Path, session: &Path) -> Result<Command> {
@@ -618,10 +613,25 @@ mod tests {
     }
 
     #[test]
-    fn traxide_negotiates_on_a_project_for_three_quarters_of_the_limit() {
+    fn traxide_negotiates_on_every_board_for_three_quarters_of_the_limit() {
+        let run = traxide_route(
+            Path::new("traxide"),
+            Path::new("board.dsn"),
+            Path::new("board.ses"),
+            Duration::from_secs(120),
+        );
+        let args: Vec<_> = run.get_args().collect();
         assert_eq!(
-            negotiation_limit(Duration::from_secs(120)),
-            Duration::from_secs(90)
+            args,
+            [
+                "route",
+                "--quiet",
+                "board.dsn",
+                "-o",
+                "board.ses",
+                "--time-limit",
+                "90"
+            ]
         );
     }
 
