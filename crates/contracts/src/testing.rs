@@ -32,6 +32,7 @@ impl DesignBuilder {
             layers: vec![],
             outline,
             cutout_footprints: Vec::new(),
+            locked: Routes::default(),
             nets: vec![],
             pads: vec![],
             via_kinds: vec![],

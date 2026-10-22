@@ -108,9 +108,18 @@ pub fn store_routes(
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             // KiCad's session import replaces every track of the board with the
-            // session's: the session carries the board's own copper too, as
-            // Freerouting's do.
-            let mut everything = design.existing.clone();
+            // session's, but for the locked: the session carries the board's
+            // own copper too, without what is locked, which would come twice.
+            let mut everything = Routes {
+                tracks: (design.existing.tracks.iter())
+                    .filter(|t| !design.locked.tracks.contains(t))
+                    .cloned()
+                    .collect(),
+                vias: (design.existing.vias.iter())
+                    .filter(|v| !design.locked.vias.contains(v))
+                    .cloned()
+                    .collect(),
+            };
             everything.extend(routes.clone());
             specctra::write_ses(&name, design, &everything)
         }

@@ -173,6 +173,7 @@ mod tests {
             })
             .into(),
             cutout_footprints: Vec::new(),
+            locked: Routes::default(),
             nets: vec![
                 Net {
                     name: "signal".into(),

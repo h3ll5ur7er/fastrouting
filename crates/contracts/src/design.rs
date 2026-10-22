@@ -20,6 +20,9 @@ pub struct Design {
     pub planes: Vec<Plane>,
     /// Copper already on the board; routing keeps it as it is.
     pub existing: Routes,
+    /// The part of it the board's program keeps itself, as it is locked there:
+    /// a session leaves it out, as KiCad's import keeps it and would add it twice.
+    pub locked: Routes,
     pub rules: DesignRules,
     /// The coordinate step of the board's format. Routes are rounded to it when
     /// stored, so routing keeps that much extra clearance.

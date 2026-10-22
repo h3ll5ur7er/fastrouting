@@ -185,7 +185,7 @@ impl<'a> DsnReader<'a> {
                 pads[pad.index()].net = Some(NetId::from_index(index));
             }
         }
-        let existing = self.wiring(&nets, &padstacks, &mut via_kinds)?;
+        let (existing, locked) = self.wiring(&nets, &padstacks, &mut via_kinds)?;
         // Freerouting keeps the clearance from keepouts, as from copper.
         let clearance = rules.design.classes[rules.design.default_class.index()].clearance;
         let keepouts = [self.keepouts()?, footprint_keepouts]
@@ -199,6 +199,7 @@ impl<'a> DsnReader<'a> {
         Ok(Design {
             outline: self.outline()?,
             cutout_footprints: Vec::new(),
+            locked,
             keepouts,
             planes: self.planes(&nets)?,
             layers: self.layers,
@@ -646,10 +647,17 @@ impl<'a> DsnReader<'a> {
         nets: &[Net],
         padstacks: &HashMap<&str, Vec<LayeredShape>>,
         via_kinds: &mut ViaKinds,
-    ) -> Result<Routes, BoardError> {
-        let mut routes = Routes::default();
+    ) -> Result<(Routes, Routes), BoardError> {
+        let (mut routes, mut locked) = (Routes::default(), Routes::default());
         let Some(wiring) = self.root.child("wiring") else {
-            return Ok(routes);
+            return Ok((routes, locked));
+        };
+        // KiCad exports locked copper as fixed; Freerouting writes the wiring
+        // it was given back as protected.
+        let is_locked = |item: &Sexp| {
+            item.child("type")
+                .and_then(|t| t.atoms().next())
+                .is_some_and(|t| t == "fix" || t == "protect")
         };
         let net_of = |item: &Sexp| -> Result<NetId, BoardError> {
             let name = item.required_child("net")?.arg_atom(0, "net name")?;
@@ -681,7 +689,7 @@ impl<'a> DsnReader<'a> {
                     .first()
                     .ok_or_else(|| shape.invalid("missing layer"))?,
             )?;
-            routes.tracks.push(Track {
+            let track = Track {
                 net: net_of(wire)?,
                 layer: layer[0],
                 width: self.units.length(
@@ -691,20 +699,28 @@ impl<'a> DsnReader<'a> {
                         .ok_or_else(|| shape.invalid("missing width"))?,
                 )?,
                 path: points.into_iter().map(to_board).collect(),
-            });
+            };
+            if is_locked(wire) {
+                locked.tracks.push(track.clone());
+            }
+            routes.tracks.push(track);
         }
         for via in wiring.children("via") {
             let args = via.args();
             let (Some(name), Some(x), Some(y)) = (args.first(), args.get(1), args.get(2)) else {
                 return Err(via.invalid("expected (via padstack x y)"));
             };
-            routes.vias.push(Via {
+            let placed = Via {
                 net: net_of(via)?,
                 kind: via_kinds.named(name, padstacks)?,
                 position: to_board(self.units.point(x, y)?),
-            });
+            };
+            if is_locked(via) {
+                locked.vias.push(placed.clone());
+            }
+            routes.vias.push(placed);
         }
-        Ok(routes)
+        Ok((routes, locked))
     }
 }
 

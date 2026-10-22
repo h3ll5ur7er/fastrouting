@@ -195,6 +195,7 @@ impl<'a> Reader<'a> {
                 layers: self.layers,
                 outline,
                 cutout_footprints,
+                locked: Routes::default(),
                 nets: self.nets,
                 pads,
                 via_kinds: self.via_kinds.kinds,
