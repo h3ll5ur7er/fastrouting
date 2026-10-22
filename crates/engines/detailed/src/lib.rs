@@ -14,13 +14,13 @@ mod search;
 
 use search::NoRoute;
 use std::cmp::Reverse;
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
-    Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, Obstruction,
-    Plan, Profile, Routes, RoutingResult,
+    Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, NetId,
+    Obstruction, Plan, Profile, Routes, RoutingResult,
 };
 use traxide_events::{CancelToken, Publisher};
 
@@ -124,7 +124,7 @@ impl<'a> Router<'a> {
             let mut state = self.fresh(plan);
             self.settle_in_rounds(&mut state, plan, corridors, layout, cancel, events);
             let second = self.negotiate(state, plan, corridors, layout, cancel, events);
-            if second.connections_routed() > first.connections_routed() {
+            if second.standing(plan) > first.standing(plan) {
                 second
             } else {
                 second.take_out(layout);
@@ -584,7 +584,6 @@ impl Finder<'_> {
     }
 }
 
-/// Where routing stands: the routes so far and what negotiation has learnt.
 /// What one way of negotiating routed, and why the rest is not.
 struct Attempt {
     routed: Vec<Option<Routes>>,
@@ -595,8 +594,16 @@ struct Attempt {
 }
 
 impl Attempt {
-    fn connections_routed(&self) -> usize {
-        self.routed.iter().filter(|r| r.is_some()).count()
+    /// How far it got: nets completed first, as boards are judged by them,
+    /// then connections routed.
+    fn standing(&self, plan: &Plan) -> (usize, usize) {
+        let nets: BTreeSet<NetId> = plan.connections.iter().map(|c| c.net).collect();
+        let incomplete: BTreeSet<NetId> = (plan.connections.iter().zip(&self.routed))
+            .filter(|(_, routed)| routed.is_none())
+            .map(|(connection, _)| connection.net)
+            .collect();
+        let routed = self.routed.iter().filter(|r| r.is_some()).count();
+        (nets.len() - incomplete.len(), routed)
     }
 
     fn take_out(&self, layout: &mut impl LayoutAccess) {
@@ -632,6 +639,7 @@ impl Attempt {
     }
 }
 
+/// Where routing stands: the routes so far and what negotiation has learnt.
 struct Negotiated {
     routed: Vec<Option<Routes>>,
     rip_ups: Vec<u32>,
@@ -788,4 +796,49 @@ fn routed_obstructions(layout: &impl LayoutAccess, routes: &Routes) -> Vec<Conne
     displaced.sort_unstable();
     displaced.dedup();
     displaced
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use traxide_contracts::PadId;
+
+    fn attempt(routed: &[bool]) -> Attempt {
+        Attempt {
+            routed: routed.iter().map(|&r| r.then(Routes::default)).collect(),
+            unrouted: (0..routed.len())
+                .filter(|&i| !routed[i])
+                .map(ConnectionId::from_index)
+                .collect(),
+            hemmed_in: Vec::new(),
+            exits_taken: Vec::new(),
+            cut_off: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_attempt_that_completes_more_nets_stands_higher_than_one_that_routes_more_connections() {
+        let connection = |net| Connection {
+            net: NetId::from_index(net),
+            from: PadId::from_index(0),
+            to: PadId::from_index(1),
+        };
+        // Net 0 has four connections, net 1 one.
+        let plan = Plan {
+            connections: vec![
+                connection(0),
+                connection(0),
+                connection(0),
+                connection(0),
+                connection(1),
+            ],
+        };
+        let net_1_complete = attempt(&[true, false, false, false, true]);
+        let more_connections = attempt(&[true, true, true, false, false]);
+        assert!(net_1_complete.standing(&plan) > more_connections.standing(&plan));
+        assert!(
+            more_connections.standing(&plan)
+                > attempt(&[true, false, false, false, false]).standing(&plan)
+        );
+    }
 }
