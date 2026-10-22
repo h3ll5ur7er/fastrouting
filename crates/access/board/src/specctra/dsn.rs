@@ -280,6 +280,8 @@ impl<'a> DsnReader<'a> {
                     net: NetId::from_index(net),
                     layer,
                     outline: outline.map(to_board),
+                    clearance: 0,
+                    min_width: 0,
                 }));
             }
         }
