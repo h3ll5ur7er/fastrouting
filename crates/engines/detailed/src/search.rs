@@ -439,8 +439,10 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     }
                 }
             }
+            // At a via's price, though the via is there: for free, paths
+            // crowd through the board's vias and take each other's room.
             self.relax_through_existing_vias(state, &joins, |next| {
-                relax(Some(next), 0, None, scratch);
+                relax(Some(next), self.profile.via_cost, None, scratch);
             });
         }
         None
