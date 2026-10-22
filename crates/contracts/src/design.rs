@@ -1,5 +1,5 @@
 use crate::{LayerId, NetClassId, NetId, PadId, Routes, ViaKindId};
-use traxide_geometry::{Point, Region, Shape};
+use traxide_geometry::{Point, Polygon, Region, Shape};
 
 /// A board to route, independent of the format it came from.
 #[derive(Debug, Clone, PartialEq)]
@@ -12,6 +12,9 @@ pub struct Design {
     pub pads: Vec<Pad>,
     pub via_kinds: Vec<ViaKind>,
     pub keepouts: Vec<Keepout>,
+    /// Copper pours of a net, which the board's program fills around the
+    /// copper of other nets.
+    pub planes: Vec<Plane>,
     /// Copper already on the board; routing keeps it as it is.
     pub existing: Routes,
     pub rules: DesignRules,
@@ -99,6 +102,16 @@ impl ViaKind {
         let on = |layer| self.copper.iter().any(|c| c.layer == layer);
         on(from) && on(to)
     }
+}
+
+/// A pour of one net on one layer: the board's program fills `outline` with
+/// copper of `net`, less a clearance around the copper of other nets, and the
+/// fill joins the copper of `net` it reaches.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Plane {
+    pub net: NetId,
+    pub layer: LayerId,
+    pub outline: Polygon,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

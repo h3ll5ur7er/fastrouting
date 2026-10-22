@@ -92,16 +92,29 @@ const FAILED: u8 = 1;
 const INCOMPLETE: u8 = 2;
 const BROKE_A_RULE: u8 = 3;
 
+/// What the KiCad plugin's *Route board* button does: KiCad starts the
+/// plugin's entry point with no arguments and only says which board through
+/// the environment. It shows each line the plugin writes to stderr as a
+/// notification, and ignores stdout, so the summary goes to stderr and no
+/// progress line is rewritten in place.
+const ROUTE_THE_BOARD_OPEN_IN_KICAD: [&str; 4] = ["traxide", "route", "--kicad", "--quiet"];
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let called_as_freerouting = args
         .first()
         .and_then(|program| Path::new(program).file_stem())
         .is_some_and(|name| name == "freerouting");
+    let started_by_kicad = args.len() == 1 && std::env::var_os("KICAD_API_SOCKET").is_some();
     let outcome = if called_as_freerouting {
         run_as_freerouting(&args[1..])
+    } else if started_by_kicad {
+        run(
+            Cli::parse_from(ROUTE_THE_BOARD_OPEN_IN_KICAD),
+            &mut std::io::stderr(),
+        )
     } else {
-        run(Cli::parse_from(args))
+        run(Cli::parse_from(args), &mut std::io::stdout())
     };
     match outcome {
         Ok(code) => code,
@@ -112,7 +125,8 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<ExitCode> {
+/// Routes or checks as `cli` says; a route writes its summary to `summary`.
+fn run(cli: Cli, summary: &mut dyn Write) -> Result<ExitCode> {
     let (input, output, profile, config, threads, quiet, drc, time_limit) = match cli.command {
         Command::Freerouting { args } => return run_as_freerouting(&args),
         Command::Check {
@@ -167,7 +181,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     if !quiet {
         eprintln!();
     }
-    Ok(summarise(&report))
+    Ok(summarise(&report, summary))
 }
 
 /// Exits successfully only when every net is complete and no rule broken.
@@ -235,7 +249,7 @@ fn run_as_freerouting(args: &[String]) -> Result<ExitCode> {
         eprintln!("warning: {warning}");
     }
     let report = traxide_routing::route(&job, &|_: Event| {}, &CancelToken::new())?;
-    summarise(&report);
+    summarise(&report, &mut std::io::stdout());
     Ok(ExitCode::SUCCESS)
 }
 
@@ -277,9 +291,12 @@ fn reason(why: &Unroutable) -> String {
     }
 }
 
-fn summarise(report: &RouteReport) -> ExitCode {
+/// Writing the summary is a courtesy; a closed stream must not change the
+/// exit code, which tells what routing achieved.
+fn summarise(report: &RouteReport, out: &mut dyn Write) -> ExitCode {
     let routed = report.connections - report.unrouted.len();
-    println!(
+    let _ = writeln!(
+        out,
         "Routed {routed} of {} connections ({} tracks, {} vias) in {:.2} s → {}",
         report.connections,
         report.tracks,
@@ -287,11 +304,21 @@ fn summarise(report: &RouteReport) -> ExitCode {
         report.elapsed.as_secs_f64(),
         report.output.display()
     );
+    // KiCad refills zones as a step of its own after the routes', which the
+    // designer meets when undoing them.
+    if report.zones_refilled {
+        let _ = writeln!(
+            out,
+            "traxide refilled the board's copper zones around the routes. \
+             Edit → Undo takes back the refill first; a second undo takes back the routes."
+        );
+    }
     for warning in &report.warnings {
-        println!("Warning: {warning}");
+        let _ = writeln!(out, "Warning: {warning}");
     }
     if !report.planes.is_empty() {
-        println!(
+        let _ = writeln!(
+            out,
             "Kept free of tracks, as planes: {}",
             report.planes.join(", ")
         );
@@ -299,13 +326,15 @@ fn summarise(report: &RouteReport) -> ExitCode {
     for unrouted in &report.unrouted {
         let why: Vec<String> = unrouted.why.iter().map(reason).collect();
         let why = why.join("; ");
-        println!(
+        let _ = writeln!(
+            out,
             "  unrouted: {} from {} to {}: {why}",
             unrouted.net, unrouted.from, unrouted.to
         );
     }
     if report.violations_before_routing > 0 {
-        println!(
+        let _ = writeln!(
+            out,
             "Note: the board broke {} rules before routing, in the copper it came with; they are as they were.",
             report.violations_before_routing
         );
@@ -317,12 +346,13 @@ fn summarise(report: &RouteReport) -> ExitCode {
         .filter(|v| !matches!(v, Violation::Unconnected { .. }))
         .collect();
     if !broken.is_empty() {
-        println!(
+        let _ = writeln!(
+            out,
             "The routes break {} rules. This is a bug in traxide; please report it with the board:",
             broken.len()
         );
         for violation in broken {
-            println!("  {violation:?}");
+            let _ = writeln!(out, "  {violation:?}");
         }
         return ExitCode::from(BROKE_A_RULE);
     }
@@ -330,5 +360,44 @@ fn summarise(report: &RouteReport) -> ExitCode {
         ExitCode::from(INCOMPLETE)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::Duration;
+    use traxide_contracts::Verdict;
+
+    fn report(zones_refilled: bool) -> RouteReport {
+        RouteReport {
+            connections: 1,
+            unrouted: Vec::new(),
+            tracks: 1,
+            vias: 0,
+            verdict: Verdict::default(),
+            violations_before_routing: 0,
+            cancelled: false,
+            elapsed: Duration::ZERO,
+            output: PathBuf::from(traxide_routing::RUNNING_KICAD),
+            zones_refilled,
+            planes: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    fn summary(report: &RouteReport) -> String {
+        let mut written = Vec::new();
+        summarise(report, &mut written);
+        String::from_utf8(written).expect("UTF-8")
+    }
+
+    #[test]
+    fn tells_the_designer_that_refilled_zones_take_an_undo_of_their_own() {
+        let summary = summary(&report(true));
+        assert!(summary.contains("refilled"), "{summary}");
+        assert!(summary.contains("second undo"), "{summary}");
+        assert!(!self::summary(&report(false)).contains("undo"));
     }
 }

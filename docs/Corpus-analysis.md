@@ -109,6 +109,8 @@ Issue269-caniot-tiny-arm is a 2-layer board whose B.Cu KiCad exported as `(type 
 
 19 corpus boards state copper planes, `(plane NET (polygon LAYER …))`; traxide ignores them. On Issue269-z10_module, GND is a plane on In1.Cu and +3V3 on In2.Cu: a via next to each pad would connect them, but traxide routes GND as tracks, and two of them (R103-2 → IC101-28, IC101-28 → IC101-42) have no way on the outer layers at all. On Issue093-interf_u a GND pour on the bottom joins the one connection left ([[TRX-58]]).
 
+Since this analysis, planes are read ([[Benchmarks#pads-joined-through-their-nets-planes-m5-trx-58]]): on z10_module the planes join all but two GND pads, IC101-28 and IC101-42, for which no via fits beside them; Issue093's bottom pour is routed as before, and the board is complete anyway.
+
 ## The board's own unlocked wiring
 
 traxide keeps all wiring a board comes with. Specctra's `(type route)` wiring, which KiCad writes for unlocked tracks, may be moved by a router; ten corpus boards carry some. On Issue269-caniot, with one routable layer, the board's 335 tracks wall in J8-9 and the QFP's pins 51–53 (5 connections, no way at any grid); on Issue157-TeamAdapt-LinePCB a track of Net-(D49-Pad1) runs across the pads Q1-3 and Q2-3 of other nets, breaking the rules already, and leaves them no way out (2). Moving a designer's tracks should be their choice ([[TRX-59]]).

@@ -49,6 +49,7 @@ pub fn verify(design: &Design, rules: &ConstraintSet, routes: &Routes) -> Verdic
     let mut violations: Vec<Violation> = found.into_iter().collect();
     violations.extend(edge_and_keepout_violations(design, rules, &pieces));
     pieces::join_layers_of_the_same_item(&pieces, &mut joined);
+    pieces::join_through_planes(design, &pieces, &mut joined);
     violations.extend(unconnected(design, &pieces, &mut joined));
     Verdict { violations }
 }

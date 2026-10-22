@@ -1,10 +1,13 @@
 //! KiCad's PCB editor running with its IPC API, for the end-to-end test of
 //! routing the board open in KiCad: KiCad 9 and 10 serve the API only from the
-//! GUI, so the editor runs from the Docker image on a virtual display.
+//! GUI, so the editor runs from the Docker image on a virtual display, with
+//! traxide's plugin installed, whose toolbar button the test presses.
 //!
 //! Linux only: the API's Unix socket is shared through a bind mount, which
-//! Docker Desktop does not pass through on macOS or Windows.
+//! Docker Desktop does not pass through on macOS or Windows. Pressing the
+//! button takes ImageMagick's `import` and `xdotool` on the host.
 
+use crate::kicad_package::IDENTIFIER;
 use anyhow::{Context, Result, bail, ensure};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -14,6 +17,11 @@ use traxide_contracts::Design;
 
 /// How long KiCad may take to start and load the board.
 const STARTUP: Duration = Duration::from_secs(90);
+/// How long the plugin may take to route a test board.
+const ROUTING: Duration = Duration::from_secs(120);
+/// The colour the plugin's light toolbar icon is filled with, by which the
+/// test finds its button on the screen (`kicad-plugin/plugins/icon.png`).
+const ICON_FILL: [u8; 3] = [27, 127, 90];
 
 /// A PCB editor with a board open; stopped when dropped.
 pub struct RunningKicad {
@@ -27,15 +35,17 @@ pub struct RunningKicad {
 
 impl RunningKicad {
     /// Starts KiCad from `image` on a copy of the board `board` and its project
-    /// files, all placed in `folder`, and waits until it serves the board.
-    pub fn open(image: &str, board: &Path, folder: &Path) -> Result<Self> {
+    /// files, all placed in `folder`, with the plugin package `package`
+    /// installed, and waits until it serves the board.
+    pub fn open(image: &str, board: &Path, folder: &Path, package: &Path) -> Result<Self> {
         let config = folder.join("config");
+        let share = folder.join("share");
         let socket_folder = folder.join("socket");
         let project = folder.join("project");
         if folder.exists() {
             std::fs::remove_dir_all(folder)?;
         }
-        for created in [&config, &socket_folder, &project] {
+        for created in [&config, &share, &socket_folder, &project] {
             std::fs::create_dir_all(created)?;
         }
         let stem = board.file_stem().context("a board file")?;
@@ -49,6 +59,7 @@ impl RunningKicad {
         // configuration, the socket and the saved board.
         run(Command::new("chmod").arg("-R").arg("a+rwX").arg(folder))?;
         write_configuration(image, &config)?;
+        install_plugin(package, &config, &share)?;
 
         let container = format!("traxide-e2e-kicad-{}", std::process::id());
         let board_name = board.file_name().context("a board file")?.to_string_lossy();
@@ -63,6 +74,11 @@ impl RunningKicad {
             .args(["-v", "/tmp/.X11-unix:/tmp/.X11-unix"])
             .arg("-v")
             .arg(format!("{}:/home/kicad/.config/kicad", config.display()))
+            .arg("-v")
+            .arg(format!(
+                "{}:/home/kicad/.local/share/kicad",
+                share.display()
+            ))
             .arg("-v")
             .arg(format!("{}:/tmp/kicad", socket_folder.display()))
             .arg("-v")
@@ -120,17 +136,130 @@ impl RunningKicad {
         Ok(testing::undo_in_kicad(&self.socket)?)
     }
 
-    /// `traxide` with the environment KiCad gives a plugin it starts.
-    pub fn plugin_command(&self, traxide: &Path) -> Command {
-        let mut command = Command::new(traxide);
-        command
-            .env(
-                "KICAD_API_SOCKET",
-                format!("ipc://{}", self.socket.display()),
-            )
-            .env("KIPRJMOD", &self.project);
-        command
+    /// Presses the plugin's *Route board* button, as a designer would, and
+    /// waits until the plugin has changed the board `before` and finished.
+    pub fn route_with_the_plugin(&self, before: &Design) -> Result<()> {
+        let display = self.display()?;
+        let (x, y) = self.find_the_button(&display)?;
+        run(Command::new("xdotool")
+            .env("DISPLAY", &display)
+            .env_remove("XAUTHORITY")
+            .args(["mousemove", &x.to_string(), &y.to_string(), "click", "1"]))?;
+        let started = Instant::now();
+        loop {
+            let plugin_running = Command::new("docker")
+                .args(["exec", &self.container, "pgrep", "-x", "traxide"])
+                .output()?
+                .status
+                .success();
+            if !plugin_running && self.design()? != *before {
+                return Ok(());
+            }
+            ensure!(
+                started.elapsed() < ROUTING,
+                "the plugin did not route the board within {} s of pressing its button",
+                ROUTING.as_secs()
+            );
+            std::thread::sleep(Duration::from_millis(300));
+        }
     }
+
+    /// The X display the editor shows on, which xvfb-run picked.
+    fn display(&self) -> Result<String> {
+        let output = Command::new("docker")
+            .args(["exec", &self.container, "printenv", "DISPLAY"])
+            .output()?;
+        ensure!(output.status.success(), "the editor has no display");
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    }
+
+    /// The middle of the plugin's button, found on a screenshot by the colour
+    /// of its icon; KiCad adds plugin buttons to the toolbar a little after
+    /// loading the board.
+    fn find_the_button(&self, display: &str) -> Result<(usize, usize)> {
+        let started = Instant::now();
+        loop {
+            let screenshot = Command::new("import")
+                .env_remove("XAUTHORITY")
+                .args([
+                    "-display", display, "-window", "root", "-depth", "8", "ppm:-",
+                ])
+                .output()
+                .context("taking a screenshot: is ImageMagick installed?")?;
+            ensure!(screenshot.status.success(), "taking a screenshot failed");
+            if let Some(middle) = middle_of_colour(&screenshot.stdout, ICON_FILL)? {
+                return Ok(middle);
+            }
+            ensure!(
+                started.elapsed() < STARTUP,
+                "the editor shows no traxide button: KiCad did not load the plugin"
+            );
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    }
+}
+
+/// Installs the plugin package as KiCad's *Install from File* does, for each
+/// KiCad version the configuration in `config` is for: `plugins/` and
+/// `resources/` go into folders named after the identifier in `3rdparty`.
+fn install_plugin(package: &Path, config: &Path, share: &Path) -> Result<()> {
+    let folder = IDENTIFIER.replace('.', "_");
+    let unpacked = share.join("unpacked");
+    // unzip, like KiCad on Linux, keeps the executable bit.
+    run(Command::new("unzip")
+        .args(["-q", "-o"])
+        .arg(package)
+        .arg("-d")
+        .arg(&unpacked))?;
+    for version in std::fs::read_dir(config)? {
+        let version = version?;
+        if !version.file_type()?.is_dir() {
+            continue;
+        }
+        let third_party = share.join(version.file_name()).join("3rdparty");
+        for part in ["plugins", "resources"] {
+            let installed = third_party.join(part).join(&folder);
+            std::fs::create_dir_all(installed.parent().context("a parent")?)?;
+            run(Command::new("cp")
+                .arg("-a")
+                .arg(unpacked.join(part))
+                .arg(&installed))?;
+        }
+    }
+    std::fs::remove_dir_all(&unpacked)?;
+    // KiCad, as the image's user, writes beside the plugin.
+    run(Command::new("chmod").arg("-R").arg("a+rwX").arg(share))
+}
+
+/// The middle of the pixels of `colour` in a binary PPM image (P6, 8 bits),
+/// if it has enough of them to be the icon.
+fn middle_of_colour(ppm: &[u8], colour: [u8; 3]) -> Result<Option<(usize, usize)>> {
+    let mut header = Vec::new();
+    let mut at = 0;
+    while header.len() < 4 {
+        let start = at;
+        while at < ppm.len() && !ppm[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        header.push(std::str::from_utf8(&ppm[start..at])?);
+        at += 1;
+    }
+    ensure!(
+        header[0] == "P6" && header[3] == "255",
+        "not an 8-bit binary PPM"
+    );
+    let width: usize = header[1].parse()?;
+    let pixels = ppm.get(at..).context("pixels")?;
+    let (mut count, mut sum_x, mut sum_y) = (0, 0, 0);
+    for (index, pixel) in pixels.as_chunks::<3>().0.iter().enumerate() {
+        if *pixel == colour {
+            count += 1;
+            sum_x += index % width;
+            sum_y += index / width;
+        }
+    }
+    // A 24-pixel icon is mostly its fill colour.
+    Ok((count >= 100).then(|| (sum_x / count, sum_y / count)))
 }
 
 impl Drop for RunningKicad {
@@ -193,4 +322,43 @@ fn run(command: &mut Command) -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ppm(width: usize, height: usize, paint: impl Fn(usize, usize) -> [u8; 3]) -> Vec<u8> {
+        let mut image = format!("P6\n{width} {height}\n255\n").into_bytes();
+        for y in 0..height {
+            for x in 0..width {
+                image.extend(paint(x, y));
+            }
+        }
+        image
+    }
+
+    #[test]
+    fn finds_the_middle_of_the_icon_on_a_screenshot() {
+        let screenshot = ppm(100, 50, |x, y| {
+            if (60..80).contains(&x) && (10..30).contains(&y) {
+                ICON_FILL
+            } else {
+                [240, 240, 240]
+            }
+        });
+        assert_eq!(
+            middle_of_colour(&screenshot, ICON_FILL).expect("a PPM"),
+            Some((69, 19))
+        );
+    }
+
+    #[test]
+    fn finds_no_icon_on_a_screenshot_without_it() {
+        let screenshot = ppm(100, 50, |_, _| [240, 240, 240]);
+        assert_eq!(
+            middle_of_colour(&screenshot, ICON_FILL).expect("a PPM"),
+            None
+        );
+    }
 }

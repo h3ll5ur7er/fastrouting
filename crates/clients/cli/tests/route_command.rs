@@ -211,3 +211,27 @@ fn a_route_names_its_board_or_the_one_open_in_kicad() {
     let both = traxide(&["route", "--kicad", board.to_str().expect("utf-8")]);
     assert_eq!(both.status.code(), Some(2), "clap's usage error");
 }
+
+/// KiCad starts a plugin's entry point with no arguments, its API's socket in
+/// the environment.
+#[test]
+fn started_by_kicad_without_arguments_it_routes_the_board_open_in_kicad() {
+    let folder = tempfile::tempdir().expect("temp dir");
+    let run = Command::new(env!("CARGO_BIN_EXE_traxide"))
+        .env("KICAD_API_SOCKET", folder.path().join("api.sock"))
+        .output()
+        .expect("the binary runs");
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert_eq!(run.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("cannot reach KiCad"), "{stderr}");
+}
+
+#[test]
+fn started_without_arguments_outside_kicad_it_shows_how_to_use_it() {
+    let run = Command::new(env!("CARGO_BIN_EXE_traxide"))
+        .env_remove("KICAD_API_SOCKET")
+        .output()
+        .expect("the binary runs");
+    assert_eq!(run.status.code(), Some(2), "clap's usage error");
+    assert!(String::from_utf8_lossy(&run.stderr).contains("Usage"));
+}

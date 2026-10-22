@@ -1,12 +1,15 @@
 //! Planning Engine: how the work is planned (volatility V5 of
 //! docs/Architecture/Volatilities.md). For now: a minimum spanning tree per net,
-//! connections from hemmed-in pads first, then shortest first; and stubs that
-//! escape the pins of fine-pitch parts before anything is routed.
+//! connections from hemmed-in pads first, then shortest first; vias that join
+//! pads to their net's planes; and stubs that escape the pins of fine-pitch
+//! parts before anything is routed.
 
 mod escape;
 mod existing;
+mod planes;
 
 pub use escape::{Escaped, escape};
+pub use planes::{PlaneJoins, join_planes};
 
 use traxide_contracts::geometry::Point;
 use traxide_contracts::{Connection, Design, NetId, Pad, PadId, Plan};
@@ -291,6 +294,43 @@ mod tests {
             path: vec![at(1.0, 1.0), at(9.0, 1.0)],
         });
         assert_eq!(pads_of(&design, &plan(&design)), pairs(&[("A1", "A2")]));
+    }
+
+    #[test]
+    fn through_hole_pads_on_a_plane_of_their_net_need_no_connection() {
+        let design = DesignBuilder::new(30.0, 10.0)
+            .layers(3)
+            .plane_layer(1)
+            .plane("GND", 1, at(0.0, 0.0), at(20.0, 10.0))
+            .tht("J1", Some("GND"), at(2.0, 2.0), 1.6)
+            .tht("J2", Some("GND"), at(18.0, 8.0), 1.6)
+            .tht("J3", Some("GND"), at(25.0, 8.0), 1.6)
+            .build();
+        assert_eq!(pads_of(&design, &plan(&design)), pairs(&[("J2", "J3")]));
+    }
+
+    #[test]
+    fn a_via_of_the_board_on_a_plane_joins_the_copper_it_carries() {
+        let mut design = DesignBuilder::new(30.0, 10.0)
+            .layers(3)
+            .plane_layer(1)
+            .plane("GND", 1, at(0.0, 0.0), at(30.0, 10.0))
+            .smd("G1", Some("GND"), at(2.0, 2.0), 0.5, 0)
+            .tht("J1", Some("GND"), at(25.0, 8.0), 1.6)
+            .build();
+        let net = design.net_named("GND");
+        design.existing.tracks.push(Track {
+            net,
+            layer: LayerId(0),
+            width: 200_000,
+            path: vec![at(2.0, 2.0), at(3.0, 2.0)],
+        });
+        design.existing.vias.push(Via {
+            net,
+            kind: ViaKindId(0),
+            position: at(3.0, 2.0),
+        });
+        assert!(plan(&design).connections.is_empty());
     }
 
     #[test]
