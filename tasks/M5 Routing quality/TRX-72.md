@@ -12,3 +12,5 @@ From the TokenBoard report ([[Research/TokenBoard-report]]): traxide placed 547 
 
 - [ ] Measure where the pairs come from: rip-up costs paid on one layer, the via cost against the bend cost, the escapes
 - [ ] Fewer vias on the keyboard and TokenBoard without losing connections or time
+
+[[TRX-71]] lets a search change layers through a via of its net the board came with: TokenBoard's KiCad board takes 522 new vias instead of 553. Vias another connection routed are not used so, as rip-up may take them away; a path through one would need that connection kept or the via handed over.

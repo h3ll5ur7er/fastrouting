@@ -154,6 +154,34 @@ fn changes_layers_to_pass_a_wall_on_the_top() {
 }
 
 #[test]
+fn changes_layers_through_a_via_of_its_net_the_board_came_with_instead_of_placing_one_beside_it() {
+    let mut design = DesignBuilder::new(20.0, 10.0)
+        .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)
+        .smd("A2", Some("A"), at(15.0, 5.0), 1.0, 0)
+        .keepout(
+            wall(at(9.5, 0.0), at(10.5, 10.0)),
+            Some(0),
+            KeepoutScope::Everything,
+        )
+        .build();
+    design.rules.hole_to_hole = mm(0.25);
+    let existing = traxide_contracts::Via {
+        net: design.net_named("A"),
+        kind: traxide_contracts::ViaKindId(0),
+        position: at(8.03, 5.04),
+    };
+    design.existing.vias.push(existing.clone());
+    let result = route(&design, &[("A1", "A2")]);
+    assert!(result.unrouted.is_empty());
+    assert_eq!(result.routes.vias.len(), 1, "{:?}", result.routes.vias);
+    let mut everything = design.existing.clone();
+    everything.extend(result.routes);
+    let rules = traxide_rules::compile(&design, Purpose::Verification);
+    let verdict = traxide_verification::verify(&design, &rules, &everything);
+    assert_eq!(verdict.violations, []);
+}
+
+#[test]
 fn reports_a_connection_it_cannot_route() {
     let design = DesignBuilder::new(20.0, 10.0)
         .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)

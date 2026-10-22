@@ -3,7 +3,7 @@ use crate::history::History;
 use crate::path::{self, Step};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use traxide_contracts::geometry::{Point, Rect, Segment};
+use traxide_contracts::geometry::{Point, Rect, Segment, Shape};
 use traxide_contracts::{
     Connection, ConnectionId, ConstraintSet, Corridors, Design, LayerId, LayoutAccess, NetId,
     Obstruction, Pad, PadId, Profile, Via, ViaKindId,
@@ -293,6 +293,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             }
         }
 
+        let joins = self.existing_vias_of_the_net();
         let mut best_target = i64::MAX;
         let mut target_came = None;
         let mut open = BinaryHeap::new();
@@ -438,8 +439,65 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
                     }
                 }
             }
+            self.relax_through_existing_vias(state, &joins, |next| {
+                relax(Some(next), 0, None, scratch);
+            });
         }
         None
+    }
+
+    /// The copper of the vias of this net the board came with that lie in the
+    /// search's window: as they stay, a path may change layers through one
+    /// instead of placing a via of its own beside it, which would sit closer
+    /// to it than the hole-to-hole distance.
+    fn existing_vias_of_the_net(&self) -> Vec<Vec<(LayerId, Shape)>> {
+        self.design
+            .existing
+            .vias
+            .iter()
+            .filter(|via| via.net == self.net && self.grid.covers(via.position))
+            .map(|via| {
+                self.design
+                    .via_kind(via.kind)
+                    .copper
+                    .iter()
+                    .map(|c| (c.layer, c.shape.map(|p| p + via.position)))
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// Hands `relax` the states on the other layers of each existing via whose
+    /// copper covers `state`'s node on its layer and theirs.
+    fn relax_through_existing_vias(
+        &self,
+        state: State,
+        joins: &[Vec<(LayerId, Shape)>],
+        mut relax: impl FnMut(State),
+    ) {
+        let here = self.grid.point(state.node);
+        for copper in joins {
+            let covers = |layer: LayerId| {
+                copper
+                    .iter()
+                    .any(|(l, shape)| *l == layer && shape.nearest_point(here) == here)
+            };
+            if !covers(LayerId(state.layer)) {
+                continue;
+            }
+            for layer in self.design.layer_ids() {
+                if layer.0 != state.layer
+                    && self.design.layers[layer.index()].routable
+                    && covers(layer)
+                {
+                    relax(State {
+                        node: state.node,
+                        layer: layer.0,
+                        heading: UNSET,
+                    });
+                }
+            }
+        }
     }
 
     /// What a track segment costs beyond its length: nothing when it is clear,
