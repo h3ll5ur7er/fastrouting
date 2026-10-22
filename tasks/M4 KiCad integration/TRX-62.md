@@ -2,7 +2,8 @@
 id: TRX-62
 title: Check custom rules against KiCad's DRC on real boards
 type: improvement
-status: backlog
+status: in-progress
+assignee: claude
 priority: medium
 labels: [rules, kicad]
 layer: engine
