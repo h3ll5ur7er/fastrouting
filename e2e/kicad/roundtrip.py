@@ -6,6 +6,9 @@
       FOLDER/RECIPE.dsn, as a user would with File → Export → Specctra DSN.
       Its zones stay unfilled.
 
+  python3 roundtrip.py dsn BOARD.kicad_pcb
+      exports a saved board, with its project's rules, as BOARD.dsn.
+
   python3 roundtrip.py import BOARD.kicad_pcb SESSION.ses ROUTED.kicad_pcb
       imports the session into the board, as File → Import → Specctra Session
       does, saves the result as ROUTED.kicad_pcb and prints, as JSON, how many
@@ -56,6 +59,12 @@ def export(recipe: str, folder: Path) -> None:
         raise SystemExit(f"KiCad could not export {recipe} as DSN")
 
 
+def export_board(board_file: Path) -> None:
+    board = pcbnew.LoadBoard(str(board_file))
+    if not pcbnew.ExportSpecctraDSN(board, str(board_file.with_suffix(".dsn"))):
+        raise SystemExit(f"KiCad could not export {board_file} as DSN")
+
+
 def import_session(board_file: Path, session: Path, routed: Path) -> None:
     board = pcbnew.LoadBoard(str(board_file))
     if not pcbnew.ImportSpecctraSES(board, str(session)):
@@ -99,6 +108,8 @@ if __name__ == "__main__":
             build(recipe, Path(folder))
         case ["export", recipe, folder]:
             export(recipe, Path(folder))
+        case ["dsn", board_file]:
+            export_board(Path(board_file))
         case ["import", board_file, session, routed]:
             import_session(Path(board_file), Path(session), Path(routed))
         case ["stats", routed]:
