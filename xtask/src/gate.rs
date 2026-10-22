@@ -7,11 +7,13 @@
 //! the results in one, over the baseline. `--partial` compares only the boards the results
 //! hold, as after one shard of the corpus.
 
+use crate::corpus::negotiation_limit;
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::PathBuf;
+use std::time::Duration;
 
 const DEFAULT_BASELINE: &str = "corpus/baseline.json";
 
@@ -173,6 +175,14 @@ fn near_the_limit(baseline: &Outcome, timeout_seconds: u64) -> bool {
     }
 }
 
+/// A board that took the corpus's negotiation limit, in the baseline or now,
+/// was routed against the clock: how many nets it routes then depends on the
+/// runner's speed, by up to a tenth of them on the same commit.
+fn against_the_clock(seconds: [f64; 2], timeout_seconds: u64) -> bool {
+    let limit = negotiation_limit(Duration::from_secs(timeout_seconds)).as_secs_f64();
+    seconds.iter().any(|&s| s >= limit)
+}
+
 /// Clearly slower: more than twice the baseline's time and 10 s more.
 fn clearly_slower(seconds: f64, baseline_seconds: f64) -> bool {
     seconds > 2.0 * baseline_seconds && seconds > baseline_seconds + 10.0
@@ -243,7 +253,9 @@ fn compare_board(
                 verdict
                     .regressions
                     .push(format!("{board} is no longer complete: {against}"));
-            } else if routed + nets_allowed_lost(*nets) < *routed_before {
+            } else if routed + nets_allowed_lost(*nets) < *routed_before
+                && !against_the_clock([*seconds_before, *seconds], timeout_seconds)
+            {
                 verdict
                     .regressions
                     .push(format!("{board} routes fewer nets: {against}"));
@@ -252,9 +264,14 @@ fn compare_board(
                     .improvements
                     .push(format!("{board} routes more nets: {against}"));
             } else if routed < routed_before {
+                let how = if against_the_clock([*seconds_before, *seconds], timeout_seconds) {
+                    "fewer nets against the clock"
+                } else {
+                    "a few nets fewer"
+                };
                 verdict
                     .notes
-                    .push(format!("{board} routes a few nets fewer: {against}"));
+                    .push(format!("{board} routes {how}: {against}"));
             }
             if clearly_slower(*seconds, *seconds_before) {
                 verdict
@@ -424,6 +441,23 @@ mod tests {
         let v = verdict(finished(1.0, 100, 90), finished(1.0, 100, 88));
         assert!(v.regressions.is_empty());
         assert_eq!(v.notes.len(), 1);
+    }
+
+    #[test]
+    fn a_board_routed_against_the_clock_may_route_fewer_nets_on_another_runner() {
+        // traxide negotiates for 90 of the corpus's 120 s, so how far it gets
+        // there depends on the runner's speed.
+        for (before, now) in [
+            (finished(91.0, 415, 236), finished(92.0, 415, 227)),
+            (finished(60.0, 415, 236), finished(92.0, 415, 227)),
+            (finished(92.0, 415, 236), finished(60.0, 415, 227)),
+        ] {
+            let v = verdict(before, now);
+            assert!(v.regressions.is_empty(), "{v:?}");
+            assert_eq!(v.notes.len(), 1, "{v:?}");
+        }
+        let complete_before = verdict(finished(91.0, 9, 9), finished(91.0, 9, 8));
+        assert_eq!(complete_before.regressions.len(), 1);
     }
 
     #[test]
