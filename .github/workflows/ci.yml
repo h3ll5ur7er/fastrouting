@@ -47,6 +47,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The plugin test runs traxide inside KiCad's image: a static build runs on its C library.
       - run: rustup target add x86_64-unknown-linux-musl
+      # The test presses the plugin's toolbar button: it finds it on a screenshot and clicks it.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xdotool imagemagick
       - run: docker pull kicad/kicad:${{ matrix.kicad }}
       - run: cargo xtask e2e
         env:

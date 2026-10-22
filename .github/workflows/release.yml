@@ -1,0 +1,77 @@
+name: Release
+
+# On a version tag (v0.1.0), builds everything as the Binaries workflow does,
+# checks that only permissive licences went into the binary, and drafts a
+# GitHub release with the archives, the KiCad plugin's packages and their
+# checksums, for the maintainer to read through and publish.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  version:
+    name: The tag names traxide's version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "traxide-cli") | .version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "The tag is $GITHUB_REF_NAME, but Cargo.toml says traxide is $version."
+            exit 1
+          fi
+
+  licences:
+    name: Permissive licences only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+
+  binaries:
+    needs: [version, licences]
+    uses: ./.github/workflows/binaries.yml
+
+  release:
+    name: Draft the release
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+          merge-multiple: true
+      # Artifacts lose the executable bit; archives keep it for Linux and macOS.
+      - name: Archives and checksums
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          mkdir release
+          cd built
+          for folder in traxide-*/; do
+            target=${folder#traxide-}
+            target=${target%/}
+            name=traxide-$version-$target
+            mv "$folder" "$name"
+            case $target in
+              *windows*) (zip -qr "../release/$name.zip" "$name") ;;
+              *)
+                chmod +x "$name/traxide"
+                tar -czf "../release/$name.tar.gz" "$name"
+                ;;
+            esac
+          done
+          for package in traxide-kicad-*.zip; do
+            cp "$package" "../release/traxide-kicad-$version-${package#traxide-kicad-}"
+          done
+          cd ../release
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+      - name: Draft
+        run: gh release create "$GITHUB_REF_NAME" --draft --title "traxide $GITHUB_REF_NAME" --notes-file .github/release-notes.md release/*
+        env:
+          GH_TOKEN: ${{ github.token }}

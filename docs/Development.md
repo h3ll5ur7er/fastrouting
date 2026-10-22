@@ -28,11 +28,11 @@ crates/
     routing/  inspection/
   clients/
     cli/                     the traxide binary, including the Freerouting-compatible mode
-    kicad/                   the KiCad PCM package around the binary
     viewer/                  optional live viewer
     wasm/                    the web demo
 xtask/                       repository tasks: layer check, end-to-end test, later corpus and release
 spikes/                      throwaway prototypes of research tasks, outside the workspace and never released
+kicad-plugin/                the KiCad plugin: its plugin.json, PCM metadata and icons; the traxide binary is its entry point
 e2e/kicad/                   the KiCad half of the end-to-end test: board recipes, import, export
 fixtures/boards/             small DSN boards shared by the tests of several crates
 corpus/                      benchmark boards and baselines (Git LFS), with [[TRX-15]]
@@ -66,6 +66,7 @@ cargo run --release -p traxide-cli -- route board.dsn  # writes board.ses next t
 cargo test --all-features                              # unit and end-to-end tests
 cargo xtask layers                                     # the layer rules
 cargo xtask e2e                                        # the KiCad round trip, see below
+cargo xtask kicad-package linux TRAXIDE traxide-kicad-linux.zip  # the KiCad plugin's package with that binary
 ```
 
 Release builds use `lto = "fat"`, `codegen-units = 1` and `panic = "abort"`. Once the GPU backend exists ([[TRX-28]]) it will be a default feature, and `--no-default-features` will build a CPU-only binary.
@@ -94,10 +95,10 @@ Three levels, all run by `cargo test` except where noted:
 - **End-to-end tests** in `tests/` of the CLI crate: run the `traxide` binary on DSN files and check the SES it writes — every connection routed, no clearance violation.
 - **Real-world tests** through KiCad: `cargo xtask e2e` builds the board recipes of `e2e/kicad/boards.py` with KiCad's Python API, exports them as DSN, routes them with `traxide`, imports the sessions back into KiCad and requires KiCad's own DRC (`kicad-cli pcb drc`) to report no violations and no unconnected items. KiCad, not our code, is the judge. Results land in `target/e2e/<recipe>/`.
   - By default KiCad runs in the official Docker image `kicad/kicad:10.0`; `TRAXIDE_KICAD_IMAGE=kicad/kicad:9.0` tests KiCad 9. CI runs both.
-  - In Docker, each recipe is also routed in a running KiCad ([[TRX-31]]): the PCB editor opens the board on a virtual display (`xvfb-run`, Linux only) with its API enabled; its API must give the same design as the board file; `traxide route --kicad` routes it as a plugin would; KiCad saves it and its DRC must find it clean, with its copper zones refilled by traxide (`ground-pour`); one undo must take the routes back, two on a board with copper zones, whose refill is an undo step of its own. Results land in `target/e2e/<recipe>/in-kicad/`.
+  - In Docker, each recipe is also routed in a running KiCad ([[TRX-31]]): the PCB editor opens the board on a virtual display (`xvfb-run`, Linux only) with its API enabled; its API must give the same design as the board file; traxide's KiCad plugin, packaged as `cargo xtask kicad-package` packages it and installed as KiCad's *Install from File* installs it, routes it when the test presses its toolbar button (found on a screenshot by the colour of its icon, pressed with `xdotool`; both it and ImageMagick's `import` must be installed); KiCad saves it and its DRC must find it clean, with its copper zones refilled by traxide (`ground-pour`); one undo must take the routes back, two on a board with copper zones, whose refill is an undo step of its own. Results land in `target/e2e/<recipe>/in-kicad/`.
   - `cargo xtask e2e --local` uses an installed KiCad instead: `TRAXIDE_KICAD_PYTHON` names a Python that can `import pcbnew` (on macOS the one inside `KiCad.app`), `TRAXIDE_KICAD_CLI` the `kicad-cli`.
   - Name recipes to run only those: `cargo xtask e2e crossing matrix-6x17`. The default set stays fast; bigger boards are benchmarks ([[Benchmarks]]).
-  - A recipe with `custom_rules` saves them as `RECIPE.kicad_dru` and is routed only from its `.kicad_pcb`: DSN, and so the KiCad plugin, cannot carry custom rules. Building the static traxide for the plugin needs `rustup target add x86_64-unknown-linux-musl`.
+  - A recipe with `custom_rules` saves them as `RECIPE.kicad_dru` and is routed only from its `.kicad_pcb`: DSN cannot carry custom rules. Building the static traxide for the plugin needs `rustup target add x86_64-unknown-linux-musl`.
   - KiCad 7 and 8 are not supported: they are not what people route with, and KiCad 7 cannot import sessions from a script.
 - **Ground truth** from KiCad: `e2e/kicad/fixtures.py` exports boards together with KiCad's own placement of every pad; `crates/access/board/tests/kicad_ground_truth.rs` holds the DSN reader to it.
 - **Test designs** in code: `traxide-contracts` with the `testing` feature offers `DesignBuilder`, so engine tests build boards in a few lines.

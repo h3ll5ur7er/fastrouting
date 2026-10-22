@@ -60,15 +60,15 @@ In the order they are built:
 
 ## Distribution
 
-- **cargo-dist** generates the release workflow, archives, installers and checksums; one extra job assembles the KiCad PCM packages.
+- **A hand-written release workflow**, not cargo-dist ([[TRX-35]]): the Binaries workflow builds every target and the KiCad PCM packages (`cargo xtask kicad-package`) on each push, and the Release workflow runs it on a version tag, checks the licences with `cargo deny`, and drafts a GitHub release with the archives (`.tar.gz`, `.zip` for Windows), the packages and `SHA256SUMS`. cargo-dist was planned for installers and the glibc GPU builds; a binary needs no installer, and the GPU builds wait for the GPU backend ([[TRX-28]]), so it would only replace a workflow that already works.
 - **Targets**:
 
 | Target | Linking | GPU |
 | --- | --- | --- |
-| `x86_64`/`aarch64-unknown-linux-gnu` | glibc ≥ 2.28 (built with `cargo-zigbuild`), everything else static | Yes |
+| `x86_64`/`aarch64-unknown-linux-gnu` | glibc ≥ 2.28 (built with `cargo-zigbuild`), everything else static; once the GPU backend exists | Yes |
 | `x86_64`/`aarch64-unknown-linux-musl` | Fully static | **No**: a static musl binary cannot load `libvulkan.so` |
 | `x86_64`/`aarch64-pc-windows-msvc` | `+crt-static` | Yes |
-| macOS universal (`lipo` of both) | System frameworks only; signed and notarised | Yes (Metal) |
+| macOS universal (`lipo` of both) | System frameworks only; signed ad hoc, to be signed with a Developer ID and notarised | Yes (Metal) |
 
 - **Size**: `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true`, profile-guided optimisation for releases (~20 % faster in fastroute's experience). Expect a few MB CPU-only, several more with wgpu (estimate).
 
