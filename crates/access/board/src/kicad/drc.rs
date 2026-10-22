@@ -35,6 +35,16 @@ pub(crate) fn report(
                 ),
                 vec![item(*a, Some(*layer)), item(*b, Some(*layer))],
             )),
+            // KiCad's default severity for holes too close is a warning.
+            Violation::HoleToHole { a, b, required } => violations.push(json!({
+                "type": "hole_to_hole",
+                "description": format!(
+                    "Drilled hole too close to other hole (min {:.4} mm)",
+                    millimetres(*required)
+                ),
+                "severity": "warning",
+                "items": [item(*a, None), item(*b, None)],
+            })),
             Violation::Edge {
                 layer,
                 item: copper,
@@ -361,6 +371,42 @@ mod tests {
                     "items": [via],
                 },
             ])
+        );
+    }
+
+    #[test]
+    fn holes_too_close_are_kicads_hole_to_hole_warning() {
+        let design = DesignBuilder::new(30.0, 20.0)
+            .smd("A-1", Some("N"), at(1.0, 1.0), 1.0, 0)
+            .build();
+        let via = |x| traxide_contracts::Via {
+            net: design.net_named("N"),
+            kind: traxide_contracts::ViaKindId(0),
+            position: at(x, 5.0),
+        };
+        let routes = Routes {
+            tracks: vec![],
+            vias: vec![via(5.0), via(5.5)],
+        };
+        let verdict = Verdict {
+            violations: vec![Violation::HoleToHole {
+                a: CopperItem::Via(0),
+                b: CopperItem::Via(1),
+                required: 250_000,
+            }],
+        };
+
+        let report = report("b.dsn", instant(0), &design, &routes, &verdict);
+
+        let via = |x| json!({"description": "Via [N] on L1 - L2", "pos": {"x": x, "y": 5.0}});
+        assert_eq!(
+            report["violations"],
+            json!([{
+                "type": "hole_to_hole",
+                "description": "Drilled hole too close to other hole (min 0.2500 mm)",
+                "severity": "warning",
+                "items": [via(5.0), via(5.5)],
+            }])
         );
     }
 

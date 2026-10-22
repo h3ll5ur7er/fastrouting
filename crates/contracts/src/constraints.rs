@@ -16,6 +16,7 @@ pub struct ConstraintSet {
     /// Per hole of the outline, in its order, where rules on the footprint
     /// that draws it set another; the rest keep `edge_clearance`.
     cutout_clearances: Vec<i32>,
+    hole_to_hole: i32,
 }
 
 impl ConstraintSet {
@@ -41,7 +42,19 @@ impl ConstraintSet {
             largest_clearance,
             edge_clearance,
             cutout_clearances: Vec::new(),
+            hole_to_hole: 0,
         }
+    }
+
+    /// How far apart the holes of vias stay.
+    #[must_use]
+    pub fn with_hole_to_hole(mut self, distance: i32) -> Self {
+        self.hole_to_hole = distance;
+        self
+    }
+
+    pub fn hole_to_hole(&self) -> i32 {
+        self.hole_to_hole
     }
 
     /// The edge clearance of each hole of the outline, in its order.

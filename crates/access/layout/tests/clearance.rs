@@ -310,3 +310,51 @@ fn copper_keeps_the_clearance_a_rule_sets_for_the_footprint_that_draws_a_cutout(
         assert!(!layout.is_track_clear(a, TOP, segment(at(12.5, 5.8), at(13.5, 5.8)), mm(0.2)));
     });
 }
+
+#[test]
+fn copper_keeps_a_keepouts_clearance_from_it() {
+    let zone = Shape::Polygon(Polygon::rectangle(Rect {
+        min: at(9.0, 6.0),
+        max: at(11.0, 10.0),
+    }));
+    let mut design = DesignBuilder::new(20.0, 10.0)
+        .smd("P1", Some("A"), at(5.0, 2.0), 1.0, 0)
+        .smd("P2", Some("B"), at(15.0, 2.0), 1.0, 0)
+        .keepout(zone, None, KeepoutScope::Everything)
+        .build();
+    // 0.1 mm below the keepout: clear of a rule area, too close to a keepout
+    // that asks 0.2 mm.
+    let below = segment(at(8.0, 5.8), at(12.0, 5.8));
+    check(&design, |layout, a, _| {
+        assert!(layout.is_track_clear(a, TOP, below, mm(0.2)));
+    });
+    design.keepouts[0].clearance = mm(0.2);
+    check(&design, |layout, a, _| {
+        assert!(!layout.is_track_clear(a, TOP, below, mm(0.2)));
+    });
+}
+
+#[test]
+fn a_via_keeps_the_hole_to_hole_distance_but_may_sit_on_a_via_of_its_net() {
+    let mut design = board();
+    design.rules.hole_to_hole = mm(0.25);
+    check(&design, |layout, a, _| {
+        let via = |x| Via {
+            net: a,
+            kind: ViaKindId(0),
+            position: at(x, 5.0),
+        };
+        layout.add_route(
+            ConnectionId(0),
+            &Routes {
+                tracks: vec![],
+                vias: vec![via(10.0)],
+            },
+        );
+        // Drills of 0.3 mm: on the via itself it is the same hole; 0.5 mm
+        // apart the holes are 0.2 mm apart, 0.6 mm apart 0.3 mm.
+        assert!(layout.is_via_clear(&via(10.0)));
+        assert!(!layout.is_via_clear(&via(10.5)));
+        assert!(layout.is_via_clear(&via(10.6)));
+    });
+}

@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use traxide_board_access::BoardError;
 pub use traxide_board_access::RUNNING_KICAD;
 use traxide_contracts::{
-    Connection, ConstraintSet, CopperItem, Design, Event, NetClassId, PadId, Routes, RoutingResult,
-    Stage, Verdict, Violation,
+    Connection, ConstraintSet, CopperItem, Design, Event, NetClassId, NetId, PadId, Plan, Profile,
+    Routes, RoutingResult, Stage, Verdict, Violation,
 };
 use traxide_detailed::Router;
 use traxide_events::{CancelToken, Publisher};
@@ -161,7 +161,9 @@ fn involves_new_copper(violation: &Violation, existing: &Routes) -> bool {
         CopperItem::Via(index) => index >= existing.vias.len(),
     };
     match violation {
-        Violation::Clearance { a, b, .. } => is_new(a) || is_new(b),
+        Violation::Clearance { a, b, .. } | Violation::HoleToHole { a, b, .. } => {
+            is_new(a) || is_new(b)
+        }
         Violation::Edge { item, .. } | Violation::Keepout { item, .. } => is_new(item),
         Violation::Unconnected { .. } => true,
     }
@@ -241,7 +243,7 @@ pub fn route(
     }
     let RoutingResult {
         routes: routed,
-        unrouted,
+        mut unrouted,
         hemmed_in,
         exits_taken,
         cut_off,
@@ -249,6 +251,37 @@ pub fn route(
     let mut routes = joins.copper.clone();
     routes.extend(escaped.copper_used(&unrouted));
     routes.extend(routed);
+    let verification_rules = traxide_rules::compile(&design, Purpose::Verification);
+    let mut total = total;
+    if !cancel.is_cancelled() {
+        let mut everything = design.existing.clone();
+        everything.extend(routes.clone());
+        let verdict = traxide_verification::verify(&design, &verification_rules, &everything);
+        let to_join = plane_pads_to_join(&design, &verdict);
+        if !to_join.is_empty() {
+            // Its connections are no part of the plan the layout's routes
+            // belong to, so they may rip none of them up.
+            let without_rip_up = Profile {
+                max_rip_ups: 0,
+                ..profile.clone()
+            };
+            total += to_join.len();
+            let joined = Router::new(&escaped.design, &rules, &without_rip_up)
+                .with_threads(threads)
+                .route_plan(
+                    &Plan {
+                        connections: to_join,
+                    },
+                    None,
+                    &mut layout,
+                    cancel,
+                    events,
+                );
+            routes.extend(joined.routes);
+            unrouted.extend(joined.unrouted);
+        }
+    }
+    let routes = routes.without_repeated_vias(&design.existing);
     let at_pins = |connections: Vec<Connection>| -> Vec<Connection> {
         connections
             .into_iter()
@@ -263,7 +296,6 @@ pub fn route(
     events.publish(Event::StageStarted(Stage::Verifying));
     let mut everything = design.existing.clone();
     everything.extend(routes.clone());
-    let verification_rules = traxide_rules::compile(&design, Purpose::Verification);
     let full_verdict = traxide_verification::verify(&design, &verification_rules, &everything);
     events.publish(Event::StageStarted(Stage::Storing));
     let output = job
@@ -334,4 +366,84 @@ fn pads_too_close(design: &Design, rules: &ConstraintSet) -> Vec<String> {
             )
         })
         .collect()
+}
+
+/// The connections that join, by track, the pads of a net with a plane that
+/// the plane's fill does not reach, as other nets' copper walls their join
+/// off: each to the nearest pad of its net that is joined (TRX-67).
+fn plane_pads_to_join(design: &Design, verdict: &Verdict) -> Vec<Connection> {
+    let has_a_plane = |net: NetId| {
+        design
+            .planes
+            .iter()
+            .any(|p| p.net == net && !design.layers[p.layer.index()].routable)
+    };
+    let mut connections = Vec::new();
+    for violation in &verdict.violations {
+        let Violation::Unconnected { net, pads: apart } = violation else {
+            continue;
+        };
+        if !has_a_plane(*net) {
+            continue;
+        }
+        let joined: Vec<PadId> = (design.net(*net).pads.iter())
+            .copied()
+            .filter(|pad| !apart.contains(pad))
+            .collect();
+        for &pad in apart {
+            let at = design.pad(pad).position;
+            let nearest =
+                (joined.iter().copied()).min_by_key(|&j| design.pad(j).position.distance(at));
+            if let Some(to) = nearest {
+                connections.push(Connection {
+                    net: *net,
+                    from: pad,
+                    to,
+                });
+            }
+        }
+    }
+    connections
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use traxide_contracts::testing::{DesignBuilder, at};
+
+    #[test]
+    fn a_pad_walled_off_from_its_plane_is_joined_by_track_to_the_nearest_joined_pad() {
+        let design = DesignBuilder::new(20.0, 10.0)
+            .layers(3)
+            .plane_layer(1)
+            .plane("GND", 1, at(0.0, 0.0), at(20.0, 10.0))
+            .smd("G1", Some("GND"), at(2.0, 5.0), 1.0, 0)
+            .smd("G2", Some("GND"), at(12.0, 5.0), 1.0, 0)
+            .smd("G3", Some("GND"), at(15.0, 5.0), 1.0, 0)
+            .smd("A1", Some("A"), at(2.0, 8.0), 1.0, 0)
+            .smd("A2", Some("A"), at(18.0, 8.0), 1.0, 0)
+            .build();
+        let gnd = design.net_named("GND");
+        let verdict = Verdict {
+            violations: vec![
+                Violation::Unconnected {
+                    net: gnd,
+                    pads: vec![design.pad_named("G3")],
+                },
+                // A net without a plane is left to routing.
+                Violation::Unconnected {
+                    net: design.net_named("A"),
+                    pads: vec![design.pad_named("A2")],
+                },
+            ],
+        };
+        assert_eq!(
+            plane_pads_to_join(&design, &verdict),
+            [Connection {
+                net: gnd,
+                from: design.pad_named("G3"),
+                to: design.pad_named("G2"),
+            }]
+        );
+    }
 }

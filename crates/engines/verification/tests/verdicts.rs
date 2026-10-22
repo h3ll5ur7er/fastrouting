@@ -357,3 +357,150 @@ fn a_rule_on_the_footprint_that_draws_a_cutout_sets_the_clearance_from_it() {
         assert!(!check(&other, close(&other)).is_clean());
     }
 }
+
+#[test]
+fn a_plane_joins_nothing_that_other_nets_copper_walls_off_from_its_fill() {
+    // The plane is filled around other nets' copper, keeping their clearance:
+    // twelve VCC vias 1.6 mm around J1 leave no gap the fill can pass, so J1
+    // lies in an island of its own, as KiCad fills it.
+    let design = board_with_a_plane()
+        .tht("J1", Some("GND"), at(6.0, 5.0), 1.6)
+        .tht("V1", Some("VCC"), at(18.0, 8.0), 1.6)
+        .build();
+    let ring: Vec<Via> = (0..12)
+        .map(|i| {
+            let angle = f64::from(i) * std::f64::consts::TAU / 12.0;
+            via(
+                &design,
+                "VCC",
+                at(6.0 + 1.6 * angle.cos(), 5.0 + 1.6 * angle.sin()),
+            )
+        })
+        .collect();
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: [vec![via(&design, "GND", at(3.0, 5.0))], ring].concat(),
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J1")]
+        }]
+    );
+}
+
+#[test]
+fn a_plane_keeps_its_clearance_from_the_planes_of_other_nets() {
+    // Two VCC pours leave a corridor of 0.3 mm in the GND plane, narrower than
+    // its clearance from them on both sides: the fill does not reach J1's via.
+    let design = board_with_a_plane()
+        .plane("VCC", 1, at(6.0, 0.0), at(10.0, 1.85))
+        .plane("VCC", 1, at(6.0, 2.15), at(10.0, 10.0))
+        .smd("J1", Some("GND"), at(8.0, 2.0), 0.4, 0)
+        .tht("V1", Some("VCC"), at(18.0, 8.0), 1.6)
+        .build();
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: vec![
+            via(&design, "GND", at(3.0, 5.0)),
+            via(&design, "GND", at(8.0, 2.0)),
+        ],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J1")]
+        }]
+    );
+}
+
+#[test]
+fn a_plane_joins_nothing_in_a_window_cut_out_of_it() {
+    use traxide_contracts::geometry::{Polygon, Rect};
+    let mut design = board_with_a_plane()
+        .tht("J1", Some("GND"), at(7.0, 5.0), 1.6)
+        .build();
+    design.planes[0].holes = vec![Polygon::rectangle(Rect {
+        min: at(5.0, 3.0),
+        max: at(9.0, 7.0),
+    })];
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: vec![via(&design, "GND", at(3.0, 5.0))],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J1")]
+        }]
+    );
+}
+
+#[test]
+fn copper_keeps_a_keepouts_clearance_from_it() {
+    use traxide_contracts::KeepoutScope;
+    use traxide_contracts::geometry::{Polygon, Rect, Shape};
+    // As TokenBoard's LED cut-outs come in a DSN: keepouts that ask 0.2 mm.
+    let mut design = board();
+    design.keepouts = vec![traxide_contracts::Keepout {
+        layer: None,
+        shape: Shape::Polygon(Polygon::rectangle(Rect {
+            min: at(9.0, 6.0),
+            max: at(11.0, 9.0),
+        })),
+        scope: KeepoutScope::Everything,
+        clearance: mm(0.2),
+    }];
+    // The track's edge 0.1 mm below the keepout.
+    let close = Routes {
+        tracks: vec![track(
+            &design,
+            "A",
+            0,
+            &[
+                at(2.0, 5.0),
+                at(8.0, 5.0),
+                at(8.0, 5.8),
+                at(12.0, 5.8),
+                at(12.0, 5.0),
+                at(18.0, 5.0),
+            ],
+        )],
+        vias: vec![],
+    };
+    assert!(
+        check(&design, close)
+            .violations
+            .contains(&Violation::Keepout {
+                layer: LayerId(0),
+                item: CopperItem::Track(0)
+            })
+    );
+}
+
+#[test]
+fn vias_closer_than_the_hole_to_hole_distance_are_reported_whatever_their_nets() {
+    let mut design = board();
+    design.rules.hole_to_hole = mm(0.25);
+    // Holes of 0.3 mm: 0.5 mm apart leaves 0.2 mm between them, 0.6 mm 0.3 mm.
+    let routes = Routes {
+        tracks: vec![track(&design, "A", 0, &[at(2.0, 5.0), at(18.0, 5.0)])],
+        vias: vec![
+            via(&design, "A", at(5.0, 5.0)),
+            via(&design, "A", at(5.5, 5.0)),
+            via(&design, "A", at(12.0, 5.0)),
+            via(&design, "A", at(12.6, 5.0)),
+        ],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::HoleToHole {
+            a: CopperItem::Via(0),
+            b: CopperItem::Via(1),
+            required: mm(0.25),
+        }]
+    );
+}

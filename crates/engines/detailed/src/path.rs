@@ -9,20 +9,22 @@ pub(crate) struct Step {
     pub(crate) via: Option<ViaKindId>,
 }
 
-/// One track per stretch on a layer and a via at each change of layer, with the
-/// points that lie on a straight line dropped.
+/// One track per stretch on a layer and a via at each change of layer that
+/// takes one, with the points that lie on a straight line dropped.
 pub(crate) fn to_routes(steps: &[Step], net: NetId, width: i32) -> Routes {
     let mut routes = Routes::default();
     let mut stretch: Vec<Point> = Vec::new();
     let mut layer = steps.first().map_or(LayerId(0), |s| s.layer);
     for step in steps {
-        if let Some(kind) = step.via {
+        if step.layer != layer || step.via.is_some() {
             finish(&mut routes, &mut stretch, net, layer, width);
-            routes.vias.push(Via {
-                net,
-                kind,
-                position: step.at,
-            });
+            if let Some(kind) = step.via {
+                routes.vias.push(Via {
+                    net,
+                    kind,
+                    position: step.at,
+                });
+            }
             layer = step.layer;
         }
         if stretch.last() != Some(&step.at) {

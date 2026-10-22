@@ -191,3 +191,45 @@ fn a_via_padstack_the_session_does_not_define_is_the_design_via_of_that_name() {
     let read = parse_ses(ses, &design).expect("valid session");
     assert_eq!(read.vias[0].kind, ViaKindId(0));
 }
+
+/// The fixture with a wire of its own that is not fixed, beside its protected one.
+fn design_with_unfixed_wiring() -> Design {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/two-resistors.dsn"
+    ))
+    .expect("fixture exists")
+    .replace(
+        "(wire (path B.Cu 200  10000 -2000  12000 -2000)(net A)(type protect))",
+        "(wire (path B.Cu 200  10000 -2000  12000 -2000)(net A)(type protect))
+    (wire (path F.Cu 200  20000 -2000  22000 -2000)(net A))",
+    );
+    parse_dsn(&text).expect("valid")
+}
+
+#[test]
+fn wiring_that_comes_fixed_or_protected_is_locked() {
+    let design = design_with_unfixed_wiring();
+    assert_eq!(design.existing.tracks.len(), 2);
+    assert_eq!(design.locked.tracks.len(), 1);
+    assert_eq!(design.locked.tracks[0].layer, LayerId(1));
+}
+
+#[test]
+fn a_session_leaves_out_the_locked_wiring_and_keeps_the_rest() {
+    // KiCad's import keeps the board's locked copper and replaces the rest
+    // with the session's: locked wiring in it would come in twice.
+    let design = design_with_unfixed_wiring();
+    let folder = tempfile::tempdir().expect("temporary folder");
+    let (board, session) = (
+        folder.path().join("board.dsn"),
+        folder.path().join("board.ses"),
+    );
+    std::fs::write(&board, "").expect("written");
+    traxide_board_access::store_routes(&session, &board, &design, &Routes::default())
+        .expect("stored");
+    let stored = parse_ses(&std::fs::read_to_string(&session).expect("read"), &design)
+        .expect("valid session");
+    assert_eq!(stored.tracks.len(), 1);
+    assert_eq!(stored.tracks[0].layer, LayerId(0));
+}

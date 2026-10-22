@@ -114,6 +114,10 @@ pub fn compile(design: &Design, purpose: Purpose) -> ConstraintSet {
         edge_clearance,
     )
     .with_cutout_clearances(cutout_clearances)
+    .with_hole_to_hole(match design.rules.hole_to_hole {
+        0 => 0,
+        apart => apart + margin,
+    })
 }
 
 /// The width of a via's largest copper.
@@ -173,6 +177,7 @@ mod tests {
             })
             .into(),
             cutout_footprints: Vec::new(),
+            locked: Routes::default(),
             nets: vec![
                 Net {
                     name: "signal".into(),
@@ -200,6 +205,7 @@ mod tests {
                 default_class: NetClassId(0),
                 edge_clearance: 250,
                 hole_clearance: 0,
+                hole_to_hole: 0,
                 custom: vec![],
             },
             resolution,

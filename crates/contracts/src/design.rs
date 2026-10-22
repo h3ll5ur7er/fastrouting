@@ -20,6 +20,9 @@ pub struct Design {
     pub planes: Vec<Plane>,
     /// Copper already on the board; routing keeps it as it is.
     pub existing: Routes,
+    /// The part of it the board's program keeps itself, as it is locked there:
+    /// a session leaves it out, as KiCad's import keeps it and would add it twice.
+    pub locked: Routes,
     pub rules: DesignRules,
     /// The coordinate step of the board's format. Routes are rounded to it when
     /// stored, so routing keeps that much extra clearance.
@@ -115,6 +118,13 @@ pub struct Plane {
     pub net: NetId,
     pub layer: LayerId,
     pub outline: Polygon,
+    /// Cut out of it, as windows: nothing is poured there.
+    pub holes: Vec<Polygon>,
+    /// How far its fill keeps from other nets' copper where its own setting
+    /// asks more than the rules; 0 where the format keeps none.
+    pub clearance: i32,
+    /// How narrow its fill may get: narrower necks are left out of it.
+    pub min_width: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +133,9 @@ pub struct Keepout {
     pub layer: Option<LayerId>,
     pub shape: Shape,
     pub scope: KeepoutScope,
+    /// How far copper keeps from it: a Specctra keepout asks the clearance as
+    /// copper does, a rule area of KiCad's only that copper stays out.
+    pub clearance: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +154,8 @@ pub struct DesignRules {
     pub edge_clearance: i32,
     /// How far copper of other nets stays from a via's hole.
     pub hole_clearance: i32,
+    /// How far apart the holes of vias stay, whatever their nets.
+    pub hole_to_hole: i32,
     /// Rules for particular copper beyond those of its class, in the order the
     /// board states them: where several apply, the last one counts, and it
     /// overrides the class's and the board's values.

@@ -157,6 +157,25 @@ fn reads_via_padstacks() {
 }
 
 #[test]
+fn a_via_from_kicad_has_the_drill_its_name_gives() {
+    // KiCad names the via padstacks it exports after their diameter and drill
+    // in micrometres; a DSN has no other place for the drill.
+    assert_eq!(two_resistors().via_kinds[0].drill, Some(mm(0.3)));
+}
+
+#[test]
+fn a_via_from_another_tool_has_no_known_drill() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/two-resistors.dsn"
+    ))
+    .expect("fixture exists")
+    .replace("KiCad's Pcbnew", "Some Other CAD");
+    let design = specctra::parse_dsn(&text).expect("valid");
+    assert_eq!(design.via_kinds[0].drill, None);
+}
+
+#[test]
 fn reads_the_board_outline() {
     let design = two_resistors();
     let expected = Rect {
@@ -231,6 +250,15 @@ fn keepouts_of_a_footprint_move_with_it() {
         .expect("the keepout of R2's image, 3 mm above its origin");
     assert_eq!(hole.layer, Some(layer(&design, "F.Cu")));
     assert_eq!(hole.scope, KeepoutScope::Everything);
+}
+
+#[test]
+fn a_keepout_keeps_the_designs_default_clearance() {
+    // A Specctra keepout asks the clearance as copper does, as Freerouting
+    // keeps it; the fixture's rule asks 200.1 µm.
+    let design = two_resistors();
+    assert!(!design.keepouts.is_empty());
+    assert!(design.keepouts.iter().all(|k| k.clearance == 200_100));
 }
 
 #[test]
@@ -584,4 +612,39 @@ fn a_plane_of_a_net_the_network_does_not_list_is_left_out() {
     let plane = "(plane GND (polygon B.Cu 0  30000 -20000  0 -20000  0 0  30000 0))";
     let design = with_power_bottom(&two_resistors_text(), plane);
     assert!(design.planes.is_empty(), "{:?}", design.planes);
+}
+
+#[test]
+fn a_window_in_a_plane_is_a_hole_of_it() {
+    // KiCad writes a window for every hole of a zone, as TokenBoard's VLED
+    // plane has one where its +3V3 island sits.
+    let plane = "(plane A (polygon B.Cu 0  1000 -1000  29000 -1000  29000 -19000  1000 -19000)
+                   (window (polygon B.Cu 0  10000 -5000  20000 -5000  20000 -15000  10000 -15000)))";
+    let design = with_power_bottom(&two_resistors_text(), plane);
+    let [plane] = &design.planes[..] else {
+        panic!("one plane: {:?}", design.planes);
+    };
+    let [hole] = &plane.holes[..] else {
+        panic!("one hole: {:?}", plane.holes);
+    };
+    assert_eq!(
+        hole.bounds(),
+        Rect {
+            min: Point::new(mm(10.0), mm(5.0)),
+            max: Point::new(mm(20.0), mm(15.0)),
+        }
+    );
+}
+
+#[test]
+fn a_window_in_the_boundary_is_a_hole_in_the_board() {
+    let text = two_resistors_text().replace(
+        "(path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000)",
+        "(path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000)
+      (window (rect pcb 10000 -5000 12000 -7000))",
+    );
+    let design = specctra::parse_dsn(&text).expect("valid");
+    assert_eq!(design.outline.holes().len(), 1);
+    assert!(!design.outline.contains(Point::new(mm(11.0), mm(6.0))));
+    assert!(design.outline.contains(Point::new(mm(5.0), mm(6.0))));
 }

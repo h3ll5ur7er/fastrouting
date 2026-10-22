@@ -159,7 +159,10 @@ impl<'a> DsnReader<'a> {
             .enumerate()
             .map(|(i, p)| (p.name.clone(), PadId::from_index(i)))
             .collect();
-        let mut via_kinds = ViaKinds::default();
+        let mut via_kinds = ViaKinds {
+            kinds: Vec::new(),
+            from_kicad: self.is_from_kicad(),
+        };
         let rules = self.rules(&padstacks, &mut via_kinds)?;
         let mut nets = self.nets(&pad_by_name)?;
         let mut warnings = Vec::new();
@@ -185,11 +188,22 @@ impl<'a> DsnReader<'a> {
                 pads[pad.index()].net = Some(NetId::from_index(index));
             }
         }
-        let existing = self.wiring(&nets, &padstacks, &mut via_kinds)?;
+        let (existing, locked) = self.wiring(&nets, &padstacks, &mut via_kinds)?;
+        // Freerouting keeps the clearance from keepouts, as from copper.
+        let clearance = rules.design.classes[rules.design.default_class.index()].clearance;
+        let keepouts = [self.keepouts()?, footprint_keepouts]
+            .concat()
+            .into_iter()
+            .map(|keepout| Keepout {
+                clearance,
+                ..keepout
+            })
+            .collect();
         Ok(Design {
             outline: self.outline()?,
             cutout_footprints: Vec::new(),
-            keepouts: [self.keepouts()?, footprint_keepouts].concat(),
+            locked,
+            keepouts,
             planes: self.planes(&nets)?,
             layers: self.layers,
             nets,
@@ -233,8 +247,12 @@ impl<'a> DsnReader<'a> {
             .structure
             .children("boundary")
             .flat_map(Sexp::args)
-            .filter(|shape| shape.keyword().is_some())
+            .filter(|shape| shape.keyword().is_some_and(|k| k != "window"))
             .collect();
+        let mut holes = Vec::new();
+        for boundary in self.structure.children("boundary") {
+            holes.extend(self.windows(boundary)?);
+        }
         let is_signal = |shape: &&Sexp| shape.args().first().and_then(Sexp::atom) == Some("signal");
         let chosen: Vec<&Sexp> = if shapes.iter().any(is_signal) {
             shapes.into_iter().filter(is_signal).collect()
@@ -243,27 +261,44 @@ impl<'a> DsnReader<'a> {
         };
         let polygons = chosen
             .into_iter()
-            .map(|shape| {
-                let polygon = match shape.keyword() {
-                    Some("path" | "polygon") => {
-                        self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
-                    }
-                    Some("rect") => {
-                        let corners = self.units.points(&shape.args()[1..])?;
-                        Polygon::rectangle(
-                            Rect::around(corners).ok_or_else(|| shape.invalid("empty rect"))?,
-                        )
-                    }
-                    _ => return Err(shape.invalid("unsupported boundary shape")),
-                };
-                Ok(polygon.map(to_board))
-            })
+            .map(|shape| self.outline_polygon(shape))
             .collect::<Result<Vec<_>, BoardError>>()?;
-        Region::new(polygons).ok_or_else(|| first.invalid("empty boundary"))
+        Region::new(polygons)
+            .map(|region| region.with_holes(holes))
+            .ok_or_else(|| first.invalid("empty boundary"))
     }
 
-    /// `(plane NET (polygon LAYER …))`, as KiCad writes its copper zones. A
-    /// plane of a net the network does not list joins no pin, and is left out.
+    /// A polygon of the boundary or a window, in board coordinates.
+    fn outline_polygon(&self, shape: &Sexp) -> Result<Polygon, BoardError> {
+        let polygon = match shape.keyword() {
+            Some("path" | "polygon") => {
+                self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
+            }
+            Some("rect") => {
+                let corners = self.units.points(&shape.args()[1..])?;
+                Polygon::rectangle(
+                    Rect::around(corners).ok_or_else(|| shape.invalid("empty rect"))?,
+                )
+            }
+            _ => return Err(shape.invalid("unsupported outline shape")),
+        };
+        Ok(polygon.map(to_board))
+    }
+
+    /// The windows of `parent`: holes cut out of it.
+    fn windows(&self, parent: &Sexp) -> Result<Vec<Polygon>, BoardError> {
+        let mut holes = Vec::new();
+        for window in parent.children("window") {
+            for shape in window.args().iter().filter(|a| a.keyword().is_some()) {
+                holes.push(self.outline_polygon(shape)?);
+            }
+        }
+        Ok(holes)
+    }
+
+    /// `(plane NET (polygon LAYER …) (window …)…)`, as KiCad writes its copper
+    /// zones, a window for each hole. A plane of a net the network does not
+    /// list joins no pin, and is left out.
     fn planes(&self, nets: &[Net]) -> Result<Vec<Plane>, BoardError> {
         let mut planes = Vec::new();
         for plane in self.structure.children("plane") {
@@ -271,7 +306,10 @@ impl<'a> DsnReader<'a> {
             let Some(net) = nets.iter().position(|n| n.name == name) else {
                 continue;
             };
-            for shape in plane.args().iter().filter(|a| a.keyword().is_some()) {
+            let holes = self.windows(plane)?;
+            let shapes =
+                (plane.args().iter()).filter(|a| a.keyword().is_some_and(|k| k != "window"));
+            for shape in shapes {
                 let LayeredShape { layers, shape } = self.shape(shape)?;
                 let Shape::Polygon(outline) = shape else {
                     continue;
@@ -280,6 +318,9 @@ impl<'a> DsnReader<'a> {
                     net: NetId::from_index(net),
                     layer,
                     outline: outline.map(to_board),
+                    holes: holes.clone(),
+                    clearance: 0,
+                    min_width: 0,
                 }));
             }
         }
@@ -328,6 +369,7 @@ impl<'a> DsnReader<'a> {
                 layer: None,
                 shape,
                 scope,
+                clearance: 0,
             }];
         }
         layers
@@ -336,6 +378,7 @@ impl<'a> DsnReader<'a> {
                 layer: Some(layer),
                 shape: shape.clone(),
                 scope,
+                clearance: 0,
             })
             .collect()
     }
@@ -525,6 +568,8 @@ impl<'a> DsnReader<'a> {
                 default_class: NetClassId(0),
                 edge_clearance: self.edge_clearance(clearance),
                 hole_clearance: 0,
+                // A DSN carries none: KiCad's default, which JLCPCB asks too.
+                hole_to_hole: 250_000,
                 custom: vec![],
             },
             class_of_net,
@@ -607,10 +652,17 @@ impl<'a> DsnReader<'a> {
         nets: &[Net],
         padstacks: &HashMap<&str, Vec<LayeredShape>>,
         via_kinds: &mut ViaKinds,
-    ) -> Result<Routes, BoardError> {
-        let mut routes = Routes::default();
+    ) -> Result<(Routes, Routes), BoardError> {
+        let (mut routes, mut locked) = (Routes::default(), Routes::default());
         let Some(wiring) = self.root.child("wiring") else {
-            return Ok(routes);
+            return Ok((routes, locked));
+        };
+        // KiCad exports locked copper as fixed; Freerouting writes the wiring
+        // it was given back as protected.
+        let is_locked = |item: &Sexp| {
+            item.child("type")
+                .and_then(|t| t.atoms().next())
+                .is_some_and(|t| t == "fix" || t == "protect")
         };
         let net_of = |item: &Sexp| -> Result<NetId, BoardError> {
             let name = item.required_child("net")?.arg_atom(0, "net name")?;
@@ -642,7 +694,7 @@ impl<'a> DsnReader<'a> {
                     .first()
                     .ok_or_else(|| shape.invalid("missing layer"))?,
             )?;
-            routes.tracks.push(Track {
+            let track = Track {
                 net: net_of(wire)?,
                 layer: layer[0],
                 width: self.units.length(
@@ -652,20 +704,28 @@ impl<'a> DsnReader<'a> {
                         .ok_or_else(|| shape.invalid("missing width"))?,
                 )?,
                 path: points.into_iter().map(to_board).collect(),
-            });
+            };
+            if is_locked(wire) {
+                locked.tracks.push(track.clone());
+            }
+            routes.tracks.push(track);
         }
         for via in wiring.children("via") {
             let args = via.args();
             let (Some(name), Some(x), Some(y)) = (args.first(), args.get(1), args.get(2)) else {
                 return Err(via.invalid("expected (via padstack x y)"));
             };
-            routes.vias.push(Via {
+            let placed = Via {
                 net: net_of(via)?,
                 kind: via_kinds.named(name, padstacks)?,
                 position: to_board(self.units.point(x, y)?),
-            });
+            };
+            if is_locked(via) {
+                locked.vias.push(placed.clone());
+            }
+            routes.vias.push(placed);
         }
-        Ok(routes)
+        Ok((routes, locked))
     }
 }
 
@@ -674,9 +734,9 @@ struct CompiledClasses<'a> {
     class_of_net: HashMap<&'a str, NetClassId>,
 }
 
-#[derive(Default)]
 struct ViaKinds {
     kinds: Vec<ViaKind>,
+    from_kicad: bool,
 }
 
 impl ViaKinds {
@@ -706,10 +766,19 @@ impl ViaKinds {
         self.kinds.push(ViaKind {
             name: text.to_owned(),
             copper,
-            drill: None,
+            drill: self.from_kicad.then(|| kicad_via_drill(text)).flatten(),
         });
         Ok(ViaKindId::from_index(self.kinds.len() - 1))
     }
+}
+
+/// The drill of a via padstack KiCad named, as in `Via[0-3]_600:300_um`: its
+/// diameter and drill in micrometres.
+fn kicad_via_drill(name: &str) -> Option<i32> {
+    let sizes = name.strip_suffix("_um")?.rsplit('_').next()?;
+    let (_, drill) = sizes.split_once(':')?;
+    let micrometres: f64 = drill.parse().ok()?;
+    Some((micrometres * 1_000.0).round() as i32)
 }
 
 fn is_from_kicad(root: &Sexp) -> bool {

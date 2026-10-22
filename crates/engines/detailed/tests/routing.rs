@@ -154,6 +154,50 @@ fn changes_layers_to_pass_a_wall_on_the_top() {
 }
 
 #[test]
+fn changes_layers_through_vias_of_its_net_the_board_came_with() {
+    // A wall on the top, and vias kept out everywhere but around two vias of
+    // the net off the grid, too close to them for a via of its own.
+    let mut builder = DesignBuilder::new(20.0, 10.0)
+        .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)
+        .smd("A2", Some("A"), at(15.0, 5.0), 1.0, 0)
+        .keepout(
+            wall(at(9.5, 0.0), at(10.5, 10.0)),
+            Some(0),
+            KeepoutScope::Everything,
+        );
+    let no_vias = [
+        ((0.0, 0.0), (7.5, 10.0)),
+        ((8.6, 0.0), (11.5, 10.0)),
+        ((12.6, 0.0), (20.0, 10.0)),
+        ((7.5, 0.0), (8.6, 4.5)),
+        ((7.5, 5.6), (8.6, 10.0)),
+        ((11.5, 0.0), (12.6, 4.5)),
+        ((11.5, 5.6), (12.6, 10.0)),
+    ];
+    for ((x0, y0), (x1, y1)) in no_vias {
+        builder = builder.keepout(wall(at(x0, y0), at(x1, y1)), None, KeepoutScope::ViasOnly);
+    }
+    let mut design = builder.build();
+    design.rules.hole_to_hole = mm(0.25);
+    for x in [8.03, 12.03] {
+        design.existing.vias.push(traxide_contracts::Via {
+            net: design.net_named("A"),
+            kind: traxide_contracts::ViaKindId(0),
+            position: at(x, 5.04),
+        });
+    }
+    let result = route(&design, &[("A1", "A2")]);
+    assert!(result.unrouted.is_empty());
+    assert_eq!(result.routes.vias, []);
+    assert!(result.routes.tracks.iter().any(|t| t.layer == LayerId(1)));
+    let mut everything = design.existing.clone();
+    everything.extend(result.routes);
+    let rules = traxide_rules::compile(&design, Purpose::Verification);
+    let verdict = traxide_verification::verify(&design, &rules, &everything);
+    assert_eq!(verdict.violations, []);
+}
+
+#[test]
 fn reports_a_connection_it_cannot_route() {
     let design = DesignBuilder::new(20.0, 10.0)
         .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)

@@ -68,7 +68,7 @@ struct Reader<'a> {
     footprints: Vec<&'a str>,
     has_copper_zones: bool,
     /// The copper zones read so far: net name, layer, outline.
-    zones: Vec<(&'a str, LayerId, Polygon)>,
+    zones: Vec<Zone<'a>>,
 }
 
 impl<'a> Reader<'a> {
@@ -186,7 +186,7 @@ impl<'a> Reader<'a> {
         // KiCad routes on a layer of type power like on any other unless a
         // zone fills it.
         for (index, layer) in self.layers.iter_mut().enumerate() {
-            let holds_a_zone = self.zones.iter().any(|zone| zone.1.index() == index);
+            let holds_a_zone = self.zones.iter().any(|zone| zone.layer.index() == index);
             layer.routable |= !holds_a_zone;
         }
         Ok(Board {
@@ -195,6 +195,7 @@ impl<'a> Reader<'a> {
                 layers: self.layers,
                 outline,
                 cutout_footprints,
+                locked: Routes::default(),
                 nets: self.nets,
                 pads,
                 via_kinds: self.via_kinds.kinds,
@@ -237,6 +238,7 @@ impl<'a> Reader<'a> {
             default_class: NetClassId::from_index(0),
             edge_clearance: self.project.edge_clearance,
             hole_clearance: self.project.hole_clearance,
+            hole_to_hole: self.project.hole_to_hole,
             custom: Vec::new(),
         }
     }
@@ -303,6 +305,7 @@ impl<'a> Reader<'a> {
                 layer: None,
                 shape,
                 scope,
+                clearance: 0,
             });
         } else {
             for &layer in layers {
@@ -310,6 +313,7 @@ impl<'a> Reader<'a> {
                     layer: Some(layer),
                     shape: shape.clone(),
                     scope,
+                    clearance: 0,
                 });
             }
         }
@@ -494,13 +498,26 @@ impl<'a> Reader<'a> {
             return Ok(());
         };
         let layers = self.copper_layers(zone);
+        let setting = |within: Option<&Sexp>, keyword: &str| {
+            within
+                .and_then(|w| w.child(keyword))
+                .map_or(Ok(0), |s| millimetres(s, 0))
+        };
+        let clearance = setting(zone.child("connect_pads"), "clearance")?;
+        let min_width = setting(Some(zone), "min_thickness")?;
         for outline in zone.children("polygon") {
             let points = points(outline.required_child("pts")?)?;
             let Some(polygon) = Polygon::new(distinct(points)) else {
                 continue;
             };
             for &layer in &layers {
-                self.zones.push((net, layer, polygon.clone()));
+                self.zones.push(Zone {
+                    net,
+                    layer,
+                    outline: polygon.clone(),
+                    clearance,
+                    min_width,
+                });
             }
         }
         Ok(())
@@ -510,12 +527,15 @@ impl<'a> Reader<'a> {
     fn planes(&self) -> Vec<Plane> {
         self.zones
             .iter()
-            .filter_map(|&(name, layer, ref outline)| {
-                let net = *self.net_by_name.get(name)?;
+            .filter_map(|zone| {
+                let net = *self.net_by_name.get(zone.net)?;
                 (!self.nets[net.index()].pads.is_empty()).then(|| Plane {
                     net,
-                    layer,
-                    outline: outline.clone(),
+                    layer: zone.layer,
+                    outline: zone.outline.clone(),
+                    holes: Vec::new(),
+                    clearance: zone.clearance,
+                    min_width: zone.min_width,
                 })
             })
             .collect()
@@ -923,6 +943,15 @@ fn steps_for(radius: f64, sweep: f64) -> u32 {
     (sweep / step).ceil().clamp(2.0, MOST) as u32
 }
 
+/// A copper zone, its net known by name until every pad is read.
+struct Zone<'a> {
+    net: &'a str,
+    layer: LayerId,
+    outline: Polygon,
+    clearance: i32,
+    min_width: i32,
+}
+
 /// A drawing on the Edge.Cuts layer.
 struct Edge<'a> {
     points: Vec<Point>,
@@ -1043,6 +1072,7 @@ mod tests {
                 // KiCad's default hole clearance, 0.25 mm, all around.
                 shape: Shape::circle(Point::new(6 * MM, 5 * MM), 5 * MM / 2),
                 scope: KeepoutScope::Everything,
+                clearance: 0,
             }]
         );
     }
@@ -1147,6 +1177,19 @@ mod tests {
                 max: Point::new(9 * MM, 9 * MM)
             }
         );
+    }
+
+    #[test]
+    fn a_planes_fill_keeps_its_zones_clearance_and_minimum_width() {
+        let design = board(
+            r#"(footprint "J" (at 5 5) (property "Reference" "J1")
+                 (pad "1" thru_hole circle (at 0 0) (size 1.6 1.6) (drill 0.8) (layers "*.Cu") (net "GND")))
+               (zone (net "GND") (net_name "GND") (layer "B.Cu")
+                 (connect_pads thru_hole_only (clearance 0.5)) (min_thickness 0.2)
+                 (polygon (pts (xy 1 1) (xy 9 1) (xy 9 9) (xy 1 9))))"#,
+        );
+        let plane = &design.planes[0];
+        assert_eq!((plane.clearance, plane.min_width), (MM / 2, MM / 5));
     }
 
     #[test]
