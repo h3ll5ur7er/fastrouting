@@ -2,7 +2,7 @@
 id: TRX-69
 title: Keep the clearance from DSN keepouts
 type: bug
-status: review
+status: done
 assignee: claude
 priority: high
 labels: [dsn, rules, verification]
