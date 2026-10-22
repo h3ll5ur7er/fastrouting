@@ -585,3 +585,38 @@ fn a_plane_of_a_net_the_network_does_not_list_is_left_out() {
     let design = with_power_bottom(&two_resistors_text(), plane);
     assert!(design.planes.is_empty(), "{:?}", design.planes);
 }
+
+#[test]
+fn a_window_in_a_plane_is_a_hole_of_it() {
+    // KiCad writes a window for every hole of a zone, as TokenBoard's VLED
+    // plane has one where its +3V3 island sits.
+    let plane = "(plane A (polygon B.Cu 0  1000 -1000  29000 -1000  29000 -19000  1000 -19000)
+                   (window (polygon B.Cu 0  10000 -5000  20000 -5000  20000 -15000  10000 -15000)))";
+    let design = with_power_bottom(&two_resistors_text(), plane);
+    let [plane] = &design.planes[..] else {
+        panic!("one plane: {:?}", design.planes);
+    };
+    let [hole] = &plane.holes[..] else {
+        panic!("one hole: {:?}", plane.holes);
+    };
+    assert_eq!(
+        hole.bounds(),
+        Rect {
+            min: Point::new(mm(10.0), mm(5.0)),
+            max: Point::new(mm(20.0), mm(15.0)),
+        }
+    );
+}
+
+#[test]
+fn a_window_in_the_boundary_is_a_hole_in_the_board() {
+    let text = two_resistors_text().replace(
+        "(path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000)",
+        "(path pcb 0  30000 -20000  0 -20000  0 0  30000 0  30000 -20000)
+      (window (rect pcb 10000 -5000 12000 -7000))",
+    );
+    let design = specctra::parse_dsn(&text).expect("valid");
+    assert_eq!(design.outline.holes().len(), 1);
+    assert!(!design.outline.contains(Point::new(mm(11.0), mm(6.0))));
+    assert!(design.outline.contains(Point::new(mm(5.0), mm(6.0))));
+}

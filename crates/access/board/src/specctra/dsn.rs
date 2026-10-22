@@ -233,8 +233,12 @@ impl<'a> DsnReader<'a> {
             .structure
             .children("boundary")
             .flat_map(Sexp::args)
-            .filter(|shape| shape.keyword().is_some())
+            .filter(|shape| shape.keyword().is_some_and(|k| k != "window"))
             .collect();
+        let mut holes = Vec::new();
+        for boundary in self.structure.children("boundary") {
+            holes.extend(self.windows(boundary)?);
+        }
         let is_signal = |shape: &&Sexp| shape.args().first().and_then(Sexp::atom) == Some("signal");
         let chosen: Vec<&Sexp> = if shapes.iter().any(is_signal) {
             shapes.into_iter().filter(is_signal).collect()
@@ -243,27 +247,44 @@ impl<'a> DsnReader<'a> {
         };
         let polygons = chosen
             .into_iter()
-            .map(|shape| {
-                let polygon = match shape.keyword() {
-                    Some("path" | "polygon") => {
-                        self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
-                    }
-                    Some("rect") => {
-                        let corners = self.units.points(&shape.args()[1..])?;
-                        Polygon::rectangle(
-                            Rect::around(corners).ok_or_else(|| shape.invalid("empty rect"))?,
-                        )
-                    }
-                    _ => return Err(shape.invalid("unsupported boundary shape")),
-                };
-                Ok(polygon.map(to_board))
-            })
+            .map(|shape| self.outline_polygon(shape))
             .collect::<Result<Vec<_>, BoardError>>()?;
-        Region::new(polygons).ok_or_else(|| first.invalid("empty boundary"))
+        Region::new(polygons)
+            .map(|region| region.with_holes(holes))
+            .ok_or_else(|| first.invalid("empty boundary"))
     }
 
-    /// `(plane NET (polygon LAYER …))`, as KiCad writes its copper zones. A
-    /// plane of a net the network does not list joins no pin, and is left out.
+    /// A polygon of the boundary or a window, in board coordinates.
+    fn outline_polygon(&self, shape: &Sexp) -> Result<Polygon, BoardError> {
+        let polygon = match shape.keyword() {
+            Some("path" | "polygon") => {
+                self.polygon(shape, shape.args().get(2..).unwrap_or_default())?
+            }
+            Some("rect") => {
+                let corners = self.units.points(&shape.args()[1..])?;
+                Polygon::rectangle(
+                    Rect::around(corners).ok_or_else(|| shape.invalid("empty rect"))?,
+                )
+            }
+            _ => return Err(shape.invalid("unsupported outline shape")),
+        };
+        Ok(polygon.map(to_board))
+    }
+
+    /// The windows of `parent`: holes cut out of it.
+    fn windows(&self, parent: &Sexp) -> Result<Vec<Polygon>, BoardError> {
+        let mut holes = Vec::new();
+        for window in parent.children("window") {
+            for shape in window.args().iter().filter(|a| a.keyword().is_some()) {
+                holes.push(self.outline_polygon(shape)?);
+            }
+        }
+        Ok(holes)
+    }
+
+    /// `(plane NET (polygon LAYER …) (window …)…)`, as KiCad writes its copper
+    /// zones, a window for each hole. A plane of a net the network does not
+    /// list joins no pin, and is left out.
     fn planes(&self, nets: &[Net]) -> Result<Vec<Plane>, BoardError> {
         let mut planes = Vec::new();
         for plane in self.structure.children("plane") {
@@ -271,7 +292,10 @@ impl<'a> DsnReader<'a> {
             let Some(net) = nets.iter().position(|n| n.name == name) else {
                 continue;
             };
-            for shape in plane.args().iter().filter(|a| a.keyword().is_some()) {
+            let holes = self.windows(plane)?;
+            let shapes =
+                (plane.args().iter()).filter(|a| a.keyword().is_some_and(|k| k != "window"));
+            for shape in shapes {
                 let LayeredShape { layers, shape } = self.shape(shape)?;
                 let Shape::Polygon(outline) = shape else {
                     continue;
@@ -280,6 +304,7 @@ impl<'a> DsnReader<'a> {
                     net: NetId::from_index(net),
                     layer,
                     outline: outline.map(to_board),
+                    holes: holes.clone(),
                     clearance: 0,
                     min_width: 0,
                 }));

@@ -415,3 +415,26 @@ fn a_plane_keeps_its_clearance_from_the_planes_of_other_nets() {
         }]
     );
 }
+
+#[test]
+fn a_plane_joins_nothing_in_a_window_cut_out_of_it() {
+    use traxide_contracts::geometry::{Polygon, Rect};
+    let mut design = board_with_a_plane()
+        .tht("J1", Some("GND"), at(7.0, 5.0), 1.6)
+        .build();
+    design.planes[0].holes = vec![Polygon::rectangle(Rect {
+        min: at(5.0, 3.0),
+        max: at(9.0, 7.0),
+    })];
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: vec![via(&design, "GND", at(3.0, 5.0))],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J1")]
+        }]
+    );
+}

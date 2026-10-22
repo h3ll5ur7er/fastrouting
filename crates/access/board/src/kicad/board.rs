@@ -529,6 +529,7 @@ impl<'a> Reader<'a> {
                     net,
                     layer: zone.layer,
                     outline: zone.outline.clone(),
+                    holes: Vec::new(),
                     clearance: zone.clearance,
                     min_width: zone.min_width,
                 })

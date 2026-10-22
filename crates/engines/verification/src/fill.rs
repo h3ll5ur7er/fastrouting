@@ -39,6 +39,9 @@ impl Fill {
         };
         let mut open = vec![false; fill.columns * fill.rows];
         fill.scan(&plane.outline, |cell| open[cell] = true);
+        for hole in &plane.holes {
+            fill.scan(hole, |cell| open[cell] = false);
+        }
         let mut on_the_board = vec![false; open.len()];
         for polygon in design.outline.polygons() {
             fill.scan(polygon, |cell| on_the_board[cell] = true);
@@ -56,7 +59,11 @@ impl Fill {
         }
         let half = plane.min_width / 2;
         let edge = |segment| Shape::Capsule { segment, radius: 0 };
-        for segment in plane.outline.edges() {
+        for segment in plane
+            .outline
+            .edges()
+            .chain(plane.holes.iter().flat_map(Polygon::edges))
+        {
             fill.close_within(&edge(segment), half, &mut open);
         }
         for polygon in design.outline.polygons() {

@@ -22,6 +22,7 @@ pub(crate) fn pads_on_planes(design: &Design) -> Vec<bool> {
 pub(crate) fn joins_plane(design: &Design, plane: &Plane, shape: &Shape) -> bool {
     !design.layers[plane.layer.index()].routable
         && shape.is_inside(&plane.outline, 0)
+        && !(plane.holes.iter()).any(|hole| Shape::Polygon(hole.clone()).is_closer_than(shape, 0))
         && !design.planes.iter().any(|other| {
             other.layer == plane.layer
                 && other.net != plane.net

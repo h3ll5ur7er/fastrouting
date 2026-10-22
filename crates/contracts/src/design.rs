@@ -115,6 +115,8 @@ pub struct Plane {
     pub net: NetId,
     pub layer: LayerId,
     pub outline: Polygon,
+    /// Cut out of it, as windows: nothing is poured there.
+    pub holes: Vec<Polygon>,
     /// How far its fill keeps from other nets' copper where its own setting
     /// asks more than the rules; 0 where the format keeps none.
     pub clearance: i32,
