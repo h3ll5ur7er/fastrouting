@@ -2,7 +2,7 @@
 id: TRX-22
 title: Run the benchmark corpus and gate releases on it
 type: feature
-status: review
+status: done
 priority: high
 assignee: claude-gate
 labels: [benchmark, ci]
@@ -12,9 +12,6 @@ layer: manager
 
 UC6 of [[Architecture/Use-cases#uc6-run-the-benchmark-corpus]]: the Inspection Manager queues route jobs and compares.
 
-- [ ] `traxide bench corpus/ --profile …` and `cargo xtask bench`
-- [ ] Table per board: time, completion, vias, length, violations, against Freerouting and the previous release
-- [ ] CI job on main that stores the history and comments regressions on pull requests
 - [x] A stored baseline of traxide's corpus results per board: `corpus/baseline.json`, written by `cargo xtask corpus` as `target/corpus/results-K-of-N.json`
 - [x] A gate that fails the Benchmark workflow on a regression against the baseline and lists the improvements: `cargo xtask gate`, the workflow's `gate` job
 - [x] Raise the baseline on purpose: `cargo xtask gate --update-baseline`, or the workflow's `corpus-results` artifact copied over `corpus/baseline.json`
@@ -24,6 +21,6 @@ UC6 of [[Architecture/Use-cases#uc6-run-the-benchmark-corpus]]: the Inspection M
 
 **The first baseline** (commit c2703e7, this container, 120 s per board, three shards at a time): 49 boards complete, 16 incomplete, 8 stopped, 3 failed, none breaking a rule, as CI's 50, 17, 6 and 3 within the boards that sit near the limit. Boards a CI run finishes where the baseline stopped show as improvements; it comes from a local run, not a CI runner, so replace it with the `corpus-results` artifact of the first green Benchmark run on main. The workflow runs on pushes that touch `corpus/**` too, so a commit that only raises the baseline runs the gate. Checked by hand: today's results pass, and a doctored shard (a net lost on a complete board, rules broken, 5 nets fewer, a 0.1 s board stopping) fails with exactly those regressions.
 
-**Left for later.** The history across commits and the comments on pull requests need a place to keep runs ([[TRX-21]]) and a token that may write comments; the Inspection Manager's `traxide bench` (UC6) and the comparison with the last release's results instead of a stored file come with it. The workflow still runs on every push that touches the code, not only on main.
+**Left for later, in [[TRX-66]].** The history across commits and the comments on pull requests need a place to keep runs ([[TRX-21]]) and a token that may write comments; the Inspection Manager's `traxide bench` (UC6) and the comparison with the last release's results instead of a stored file come with it. The workflow still runs on every push that touches the code, not only on main.
 
 **Depends on:** [[TRX-15]], [[TRX-20]], [[TRX-21]], [[TRX-14]]

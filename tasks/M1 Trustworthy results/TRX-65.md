@@ -2,7 +2,7 @@
 id: TRX-65
 title: Keep the edge clearance from cutouts inside footprints
 type: bug
-status: review
+status: done
 priority: high
 assignee: claude
 labels: [rules, kicad, verification]

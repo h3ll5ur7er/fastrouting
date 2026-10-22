@@ -13,6 +13,9 @@ pub struct ConstraintSet {
     /// hundreds of classes has a table of tens of thousands.
     largest_clearance: i32,
     edge_clearance: i32,
+    /// Per hole of the outline, in its order, where rules on the footprint
+    /// that draws it set another; the rest keep `edge_clearance`.
+    cutout_clearances: Vec<i32>,
 }
 
 impl ConstraintSet {
@@ -37,7 +40,15 @@ impl ConstraintSet {
             clearance_between_classes,
             largest_clearance,
             edge_clearance,
+            cutout_clearances: Vec::new(),
         }
+    }
+
+    /// The edge clearance of each hole of the outline, in its order.
+    #[must_use]
+    pub fn with_cutout_clearances(mut self, clearances: Vec<i32>) -> Self {
+        self.cutout_clearances = clearances;
+        self
     }
 
     fn class(&self, net: Option<NetId>) -> NetClassId {
@@ -67,5 +78,13 @@ impl ConstraintSet {
 
     pub fn edge_clearance(&self) -> i32 {
         self.edge_clearance
+    }
+
+    /// The clearance from the `hole`th hole of the outline.
+    pub fn cutout_clearance(&self, hole: usize) -> i32 {
+        self.cutout_clearances
+            .get(hole)
+            .copied()
+            .unwrap_or(self.edge_clearance)
     }
 }

@@ -61,8 +61,11 @@ struct Reader<'a> {
     net_by_name: HashMap<&'a str, NetId>,
     via_kinds: ViaKinds,
     keepouts: Vec<Keepout>,
-    /// The drawings on the Edge.Cuts layer, each open or closed.
-    edges: Vec<(Vec<Point>, bool)>,
+    /// The drawings on the Edge.Cuts layer, each open or closed, with the
+    /// reference of the footprint that draws it.
+    edges: Vec<Edge<'a>>,
+    /// The references of the footprints read so far.
+    footprints: Vec<&'a str>,
     has_copper_zones: bool,
     /// The copper zones read so far: net name, layer, outline.
     zones: Vec<(&'a str, LayerId, Polygon)>,
@@ -120,6 +123,7 @@ impl<'a> Reader<'a> {
             via_kinds: ViaKinds::default(),
             keepouts: Vec::new(),
             edges: Vec::new(),
+            footprints: Vec::new(),
             has_copper_zones: false,
             zones: Vec::new(),
         })
@@ -144,17 +148,22 @@ impl<'a> Reader<'a> {
             self.zone(zone)?;
         }
         for item in self.root.args() {
-            if let Some(drawing) = drawing(item, "gr_", &Transform::IDENTITY)? {
-                self.edges.push(drawing);
+            if let Some((points, closed)) = drawing(item, "gr_", &Transform::IDENTITY)? {
+                self.edges.push(Edge {
+                    points,
+                    closed,
+                    footprint: None,
+                });
             }
         }
-        let outline = self.outline()?;
+        let (outline, cutout_footprints) = self.outline()?;
         let mut warnings = Vec::new();
         if let Some(text) = custom_rules {
             let names = rules::Names {
                 classes: &rules.classes,
                 nets: &self.nets,
                 layers: &self.layers,
+                footprints: &self.footprints,
             };
             let read = rules::read(text, &names);
             rules.custom = read.rules;
@@ -185,6 +194,7 @@ impl<'a> Reader<'a> {
                 planes,
                 layers: self.layers,
                 outline,
+                cutout_footprints,
                 nets: self.nets,
                 pads,
                 via_kinds: self.via_kinds.kinds,
@@ -319,6 +329,7 @@ impl<'a> Reader<'a> {
             })
             .and_then(|p| p.args().get(1)?.atom())
             .unwrap_or_default();
+        self.footprints.push(reference);
         for pad in footprint.children("pad") {
             if let Some(read) = self.pad(pad, &placement)? {
                 let base = format!("{reference}-{}", pad.arg_atom(0, "pad number")?);
@@ -332,8 +343,12 @@ impl<'a> Reader<'a> {
             }
         }
         for item in footprint.args() {
-            if let Some(drawing) = drawing(item, "fp_", &placement)? {
-                self.edges.push(drawing);
+            if let Some((points, closed)) = drawing(item, "fp_", &placement)? {
+                self.edges.push(Edge {
+                    points,
+                    closed,
+                    footprint: Some(reference),
+                });
             }
         }
         for zone in footprint.children("zone") {
@@ -584,26 +599,28 @@ impl<'a> Reader<'a> {
     /// The outer loops of the edges are the board; loops inside them are
     /// holes in it, cutouts that copper keeps the edge clearance from, as
     /// KiCad's DRC does, whether the board or a footprint draws them.
-    fn outline(&mut self) -> Result<Region, BoardError> {
-        let polygons: Vec<Polygon> = loops(std::mem::take(&mut self.edges))
+    /// Also the footprint that draws each hole, in their order.
+    fn outline(&mut self) -> Result<(Region, Vec<Option<String>>), BoardError> {
+        let polygons: Vec<(Polygon, Option<&str>)> = loops(std::mem::take(&mut self.edges))
             .into_iter()
-            .filter_map(|points| Polygon::new(distinct(points)))
+            .filter_map(|(points, footprint)| Some((Polygon::new(distinct(points))?, footprint)))
             .collect();
-        let (mut outer, mut holes) = (Vec::new(), Vec::new());
-        for (i, polygon) in polygons.iter().enumerate() {
+        let (mut outer, mut holes, mut owners) = (Vec::new(), Vec::new(), Vec::new());
+        for (i, (polygon, footprint)) in polygons.iter().enumerate() {
             let around = polygons
                 .iter()
                 .enumerate()
-                .filter(|&(j, other)| j != i && other.contains(polygon.points()[0]))
+                .filter(|&(j, (other, _))| j != i && other.contains(polygon.points()[0]))
                 .count();
             if around % 2 == 0 {
                 outer.push(polygon.clone());
             } else {
                 holes.push(polygon.clone());
+                owners.push(footprint.map(str::to_owned));
             }
         }
         Region::new(outer)
-            .map(|region| region.with_holes(holes))
+            .map(|region| (region.with_holes(holes), owners))
             .ok_or_else(|| {
                 self.root
                     .invalid("the board has no closed outline on the Edge.Cuts layer")
@@ -906,32 +923,53 @@ fn steps_for(radius: f64, sweep: f64) -> u32 {
     (sweep / step).ceil().clamp(2.0, MOST) as u32
 }
 
+/// A drawing on the Edge.Cuts layer.
+struct Edge<'a> {
+    points: Vec<Point>,
+    closed: bool,
+    /// The reference of the footprint that draws it; `None` on the board.
+    footprint: Option<&'a str>,
+}
+
 /// Joins open drawings end to end into closed loops; drawings that close no
-/// loop are left out, as KiCad's DRC reports them.
-fn loops(edges: Vec<(Vec<Point>, bool)>) -> Vec<Vec<Point>> {
+/// loop are left out, as KiCad's DRC reports them. A loop belongs to a
+/// footprint when all its drawings do.
+fn loops(edges: Vec<Edge<'_>>) -> Vec<(Vec<Point>, Option<&str>)> {
     let near = |a: Point, b: Point| a.distance(b) <= EDGE_JOIN_DISTANCE;
-    let (closed, mut open): (Vec<_>, Vec<_>) = edges.into_iter().partition(|(_, closed)| *closed);
-    let mut loops: Vec<Vec<Point>> = closed.into_iter().map(|(points, _)| points).collect();
+    let (closed, mut open): (Vec<_>, Vec<_>) = edges.into_iter().partition(|edge| edge.closed);
+    let mut loops: Vec<(Vec<Point>, Option<&str>)> = closed
+        .into_iter()
+        .map(|edge| (edge.points, edge.footprint))
+        .collect();
     open.reverse();
-    while let Some((mut chain, _)) = open.pop() {
+    while let Some(Edge {
+        points: mut chain,
+        mut footprint,
+        ..
+    }) = open.pop()
+    {
         loop {
             let (first, last) = (chain[0], chain[chain.len() - 1]);
             if chain.len() > 3 && near(first, last) {
                 chain.pop();
-                loops.push(chain);
+                loops.push((chain, footprint));
                 break;
             }
-            let Some(next) = open
-                .iter()
-                .rposition(|(p, _)| near(p[0], last) || near(p[p.len() - 1], last))
-            else {
+            let Some(next) = open.iter().rposition(|edge| {
+                let p = &edge.points;
+                near(p[0], last) || near(p[p.len() - 1], last)
+            }) else {
                 break;
             };
-            let (mut next, _) = open.remove(next);
-            if !near(next[0], last) {
-                next.reverse();
+            let next = open.remove(next);
+            if next.footprint != footprint {
+                footprint = None;
             }
-            chain.extend(next.into_iter().skip(1));
+            let mut points = next.points;
+            if !near(points[0], last) {
+                points.reverse();
+            }
+            chain.extend(points.into_iter().skip(1));
         }
     }
     loops
@@ -1155,6 +1193,27 @@ mod tests {
         assert!(hole.min.x >= 4 * MM && hole.max.x <= 6 * MM, "{hole:?}");
         assert!(hole.max.x > 6 * MM - 10_000);
         assert!(!design.outline.contains(Point::new(5 * MM, 5 * MM)));
+    }
+
+    #[test]
+    fn a_cutout_a_footprint_draws_belongs_to_that_footprint() {
+        // Custom rules may name it with memberOfFootprint, as TokenBoard's LED
+        // cutouts are; a cutout of the board's own belongs to none.
+        let design = board(
+            r#"(gr_circle (center 2 2) (end 3 2) (layer "Edge.Cuts"))
+               (footprint "SK6812" (at 7 7) (property "Reference" "LED1")
+                 (fp_line (start -1 -1) (end 1 -1) (layer "Edge.Cuts"))
+                 (fp_line (start 1 -1) (end 1 1) (layer "Edge.Cuts"))
+                 (fp_line (start 1 1) (end -1 1) (layer "Edge.Cuts"))
+                 (fp_line (start -1 1) (end -1 -1) (layer "Edge.Cuts")))"#,
+        );
+        let owners: Vec<(bool, Option<&str>)> = (design.outline.holes().iter())
+            .zip(&design.cutout_footprints)
+            .map(|(hole, owner)| (hole.bounds().min.x > 5 * MM, owner.as_deref()))
+            .collect();
+        assert_eq!(owners.len(), 2, "{owners:?}");
+        assert!(owners.contains(&(false, None)), "{owners:?}");
+        assert!(owners.contains(&(true, Some("LED1"))), "{owners:?}");
     }
 
     #[test]

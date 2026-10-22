@@ -16,6 +16,8 @@ pub(crate) struct Names<'a> {
     pub classes: &'a [NetClass],
     pub nets: &'a [Net],
     pub layers: &'a [Layer],
+    /// The references of the board's footprints.
+    pub footprints: &'a [&'a str],
 }
 
 /// The rules of a `.kicad_dru` that traxide could read, and what it could not.
@@ -232,6 +234,8 @@ struct Parser<'t> {
 enum Operand {
     Property(String),
     Text(String),
+    /// A function that is a condition of its own, such as A.memberOfFootprint('U*').
+    Condition(Condition),
     Other,
 }
 
@@ -279,7 +283,10 @@ impl Parser<'_> {
             .into_iter()
             .find(|op| self.eat(op));
         let Some(op) = comparison else {
-            return Some(Condition::Unknown);
+            return Some(match left {
+                Operand::Condition(condition) => condition,
+                _ => Condition::Unknown,
+            });
         };
         let right = self.operand()?;
         let equal = match (left, right) {
@@ -298,8 +305,9 @@ impl Parser<'_> {
         let token = self.tokens.get(self.at)?.clone();
         self.at += 1;
         match token {
-            Token::Word(_) if self.eat("(") => {
-                // A function such as A.inDiffPair('*'): its arguments are skipped.
+            Token::Word(function) if self.eat("(") => {
+                let arguments = self.at;
+                // Any other function, such as A.inDiffPair('*'): its arguments are skipped.
                 let mut depth = 1;
                 while depth > 0 {
                     match self.tokens.get(self.at)? {
@@ -309,12 +317,35 @@ impl Parser<'_> {
                     }
                     self.at += 1;
                 }
-                Some(Operand::Other)
+                Some(match &self.tokens[arguments..self.at - 1] {
+                    [Token::Text(pattern)] => self.function(&function, pattern),
+                    _ => Operand::Other,
+                })
             }
             Token::Word(word) => Some(Operand::Property(word)),
             Token::Text(text) => Some(Operand::Text(text)),
             Token::Symbol(_) => None,
         }
+    }
+
+    /// `A.memberOfFootprint('LED*')`: the footprints whose reference the
+    /// pattern matches. A pattern with a library name, `Lib:Footprint`, names
+    /// footprints by what the board does not keep, so it may hold or not.
+    fn function(&self, function: &str, pattern: &str) -> Operand {
+        let item = match function.split_once('.') {
+            Some(("A", "memberOfFootprint")) => Item::A,
+            Some(("B", "memberOfFootprint")) => Item::B,
+            _ => return Operand::Other,
+        };
+        if pattern.contains(':') {
+            return Operand::Condition(Condition::Unknown);
+        }
+        let pattern = pattern.to_lowercase();
+        let footprints = (self.names.footprints.iter())
+            .filter(|reference| matches_wildcards(&pattern, &reference.to_lowercase()))
+            .map(|&reference| reference.to_owned())
+            .collect();
+        Operand::Condition(Condition::MemberOfFootprint { item, footprints })
     }
 
     /// `property == pattern`, where KiCad matches the pattern's wildcards
@@ -382,12 +413,42 @@ mod tests {
         let classes = [class("Default"), class("HV"), class("USB")];
         let nets = [net("GND"), net("/HV+"), net("/HV-")];
         let layers = ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"].map(layer);
+        let footprints = ["LED1", "LED2", "U1"];
         let names = Names {
             classes: &classes,
             nets: &nets,
             layers: &layers,
+            footprints: &footprints,
         };
         read(&format!("(version 1)\n{text}"), &names).rules
+    }
+
+    #[test]
+    fn member_of_footprint_names_the_footprints_its_pattern_matches() {
+        let rule = only(
+            r#"(rule "LED cutout" (constraint edge_clearance (min 0.2mm))
+                 (condition "A.memberOfFootprint('LED*') || B.memberOfFootprint('led2')"))"#,
+        );
+        let member = |item, footprints: &[&str]| Condition::MemberOfFootprint {
+            item,
+            footprints: footprints.iter().map(|&f| f.to_owned()).collect(),
+        };
+        assert_eq!(
+            rule.condition,
+            Condition::Any(vec![
+                member(Item::A, &["LED1", "LED2"]),
+                member(Item::B, &["LED2"])
+            ])
+        );
+    }
+
+    #[test]
+    fn member_of_footprint_by_library_name_may_hold_or_not() {
+        let rule = only(
+            r#"(rule r (constraint edge_clearance (min 0.2mm))
+                 (condition "A.memberOfFootprint('LEDs:SK6812')"))"#,
+        );
+        assert_eq!(rule.condition, Condition::Unknown);
     }
 
     fn only(text: &str) -> CustomRule {
@@ -535,6 +596,7 @@ mod tests {
         classes: &[],
         nets: &[],
         layers: &[],
+        footprints: &[],
     };
 
     fn names_and_warnings(text: &str) -> (Vec<String>, Vec<String>) {

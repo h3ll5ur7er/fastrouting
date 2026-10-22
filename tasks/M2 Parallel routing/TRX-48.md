@@ -12,7 +12,7 @@ layer: engine
 
 The detailed search walks a 0.1 mm grid: millions of states on a large board, most of them in open space where nothing needs deciding. Searching a graph of the places where something does change — corners of obstacles inflated by their clearance, the corridor's crossing points, a coarse grid in between — needs far fewer states for the same paths ([[Research/Algorithms#classical-baselines]]).
 
-- [x] Profile the boards that stop at the corpus's limit (gdb stack samples of a release build with line tables; no perf in the container): Issue289's two boards spent their time scanning the 242 × 242 clearance table on every copper query, now worked out once, so both finish ([[Benchmarks#the-largest-clearance-worked-out-once-m2-trx-48]]). Issue066 has no such hot spot: its samples spread over the open list's heap, copper queries and history lookups, so it simply expands too many states, which only a coarser graph, below, can change. Issue103-Board-Unrouted and Issue113 are not profiled yet
+- [x] Profile the boards that stop at the corpus's limit (gdb stack samples of a release build with line tables; no perf in the container): Issue289's two boards spent their time scanning the 242 × 242 clearance table on every copper query, now worked out once, so both finish ([[Benchmarks#the-largest-clearance-worked-out-once-m2-trx-48]]). Issue066 has no such hot spot: its samples spread over the open list's heap, copper queries and history lookups, so it simply expands too many states, which only a coarser graph, below, can change. Issue103-Board-Unrouted and Issue113, sampled in October 2026 with the second attempt of [[TRX-56]] and `--time-limit 90` (20 samples each): no hot spot either; the busy threads' innermost frames spread over the search, the state table (`get_or_insert_with`), copper queries (`intersects`, `of_track`, the bucket candidates) and geometry, and most threads wait, as few connections can be searched side by side. The time goes into how many states the search expands, as on Issue066
 - [ ] Implicit octilinear graph from corners of inflated obstacles plus a fallback grid
 - [ ] Same results as the grid search on the end-to-end boards, measured in [[Benchmarks]]
 - [ ] Decide after [[TRX-26]]: corridors may shrink the grid search enough
@@ -28,6 +28,20 @@ A heavier estimate, measured October 2026 against today's 1.2: at 1.5 the keyboa
 What the flooding searches pay, measured on Issue015 in October 2026: the largest estimated 72–88 mm and paid 105–250 mm, of which the length was 84–103 mm, 3–11 vias at 2 mm each (the estimate allows at most one), and on some searches 17–143 mm of rip-up and history costs. A coarse cost-to-target map that knows on which layer routed copper lies, and what a via costs, could capture most of that; the map of fixed copper alone could not.
 
 Tried in October 2026: such a coarse map (1 mm cells, entering a cell with routed copper of other connections costing their rip-up price, vias at their cost, Dijkstra from the target) as a floor under the straight-line estimate. It made things worse: the keyboard took 170 vias instead of 113, Issue015 expanded 20 million states instead of 9, Issue034 lost 10 connections; only Mars-64 gained (74 of 106 instead of 72, half the expansions). Charging every cell that holds routed copper overestimates, as a way can pass beside the copper inside the same cell; a map like this would have to count crossings, not cells.
+
+Tried in October 2026, as the cheapest form of a coarser graph: in open space (`is_open_around`), a search going straight leaps 4 or 8 nodes ahead instead of one, and its single straight step is left out (connections routed, vias, time, nets complete; `--time-limit 90`):
+
+| Board | Steps (today) | Leaps of 4 | Leaps of 8 |
+| --- | --- | --- | --- |
+| keyboard-tkl | 315, 101 vias, 0.96 s | 315, 127 vias, 1.88 s | 315, 113 vias, 1.16 s |
+| Issue015 | 61, 130 vias, 23 s | 61, 133 vias, 28 s | 61, 108 vias, 20 s |
+| Issue034 | 147, 216 vias, 32 s | 147, 243 vias, 67 s | 147, 170 vias, 18 s |
+| Issue110-RelayModule | 88, 84 vias, 25 s | 88, 81 vias, 12 s | 88, 79 vias, 30 s |
+| Mars-64 (Issue102) | 72 nets, 168 vias | 74 nets, 215 vias | 73 nets, 256 vias |
+| Issue066 | 221 of 266 nets | 208 nets | 213 nets |
+| Issue103-Board-Unrouted | 160 of 282 nets | 154 nets | 154 nets |
+
+Rejected: the boards that take the whole limit, the reason for this task, complete fewer nets, and elsewhere it is as often slower as faster. Bends only every 4 or 8 nodes in open space change which routes negotiation finds more than the leaps save. A graph of corners would have to keep a bend possible wherever one matters, not only where the grid of leaps allows it.
 
 Ending negotiation after two rounds without gain left the Mars-64 boards at 62 of 94 nets instead of 71; four rounds route them as completely as before ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]).
 

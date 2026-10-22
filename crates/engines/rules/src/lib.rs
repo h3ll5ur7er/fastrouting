@@ -81,15 +81,24 @@ pub fn compile(design: &Design, purpose: Purpose) -> ConstraintSet {
                 + margin
         })
         .collect();
-    let edge_clearance = ids
-        .iter()
-        .map(|&group| {
-            rules
-                .of(Constraint::EdgeClearance, group)
-                .minimum(design.rules.edge_clearance)
+    let edge_clearance_of = |footprint: Option<&str>| {
+        ids.iter()
+            .map(|&group| {
+                rules
+                    .at_edge(group, footprint)
+                    .minimum(design.rules.edge_clearance)
+            })
+            .max()
+            .unwrap_or(design.rules.edge_clearance)
+            + margin
+    };
+    let edge_clearance = edge_clearance_of(None);
+    let cutout_clearances = (0..design.outline.holes().len())
+        .map(|hole| {
+            let footprint = design.cutout_footprints.get(hole).cloned().flatten();
+            edge_clearance_of(footprint.as_deref())
         })
-        .max()
-        .unwrap_or(design.rules.edge_clearance);
+        .collect();
     ConstraintSet::new(
         of_net,
         of_no_net,
@@ -102,8 +111,9 @@ pub fn compile(design: &Design, purpose: Purpose) -> ConstraintSet {
             .collect(),
         via_kinds,
         clearance_between_classes,
-        edge_clearance + margin,
+        edge_clearance,
     )
+    .with_cutout_clearances(cutout_clearances)
 }
 
 /// The width of a via's largest copper.
@@ -162,6 +172,7 @@ mod tests {
                 max: Point::new(1, 1),
             })
             .into(),
+            cutout_footprints: Vec::new(),
             nets: vec![
                 Net {
                     name: "signal".into(),

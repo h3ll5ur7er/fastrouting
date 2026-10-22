@@ -31,6 +31,7 @@ impl DesignBuilder {
         let design = Design {
             layers: vec![],
             outline,
+            cutout_footprints: Vec::new(),
             nets: vec![],
             pads: vec![],
             via_kinds: vec![],

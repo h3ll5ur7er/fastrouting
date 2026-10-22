@@ -2,9 +2,8 @@
 id: TRX-33
 title: Route inside KiCad with a native plugin
 type: feature
-status: review
+status: todo
 priority: high
-assignee: claude-release
 labels: [kicad, client]
 estimate: 3
 layer: client
@@ -32,3 +31,5 @@ Decisions:
 Open, for a person with Windows and macOS: the install check above. Everything else is done and in `cargo xtask e2e`.
 
 **Depends on:** [[TRX-31]], [[TRX-13]]
+
+**Waiting for the maintainer** since the merge of PR #6: installing the package on Windows and macOS needs those machines; Linux is tested by `cargo xtask e2e`.

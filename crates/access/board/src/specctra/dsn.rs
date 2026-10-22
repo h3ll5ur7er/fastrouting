@@ -188,6 +188,7 @@ impl<'a> DsnReader<'a> {
         let existing = self.wiring(&nets, &padstacks, &mut via_kinds)?;
         Ok(Design {
             outline: self.outline()?,
+            cutout_footprints: Vec::new(),
             keepouts: [self.keepouts()?, footprint_keepouts].concat(),
             planes: self.planes(&nets)?,
             layers: self.layers,
