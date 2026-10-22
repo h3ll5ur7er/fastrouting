@@ -198,6 +198,37 @@ fn changes_layers_through_vias_of_its_net_the_board_came_with() {
 }
 
 #[test]
+fn a_path_keeps_its_own_vias_the_hole_to_hole_distance_apart() {
+    // A thin wall keeps tracks off the bottom at x = 10 mm, and the top takes
+    // tracks only from 9.6 to 10.4 mm: the hop over the wall is short, and its
+    // vias may come as close as 0.4 mm.
+    let mut design = DesignBuilder::new(20.0, 10.0)
+        .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 1)
+        .smd("A2", Some("A"), at(15.0, 5.0), 1.0, 1)
+        .keepout(
+            wall(at(9.95, 0.0), at(10.05, 10.0)),
+            Some(1),
+            KeepoutScope::TracksOnly,
+        )
+        .keepout(
+            wall(at(0.0, 0.0), at(9.6, 10.0)),
+            Some(0),
+            KeepoutScope::TracksOnly,
+        )
+        .keepout(
+            wall(at(10.4, 0.0), at(20.0, 10.0)),
+            Some(0),
+            KeepoutScope::TracksOnly,
+        )
+        .build();
+    design.rules.hole_to_hole = mm(0.25);
+    let result = route(&design, &[("A1", "A2")]);
+    assert!(result.unrouted.is_empty());
+    assert_eq!(result.routes.vias.len(), 2, "{:?}", result.routes.vias);
+    assert_legal(&design, &result.routes);
+}
+
+#[test]
 fn reports_a_connection_it_cannot_route() {
     let design = DesignBuilder::new(20.0, 10.0)
         .smd("A1", Some("A"), at(5.0, 5.0), 1.0, 0)
