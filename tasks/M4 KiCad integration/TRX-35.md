@@ -2,9 +2,8 @@
 id: TRX-35
 title: Release static binaries for six targets
 type: chore
-status: review
+status: todo
 priority: high
-assignee: claude-release
 labels: [release, ci]
 estimate: 2
 layer: infrastructure
@@ -28,3 +27,5 @@ Decisions:
 Open, for the maintainer: Developer ID signing and notarisation (credentials), and the glibc GPU builds once [[TRX-28]] exists. To release: set the version in `Cargo.toml`, tag `vX.Y.Z`, push the tag, then read through and publish the draft release.
 
 **Depends on:** [[TRX-3]], [[TRX-14]]
+
+**Waiting for the maintainer** since the merge of PR #6: signing and notarisation need the maintainer's Apple Developer ID and, optionally, a Windows certificate; the glibc build waits for [[TRX-28]].
