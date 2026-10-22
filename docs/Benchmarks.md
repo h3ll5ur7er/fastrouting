@@ -17,6 +17,18 @@ time target/release/traxide route -q target/e2e/matrix-6x17/matrix-6x17.dsn
 
 The machine: a 4-core cloud container (x86-64), one thread used.
 
+## Edge clearance by the footprint that draws a cutout (M4, TRX-62)
+
+TokenBoard's custom rule lowers the edge clearance from 0.3 to 0.2 mm at the cutouts its LED footprints draw (`A.memberOfFootprint('LED*') || B.memberOfFootprint('LED*')`). traxide now reads it, so each cutout keeps its own clearance ([[TRX-62]]). On this machine, with `--time-limit 90` as in the corpus:
+
+| | `traxide check` | KiCad 10's DRC, zones refilled |
+| --- | --- | --- |
+| The author's routing, as committed | 240 of 241 nets, **no rule broken** (4 edge violations before) | no violation |
+| traxide before (main) | 241 of 241 nets, no rule broken | no violation, nothing unconnected |
+| traxide now: 386 of 386 connections, 559 vias, 47 s | 241 of 241 nets, no rule broken | no violation, **1 missing VLED connection** |
+
+The missing connection is a plane join of [[TRX-58]] that the vias of ROW1, SWCLK and SWDIO wall off into an island of the VLED plane on In2.Cu; `traxide check` counts every via inside a plane's outline as joined. The routing before happened not to close that pocket. [[TRX-67]] takes it.
+
 ## A real KiCad project: TokenBoard (TRX-64)
 
 October 2026, on this machine (4 cores), `cargo xtask corpus --list corpus/kicad-projects.txt --freerouting …`: the maintainer's keyboard [TokenBoard](https://github.com/h3ll5ur7er/tokenboard) at commit 478b4f9 (`kb/kb.kicad_pcb`, KiCad 10, 4 layers with In1.Cu and In2.Cu as power planes, 241 nets, 7 zones), committed as Freerouting routed it. The corpus strips its 2114 unlocked tracks and vias; the 634 tracks and 439 vias its author locked stay. `traxide check` judges all boards; it counts pads joined only through zones and planes as unconnected, so the author's power nets show 438 of them while their nets count as complete.
