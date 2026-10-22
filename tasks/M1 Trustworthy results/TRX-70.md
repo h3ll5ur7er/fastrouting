@@ -2,7 +2,7 @@
 id: TRX-70
 title: Write the fixed wiring a DSN came with as protected, not as new routes
 type: bug
-status: in-progress
+status: review
 assignee: claude
 priority: high
 labels: [dsn, ses]
@@ -13,4 +13,4 @@ From the TokenBoard report ([[Research/TokenBoard-report]]): the DSN's `wiring` 
 
 - [x] A failing test: a session leaves out the wiring that came fixed or protected, and keeps the board's other wiring
 - [x] Decided from how KiCad 10 imports a session, on the `crossing` board with a locked track and via exported as `(type fix)`: written plainly or as `(type protect)`, KiCad keeps its locked copper and adds the session's copies (6 tracks, 4 vias, 1 co-located); left out, it keeps its own (5 tracks, 3 vias, none co-located). So a design keeps its locked copper apart (`Design::locked`, from `(type fix)` and `(type protect)` wiring), and a session leaves it out. Unlocked wiring is still written: the import replaces it
-- [ ] The report's board: no co-located holes after the import
+- [x] The report's board: no co-located holes after the import. The report brings no `.kicad_pcb` to import into, so judged on the session: none of its vias sits on one of the 439 fixed ones, where the report's session wrote back all 439; the import itself was verified on the `crossing` board above

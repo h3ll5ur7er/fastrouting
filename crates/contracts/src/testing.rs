@@ -49,6 +49,7 @@ impl DesignBuilder {
                 default_class: NetClassId(0),
                 edge_clearance: mm(0.2),
                 hole_clearance: 0,
+                hole_to_hole: 0,
                 custom: vec![],
             },
             resolution: 0,
@@ -74,7 +75,7 @@ impl DesignBuilder {
         self.design.via_kinds = vec![ViaKind {
             name: "via".into(),
             copper,
-            drill: None,
+            drill: Some(mm(0.3)),
         }];
         self
     }

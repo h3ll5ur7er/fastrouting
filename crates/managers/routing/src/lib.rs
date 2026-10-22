@@ -161,7 +161,9 @@ fn involves_new_copper(violation: &Violation, existing: &Routes) -> bool {
         CopperItem::Via(index) => index >= existing.vias.len(),
     };
     match violation {
-        Violation::Clearance { a, b, .. } => is_new(a) || is_new(b),
+        Violation::Clearance { a, b, .. } | Violation::HoleToHole { a, b, .. } => {
+            is_new(a) || is_new(b)
+        }
         Violation::Edge { item, .. } | Violation::Keepout { item, .. } => is_new(item),
         Violation::Unconnected { .. } => true,
     }
@@ -279,6 +281,7 @@ pub fn route(
             unrouted.extend(joined.unrouted);
         }
     }
+    let routes = routes.without_repeated_vias(&design.existing);
     let at_pins = |connections: Vec<Connection>| -> Vec<Connection> {
         connections
             .into_iter()

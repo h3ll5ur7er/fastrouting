@@ -49,6 +49,7 @@ impl CheckReport {
 fn kind(violation: &Violation) -> &'static str {
     match violation {
         Violation::Clearance { .. } => "clearance",
+        Violation::HoleToHole { .. } => "hole to hole",
         Violation::Edge { .. } => "edge",
         Violation::Keepout { .. } => "keepout",
         Violation::Unconnected { .. } => "unconnected",

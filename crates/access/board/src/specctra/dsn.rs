@@ -159,7 +159,10 @@ impl<'a> DsnReader<'a> {
             .enumerate()
             .map(|(i, p)| (p.name.clone(), PadId::from_index(i)))
             .collect();
-        let mut via_kinds = ViaKinds::default();
+        let mut via_kinds = ViaKinds {
+            kinds: Vec::new(),
+            from_kicad: self.is_from_kicad(),
+        };
         let rules = self.rules(&padstacks, &mut via_kinds)?;
         let mut nets = self.nets(&pad_by_name)?;
         let mut warnings = Vec::new();
@@ -565,6 +568,8 @@ impl<'a> DsnReader<'a> {
                 default_class: NetClassId(0),
                 edge_clearance: self.edge_clearance(clearance),
                 hole_clearance: 0,
+                // A DSN carries none: KiCad's default, which JLCPCB asks too.
+                hole_to_hole: 250_000,
                 custom: vec![],
             },
             class_of_net,
@@ -729,9 +734,9 @@ struct CompiledClasses<'a> {
     class_of_net: HashMap<&'a str, NetClassId>,
 }
 
-#[derive(Default)]
 struct ViaKinds {
     kinds: Vec<ViaKind>,
+    from_kicad: bool,
 }
 
 impl ViaKinds {
@@ -761,10 +766,19 @@ impl ViaKinds {
         self.kinds.push(ViaKind {
             name: text.to_owned(),
             copper,
-            drill: None,
+            drill: self.from_kicad.then(|| kicad_via_drill(text)).flatten(),
         });
         Ok(ViaKindId::from_index(self.kinds.len() - 1))
     }
+}
+
+/// The drill of a via padstack KiCad named, as in `Via[0-3]_600:300_um`: its
+/// diameter and drill in micrometres.
+fn kicad_via_drill(name: &str) -> Option<i32> {
+    let sizes = name.strip_suffix("_um")?.rsplit('_').next()?;
+    let (_, drill) = sizes.split_once(':')?;
+    let micrometres: f64 = drill.parse().ok()?;
+    Some((micrometres * 1_000.0).round() as i32)
 }
 
 fn is_from_kicad(root: &Sexp) -> bool {

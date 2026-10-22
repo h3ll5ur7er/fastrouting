@@ -10,6 +10,7 @@ mod unions;
 
 use pieces::Piece;
 use std::collections::BTreeSet;
+use traxide_contracts::geometry::Point;
 use traxide_contracts::{
     ConstraintSet, CopperItem, Design, KeepoutScope, NetId, PadId, Routes, Verdict, Violation,
 };
@@ -48,11 +49,62 @@ pub fn verify(design: &Design, rules: &ConstraintSet, routes: &Routes) -> Verdic
         }
     });
     let mut violations: Vec<Violation> = found.into_iter().collect();
+    violations.extend(holes_too_close(design, rules, routes));
     violations.extend(edge_and_keepout_violations(design, rules, &pieces));
     pieces::join_layers_of_the_same_item(&pieces, &mut joined);
     pieces::join_through_planes(design, rules, &pieces, &mut joined);
     violations.extend(unconnected(design, &pieces, &mut joined));
     Verdict { violations }
+}
+
+/// The pairs of vias whose holes are closer than the hole-to-hole distance, in
+/// index order. Vias of a net on the same spot are one hole, as KiCad drills it.
+fn holes_too_close(design: &Design, rules: &ConstraintSet, routes: &Routes) -> Vec<Violation> {
+    let required = rules.hole_to_hole();
+    if required <= 0 {
+        return Vec::new();
+    }
+    let holes: Vec<(usize, Point, i64)> = routes
+        .vias
+        .iter()
+        .enumerate()
+        .filter_map(|(i, via)| {
+            let drill = design.via_kind(via.kind).drill?;
+            Some((i, via.position, i64::from(drill / 2)))
+        })
+        .collect();
+    let widest = holes
+        .iter()
+        .map(|&(_, _, radius)| radius)
+        .max()
+        .unwrap_or(0);
+    let mut by_x: Vec<usize> = (0..holes.len()).collect();
+    by_x.sort_by_key(|&h| holes[h].1.x);
+    let mut found = BTreeSet::new();
+    for (k, &h) in by_x.iter().enumerate() {
+        let (i, at, radius) = holes[h];
+        for &other in &by_x[k + 1..] {
+            let (j, other_at, other_radius) = holes[other];
+            if i64::from(other_at.x) - i64::from(at.x) >= 2 * widest + i64::from(required) {
+                break;
+            }
+            let (via, other_via) = (&routes.vias[i], &routes.vias[j]);
+            if via.net == other_via.net && at == other_at {
+                continue;
+            }
+            if at.distance(other_at) - radius - other_radius < i64::from(required) {
+                found.insert((i.min(j), i.max(j)));
+            }
+        }
+    }
+    found
+        .into_iter()
+        .map(|(a, b)| Violation::HoleToHole {
+            a: CopperItem::Via(a),
+            b: CopperItem::Via(b),
+            required,
+        })
+        .collect()
 }
 
 /// The pairs of pads of different nets closer than their clearance, on any

@@ -154,6 +154,8 @@ pub struct DesignRules {
     pub edge_clearance: i32,
     /// How far copper of other nets stays from a via's hole.
     pub hole_clearance: i32,
+    /// How far apart the holes of vias stay, whatever their nets.
+    pub hole_to_hole: i32,
     /// Rules for particular copper beyond those of its class, in the order the
     /// board states them: where several apply, the last one counts, and it
     /// overrides the class's and the board's values.

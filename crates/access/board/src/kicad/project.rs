@@ -11,6 +11,8 @@ pub(crate) struct Project {
     pub edge_clearance: i32,
     /// How far copper of other nets stays from a hole.
     pub hole_clearance: i32,
+    /// How far apart holes stay.
+    pub hole_to_hole: i32,
     min_clearance: i32,
     min_track_width: i32,
     assignments: HashMap<String, String>,
@@ -51,6 +53,8 @@ const DEFAULT_VIA_DIAMETER: f64 = 0.6;
 const DEFAULT_VIA_DRILL: f64 = 0.3;
 const DEFAULT_EDGE_CLEARANCE: f64 = 0.5;
 const DEFAULT_HOLE_CLEARANCE: f64 = 0.25;
+/// KiCad's default minimum between holes, which JLCPCB asks too.
+const DEFAULT_HOLE_TO_HOLE: f64 = 0.25;
 
 pub(crate) fn nanometres(millimetres: f64) -> i32 {
     (millimetres * 1e6).round() as i32
@@ -127,6 +131,7 @@ impl Project {
                 DEFAULT_EDGE_CLEARANCE,
             )),
             hole_clearance: nanometres(minimum("min_hole_clearance", DEFAULT_HOLE_CLEARANCE)),
+            hole_to_hole: nanometres(minimum("min_hole_to_hole", DEFAULT_HOLE_TO_HOLE)),
             min_clearance,
             min_track_width,
             assignments,

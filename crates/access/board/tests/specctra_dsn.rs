@@ -157,6 +157,25 @@ fn reads_via_padstacks() {
 }
 
 #[test]
+fn a_via_from_kicad_has_the_drill_its_name_gives() {
+    // KiCad names the via padstacks it exports after their diameter and drill
+    // in micrometres; a DSN has no other place for the drill.
+    assert_eq!(two_resistors().via_kinds[0].drill, Some(mm(0.3)));
+}
+
+#[test]
+fn a_via_from_another_tool_has_no_known_drill() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/two-resistors.dsn"
+    ))
+    .expect("fixture exists")
+    .replace("KiCad's Pcbnew", "Some Other CAD");
+    let design = specctra::parse_dsn(&text).expect("valid");
+    assert_eq!(design.via_kinds[0].drill, None);
+}
+
+#[test]
 fn reads_the_board_outline() {
     let design = two_resistors();
     let expected = Rect {

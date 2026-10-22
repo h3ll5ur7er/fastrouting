@@ -480,3 +480,27 @@ fn copper_keeps_a_keepouts_clearance_from_it() {
             })
     );
 }
+
+#[test]
+fn vias_closer_than_the_hole_to_hole_distance_are_reported_whatever_their_nets() {
+    let mut design = board();
+    design.rules.hole_to_hole = mm(0.25);
+    // Holes of 0.3 mm: 0.5 mm apart leaves 0.2 mm between them, 0.6 mm 0.3 mm.
+    let routes = Routes {
+        tracks: vec![track(&design, "A", 0, &[at(2.0, 5.0), at(18.0, 5.0)])],
+        vias: vec![
+            via(&design, "A", at(5.0, 5.0)),
+            via(&design, "A", at(5.5, 5.0)),
+            via(&design, "A", at(12.0, 5.0)),
+            via(&design, "A", at(12.6, 5.0)),
+        ],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::HoleToHole {
+            a: CopperItem::Via(0),
+            b: CopperItem::Via(1),
+            required: mm(0.25),
+        }]
+    );
+}

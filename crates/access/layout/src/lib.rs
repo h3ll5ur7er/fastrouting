@@ -10,7 +10,7 @@ use outline::Outline;
 use traxide_contracts::geometry::{Point, Rect, Segment, Shape};
 use traxide_contracts::{
     ConnectionId, ConstraintSet, Design, KeepoutScope, LayerId, LayoutAccess, NetId, Obstruction,
-    Routes, Via,
+    Routes, Via, ViaKindId,
 };
 
 /// Buckets of about this size keep a clearance query to a handful of buckets for
@@ -62,6 +62,23 @@ pub struct Layout<'a> {
     layers: Vec<Buckets>,
     /// The obstacles of each routed connection, by connection.
     routed: Vec<Vec<usize>>,
+    /// The holes of vias, which keep the hole-to-hole distance whatever their
+    /// nets, indexed by `hole_buckets`.
+    holes: Vec<Hole>,
+    hole_buckets: Buckets,
+    widest_hole: i32,
+    /// The holes of each routed connection, by connection.
+    routed_holes: Vec<Vec<usize>>,
+}
+
+#[derive(Debug, Clone)]
+struct Hole {
+    net: NetId,
+    kind: ViaKindId,
+    position: Point,
+    radius: i32,
+    connection: Option<ConnectionId>,
+    removed: bool,
 }
 
 impl<'a> Layout<'a> {
@@ -80,6 +97,10 @@ impl<'a> Layout<'a> {
             obstacles: Vec::new(),
             layers,
             routed: Vec::new(),
+            holes: Vec::new(),
+            hole_buckets: Buckets::new(bounds, BUCKET_SIZE),
+            widest_hole: 0,
+            routed_holes: Vec::new(),
         };
         for pad in &design.pads {
             for copper in &pad.copper {
@@ -101,6 +122,9 @@ impl<'a> Layout<'a> {
         }
         for (layer, net, shape) in copper_of(design, &design.existing) {
             layout.insert(layer, Owner::Fixed(Some(net)), shape);
+        }
+        for via in &design.existing.vias {
+            layout.insert_hole(via, None);
         }
         layout
     }
@@ -176,8 +200,77 @@ impl<'a> Layout<'a> {
         via_copper(self.design, via)
     }
 
-    fn via_obstruction_of(&self, via: &Via, wanted: Wanted) -> Obstruction {
+    fn insert_hole(&mut self, via: &Via, connection: Option<ConnectionId>) -> Option<usize> {
+        let radius = self.design.via_kind(via.kind).drill? / 2;
+        let id = self.holes.len();
+        let bounds = Rect {
+            min: via.position,
+            max: via.position,
+        }
+        .inflated(radius);
+        self.holes.push(Hole {
+            net: via.net,
+            kind: via.kind,
+            position: via.position,
+            radius,
+            connection,
+            removed: false,
+        });
+        self.hole_buckets.insert(bounds, id);
+        self.widest_hole = self.widest_hole.max(radius);
+        Some(id)
+    }
+
+    /// What keeps `via`'s hole the hole-to-hole distance from the others'. A
+    /// via may sit on one of its own net: then it is the same hole.
+    fn hole_obstruction(&self, via: &Via, wanted: Wanted) -> Obstruction {
+        let Some(drill) = self.design.via_kind(via.kind).drill else {
+            return Obstruction::None;
+        };
+        let (radius, apart) = (drill / 2, self.rules.hole_to_hole());
+        if apart <= 0 {
+            return Obstruction::None;
+        }
+        let reach = Rect {
+            min: via.position,
+            max: via.position,
+        }
+        .inflated(radius + apart + self.widest_hole);
         let mut routed = Vec::new();
+        for id in self.hole_buckets.candidates(reach) {
+            let hole = &self.holes[id];
+            if hole.removed
+                || (hole.net == via.net && hole.kind == via.kind && hole.position == via.position)
+            {
+                continue;
+            }
+            let gap =
+                hole.position.distance(via.position) - i64::from(hole.radius) - i64::from(radius);
+            if gap >= i64::from(apart) {
+                continue;
+            }
+            match hole.connection {
+                Some(connection) if hole.net != via.net => {
+                    if wanted == Wanted::First {
+                        return Obstruction::Routed(vec![connection]);
+                    }
+                    routed.push(connection);
+                }
+                _ => return Obstruction::Fixed,
+            }
+        }
+        obstruction_by(routed)
+    }
+
+    fn via_obstruction_of(&self, via: &Via, wanted: Wanted) -> Obstruction {
+        let mut routed = match self.hole_obstruction(via, wanted) {
+            Obstruction::None => Vec::new(),
+            Obstruction::Fixed => return Obstruction::Fixed,
+            Obstruction::Routed(connections) if wanted == Wanted::First => {
+                return Obstruction::Routed(connections);
+            }
+            Obstruction::Routed(connections) => connections,
+        };
         for (layer, shape) in self.via_copper(via) {
             match self.obstruction(via.net, layer, &shape, Item::Via, wanted) {
                 Obstruction::None => {}
@@ -274,14 +367,25 @@ impl LayoutAccess for Layout<'_> {
             .collect();
         if self.routed.len() <= connection.index() {
             self.routed.resize(connection.index() + 1, Vec::new());
+            self.routed_holes.resize(connection.index() + 1, Vec::new());
         }
         self.routed[connection.index()].extend(ids);
+        for via in &routes.vias {
+            if let Some(id) = self.insert_hole(via, Some(connection)) {
+                self.routed_holes[connection.index()].push(id);
+            }
+        }
     }
 
     fn remove_route(&mut self, connection: ConnectionId) {
         if let Some(ids) = self.routed.get_mut(connection.index()) {
             for id in ids.drain(..) {
                 self.obstacles[id].removed = true;
+            }
+        }
+        if let Some(ids) = self.routed_holes.get_mut(connection.index()) {
+            for id in ids.drain(..) {
+                self.holes[id].removed = true;
             }
         }
     }

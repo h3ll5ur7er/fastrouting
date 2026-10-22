@@ -238,6 +238,7 @@ impl<'a> Reader<'a> {
             default_class: NetClassId::from_index(0),
             edge_clearance: self.project.edge_clearance,
             hole_clearance: self.project.hole_clearance,
+            hole_to_hole: self.project.hole_to_hole,
             custom: Vec::new(),
         }
     }

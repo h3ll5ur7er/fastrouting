@@ -22,6 +22,12 @@ pub enum Violation {
         b: CopperItem,
         required: i32,
     },
+    /// Holes of vias closer than the hole-to-hole distance, whatever their nets.
+    HoleToHole {
+        a: CopperItem,
+        b: CopperItem,
+        required: i32,
+    },
     /// Copper outside the board or closer to its edge than allowed.
     Edge { layer: LayerId, item: CopperItem },
     /// Copper where a keepout forbids it.

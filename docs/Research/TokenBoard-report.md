@@ -16,3 +16,5 @@ In October 2026 the agent that designs TokenBoard (the maintainer's 88-key keybo
 | 20 fixed fan-out lanes joined elsewhere than at their free end, left dangling | [[TRX-73]] |
 
 What this route through Specctra shows that the corpus's KiCad projects ([[TRX-64]]) do not: the DSN carries the cutouts as keepouts and the pre-routing as fixed wiring, and the session goes back into KiCad by its import, which keeps what is locked.
+
+**After [[TRX-68]] to [[TRX-71]].** traxide reads the DSN as exported and routes all 392 connections in 89 s with 984 wires and 559 vias. Judged against the DSN by scripts apart from traxide: no wire closer than 150 µm to a keepout, no via on a fixed one, no two holes closer than 0.25 mm and no duplicate vias; traxide's own DRC finds nothing. The report brings no `.kicad_pcb`, so KiCad's import of this session is untried; KiCad 10's import of fixed wiring was verified on the `crossing` board ([[TRX-70]]). [[TRX-72]] and [[TRX-73]] are open.
