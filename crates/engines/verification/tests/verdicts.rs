@@ -213,3 +213,90 @@ fn pads_of_one_part_are_named_only_where_they_overlap() {
         [[design.pad_named("U2-1"), design.pad_named("U2-2")]]
     );
 }
+
+/// A 3-layer board whose middle layer is a GND plane over its left half, with
+/// a GND pad on the top layer over the plane and one outside it.
+fn board_with_a_plane() -> DesignBuilder {
+    DesignBuilder::new(20.0, 10.0)
+        .layers(3)
+        .plane_layer(1)
+        .plane("GND", 1, at(0.0, 0.0), at(10.0, 10.0))
+        .smd("G1", Some("GND"), at(2.0, 5.0), 1.0, 0)
+}
+
+fn via(design: &Design, net: &str, position: Point) -> Via {
+    Via {
+        net: design.net_named(net),
+        kind: ViaKindId(0),
+        position,
+    }
+}
+
+#[test]
+fn a_plane_joins_the_through_hole_pads_and_vias_of_its_net_on_it() {
+    let design = board_with_a_plane()
+        .tht("J1", Some("GND"), at(8.0, 2.0), 1.6)
+        .build();
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: vec![via(&design, "GND", at(3.0, 5.0))],
+    };
+    assert_eq!(check(&design, routes), Verdict::default());
+}
+
+#[test]
+fn copper_outside_the_plane_is_not_joined_by_it() {
+    let design = board_with_a_plane()
+        .tht("J1", Some("GND"), at(15.0, 2.0), 1.6)
+        .build();
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: vec![via(&design, "GND", at(3.0, 5.0))],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J1")]
+        }]
+    );
+}
+
+#[test]
+fn a_plane_joins_nothing_where_a_plane_of_another_net_overlaps_it() {
+    // Which of two overlapping pours fills the overlap is the board program's
+    // choice: their order of priority, which the design does not know.
+    let design = board_with_a_plane()
+        .plane("VCC", 1, at(6.0, 0.0), at(10.0, 4.0))
+        .tht("J1", Some("GND"), at(8.0, 2.0), 1.6)
+        .tht("V1", Some("VCC"), at(18.0, 8.0), 1.6)
+        .build();
+    let routes = Routes {
+        tracks: vec![track(&design, "GND", 0, &[at(2.0, 5.0), at(3.0, 5.0)])],
+        vias: vec![via(&design, "GND", at(3.0, 5.0))],
+    };
+    assert_eq!(
+        check(&design, routes).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J1")]
+        }]
+    );
+}
+
+#[test]
+fn a_pour_on_a_layer_that_takes_tracks_joins_nothing() {
+    // Tracks of other nets may cut such a pour apart, wherever routing put them.
+    let design = DesignBuilder::new(20.0, 10.0)
+        .plane("GND", 1, at(0.0, 0.0), at(20.0, 10.0))
+        .tht("J1", Some("GND"), at(2.0, 2.0), 1.6)
+        .tht("J2", Some("GND"), at(18.0, 2.0), 1.6)
+        .build();
+    assert_eq!(
+        check(&design, Routes::default()).violations,
+        [Violation::Unconnected {
+            net: design.net_named("GND"),
+            pads: vec![design.pad_named("J2")]
+        }]
+    );
+}

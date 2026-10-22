@@ -182,6 +182,7 @@ mod tests {
             pads: vec![],
             via_kinds: vec![via(600, 300), via(800, 400)],
             keepouts: vec![],
+            planes: vec![],
             existing: Routes::default(),
             rules: DesignRules {
                 classes: vec![class("default", 200, 200, 0), class("power", 500, 300, 1)],

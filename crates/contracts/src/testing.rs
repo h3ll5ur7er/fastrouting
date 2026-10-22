@@ -2,7 +2,7 @@
 
 use crate::{
     Design, DesignRules, Keepout, KeepoutScope, Layer, LayerId, LayerShape, Net, NetClass,
-    NetClassId, NetId, Pad, PadId, Routes, ViaKind, ViaKindId,
+    NetClassId, NetId, Pad, PadId, Plane, Routes, ViaKind, ViaKindId,
 };
 use traxide_geometry::{Point, Polygon, Rect, Region, Shape};
 
@@ -35,6 +35,7 @@ impl DesignBuilder {
             pads: vec![],
             via_kinds: vec![],
             keepouts: vec![],
+            planes: vec![],
             existing: Routes::default(),
             rules: DesignRules {
                 classes: vec![NetClass {
@@ -129,6 +130,23 @@ impl DesignBuilder {
             layer: layer.map(LayerId::from_index),
             shape,
             scope,
+        });
+        self
+    }
+
+    /// Makes `layer` a plane layer, which carries no tracks.
+    pub fn plane_layer(mut self, layer: usize) -> Self {
+        self.design.layers[layer].routable = false;
+        self
+    }
+
+    /// A pour of `net` filling the rectangle from `min` to `max` on `layer`.
+    pub fn plane(mut self, net: &str, layer: usize, min: Point, max: Point) -> Self {
+        let net = self.net_named(net);
+        self.design.planes.push(Plane {
+            net,
+            layer: LayerId::from_index(layer),
+            outline: Polygon::rectangle(Rect { min, max }),
         });
         self
     }

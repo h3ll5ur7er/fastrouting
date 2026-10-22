@@ -149,6 +149,7 @@ impl Kicad {
             out,
             &format!(
                 "python3 roundtrip.py import {{out}}/{recipe}.kicad_pcb {{out}}/{session} {{out}}/{routed}.kicad_pcb && \
+                 python3 roundtrip.py refill {{out}}/{routed}.kicad_pcb && \
                  kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
@@ -164,50 +165,11 @@ impl Kicad {
             out,
             &format!(
                 "python3 roundtrip.py stats {{out}}/{routed}.kicad_pcb && \
+                 python3 roundtrip.py refill {{out}}/{routed}.kicad_pcb && \
                  kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
             ),
         )?;
         judged(&printed, &out.join(report))
-    }
-
-    /// Routes the exported board of `recipe` inside KiCad as the KiCad plugin
-    /// does, with the traxide at `traxide` as KiCad sees it, and judges it.
-    pub fn route_with_plugin(
-        &self,
-        root: &Path,
-        out: &Path,
-        recipe: &str,
-        traxide: &str,
-    ) -> Result<Judgement> {
-        let routed = format!("{recipe}.plugin");
-        let report = format!("{routed}.drc.json");
-        let printed = self.run(
-            root,
-            out,
-            &format!(
-                "python3 plugin_route.py {{out}}/{recipe}.kicad_pcb {{out}}/{routed}.kicad_pcb {traxide} && \
-                 kicad-cli pcb drc --format json --severity-error -o {{out}}/{report} {{out}}/{routed}.kicad_pcb"
-            ),
-        )?;
-        judged(&printed, &out.join(report))
-    }
-
-    /// Where traxide is for KiCad: in the container, the static build of the
-    /// repository mounted at /work, which runs whatever the image's C library.
-    pub fn traxide_for_kicad(&self, root: &Path) -> Result<String> {
-        match self {
-            Self::Docker { .. } => {
-                let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-                let built = Command::new(&cargo)
-                    .args(["build", "--release", "--quiet", "-p", "traxide-cli"])
-                    .args(["--target", "x86_64-unknown-linux-musl"])
-                    .current_dir(root)
-                    .status()?;
-                ensure!(built.success(), "building the static traxide failed");
-                Ok("/work/target/x86_64-unknown-linux-musl/release/traxide".into())
-            }
-            Self::Local { .. } => Ok(root.join("target/release/traxide").display().to_string()),
-        }
     }
 
     /// Runs `script` (a shell command line) in the e2e scripts' folder; `{out}` stands for `out`.
@@ -295,6 +257,23 @@ pub fn build_traxide() -> Result<(PathBuf, PathBuf)> {
     ensure!(built.success(), "building traxide failed");
     let traxide = root.join("target/release/traxide");
     Ok((root, traxide))
+}
+
+/// A static build of `traxide` in the repository at `root`, for the KiCad
+/// plugin: it runs whatever the C library of the Linux it lands on.
+pub fn build_static_traxide(root: &Path) -> Result<PathBuf> {
+    let target = "x86_64-unknown-linux-musl";
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let built = Command::new(&cargo)
+        .args(["build", "--release", "--quiet", "-p", "traxide-cli"])
+        .args(["--target", target])
+        .current_dir(root)
+        .status()?;
+    ensure!(
+        built.success(),
+        "building the static traxide failed: rustup target add {target}?"
+    );
+    Ok(root.join("target").join(target).join("release/traxide"))
 }
 
 /// The recipes named in `args`, or `default` when none is.

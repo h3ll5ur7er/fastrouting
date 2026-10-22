@@ -19,6 +19,10 @@
       loads a board routed without KiCad, as KiCad opens it, and prints the
       same statistics.
 
+  python3 roundtrip.py refill ROUTED.kicad_pcb
+      fills the board's unfilled copper zones and saves it, as a designer
+      does before checking a routed board: an unfilled zone joins nothing.
+
 KiCad's DRC (kicad-cli pcb drc) then judges the routed board.
 """
 
@@ -74,6 +78,16 @@ def import_session(board_file: Path, session: Path, routed: Path) -> None:
     print_stats(board)
 
 
+def refill(board_file: Path) -> None:
+    board = pcbnew.LoadBoard(str(board_file))
+    # A board traxide routed in a running KiCad comes refilled, and is
+    # judged as it came.
+    unfilled = [zone for zone in board.Zones() if not zone.GetIsRuleArea() and not zone.IsFilled()]
+    if unfilled:
+        pcbnew.ZONE_FILLER(board).Fill(unfilled)
+        pcbnew.SaveBoard(str(board_file), board)
+
+
 def print_stats(board) -> None:
     items = list(board.GetTracks())
     vias = [item for item in items if item.GetClass() == "PCB_VIA"]
@@ -100,5 +114,7 @@ if __name__ == "__main__":
             import_session(Path(board_file), Path(session), Path(routed))
         case ["stats", routed]:
             print_stats(pcbnew.LoadBoard(routed))
+        case ["refill", routed]:
+            refill(Path(routed))
         case _:
             raise SystemExit(__doc__)

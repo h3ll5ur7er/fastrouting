@@ -196,6 +196,25 @@ def ground_pour() -> pcbnew.BOARD:
     return builder.board
 
 
+def inner_plane() -> pcbnew.BOARD:
+    """A 4-layer board whose first inner layer, of type power, is a ground
+    plane: the ground pads of its capacitors, on both sides, join it by vias
+    beside them, the header's ground pin through its hole; the supply and a
+    signal are routed as tracks."""
+    builder = BoardBuilder(40, 30, copper_layers=4)
+    builder.board.SetLayerType(pcbnew.In1_Cu, pcbnew.LT_POWER)
+    cap = lambda a, b: [Smd("1", -0.8, 0, 0.9, 1.0, a), Smd("2", 0.8, 0, 0.9, 1.0, b)]
+    builder.footprint("J1", 20, 4, [Tht("1", -1.27, 0, 1.7, 1.0, "GND"),
+                                    Tht("2", 1.27, 0, 1.7, 1.0, "VCC")])
+    builder.footprint("C1", 8, 8, cap("VCC", "GND"))
+    builder.footprint("C2", 32, 8, cap("VCC", "GND"), rotation=90)
+    builder.footprint("C3", 8, 22, cap("VCC", "GND"), back=True)
+    builder.footprint("C4", 32, 22, cap("SIG", "GND"), back=True)
+    builder.footprint("TP1", 20, 26, [Smd("1", 0, 0, 1.2, 1.2, "SIG")])
+    builder.zone("GND", pcbnew.In1_Cu, [(0.5, 0.5), (39.5, 0.5), (39.5, 29.5), (0.5, 29.5)])
+    return builder.board
+
+
 def isolation() -> pcbnew.BOARD:
     """A high-voltage net that two signals must cross, at the distance the
     board's custom rules ask (ISOLATION_RULES)."""
@@ -370,6 +389,7 @@ RECIPES = {
     "placements": Recipe(placements),
     "crossing": Recipe(crossing),
     "ground-pour": Recipe(ground_pour),
+    "inner-plane": Recipe(inner_plane),
     "isolation": Recipe(
         isolation,
         classes=(NetClass("HV", "HV", track=0.5, clearance=0.3),),

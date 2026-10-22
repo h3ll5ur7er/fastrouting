@@ -17,5 +17,8 @@ traxide-events.workspace = true
 traxide-planning.workspace = true
 traxide-routing.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

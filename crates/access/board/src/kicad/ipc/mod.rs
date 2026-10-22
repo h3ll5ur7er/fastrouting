@@ -14,7 +14,7 @@ pub(crate) use client::Environment;
 
 use super::board::{self, Board};
 use super::project::{ClassValues, LiveClass, Project};
-use crate::{Beside, BoardError, RUNNING_KICAD};
+use crate::{Beside, BoardError, RUNNING_KICAD, Stored};
 use client::Kicad;
 use messages::board::commands::{
     GetNetClassForNets, GetNets, NetClassForNetsResponse, NetsResponse, RefillZones,
@@ -51,7 +51,7 @@ pub(crate) fn store_routes(
     environment: &Environment,
     design: &Design,
     routes: &Routes,
-) -> Result<(), BoardError> {
+) -> Result<Stored, BoardError> {
     let mut kicad = Kicad::connect(environment)?;
     let document = kicad.open_board()?;
     let board = read(&mut kicad, &document, environment)?;
@@ -62,7 +62,7 @@ pub(crate) fn store_routes(
     }
     let items = items::of(&board, routes)?;
     if items.is_empty() {
-        return Ok(());
+        return Ok(Stored::default());
     }
     let commit: BeginCommitResponse = kicad.call(&BeginCommit::default())?;
     let added = create(&mut kicad, &document, items);
@@ -82,7 +82,9 @@ pub(crate) fn store_routes(
     if board.has_copper_zones {
         refill_zones(&mut kicad, &document)?;
     }
-    Ok(())
+    Ok(Stored {
+        zones_refilled: board.has_copper_zones,
+    })
 }
 
 fn refill_zones(kicad: &mut Kicad, document: &DocumentSpecifier) -> Result<(), BoardError> {
@@ -245,17 +247,23 @@ pub(crate) mod testing {
 
     /// Undoes the last change to the board, as *Edit → Undo* does.
     pub fn undo(environment: &Environment) -> Result<(), BoardError> {
+        run_action(environment, "common.Interactive.undo")
+    }
+
+    /// Runs one of the PCB editor's actions by its name, as its menu, its
+    /// toolbar or a hotkey would.
+    pub fn run_action(environment: &Environment, action: &str) -> Result<(), BoardError> {
         let mut kicad = Kicad::connect(environment)?;
         // KiCad calls RunAction a prototyping aid rather than an API; it is the
-        // only way to press Ctrl+Z from outside.
+        // only way to press a button from outside.
         let ran: RunActionResponse = kicad.call(&RunAction {
-            action: "common.Interactive.undo".into(),
+            action: action.into(),
         })?;
         if ran.status == i32::from(RunActionStatus::RasOk) {
             Ok(())
         } else {
             Err(BoardError::Kicad(format!(
-                "KiCad did not undo ({})",
+                "KiCad did not run {action} ({})",
                 ran.status
             )))
         }
@@ -556,7 +564,11 @@ mod tests {
     #[test]
     fn stores_routes_as_one_commit() {
         let (_folder, environment, state) = fake_kicad(|_| {});
-        store_routes(&environment, &file_design(), &some_routes()).expect("stored");
+        let stored = store_routes(&environment, &file_design(), &some_routes()).expect("stored");
+        assert!(
+            !stored.zones_refilled,
+            "a board without zones has none to refill"
+        );
         let received = received(&state);
         let commit = received
             .iter()
@@ -582,7 +594,8 @@ mod tests {
         std::fs::write(&board, &zoned).expect("written");
         let design = crate::load_design(&board).expect("a valid board");
         let (_folder, environment, state) = fake_kicad(|state| state.board = zoned);
-        store_routes(&environment, &design, &some_routes()).expect("stored");
+        let stored = store_routes(&environment, &design, &some_routes()).expect("stored");
+        assert!(stored.zones_refilled);
         let received = received(&state);
         assert_eq!(
             received[received.len() - 2..],
