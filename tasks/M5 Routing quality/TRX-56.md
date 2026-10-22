@@ -92,4 +92,9 @@ Measured again on 331073f (fine-pitch pins escaped, two rounds without gain; [[d
 
 Locked rounds route the most on every congested board, but lose a connection on two boards rip-up completes and take two to four times as long. So they cannot replace rip-up; next to try: run them only where rip-up leaves connections unrouted, as a second attempt, and keep the result that routes more (a board rip-up completes never pays for it), within the time limit.
 
+Done: `Router::route_plan` routes a board a second time where rip-up leaves connections unrouted, in rounds with the settled routes locked, and keeps the attempt that completes more nets (more connections where they tie); the time limit covers both ([[Benchmarks#a-second-attempt-in-rounds-where-rip-up-falls-short-m5-trx-56]]). Without a limit Mars-64 routes 93 instead of 81, Issue039 177 instead of 166, bm01 184 instead of 178, Issue283 188 instead of 182, caniot 75 instead of 71, Issue029 86 instead of 85, in three to seven times the time; with 90 s, Mars-64 85, caniot 75, Issue039 167, the rest as before. The boards rip-up completes route the same in the same time.
+
+- [x] A second attempt in locked rounds where rip-up leaves connections unrouted, the better kept
+- [x] The corpus routes every board with the 90 s negotiation limit that [[TRX-64]] gives KiCad projects, so that the second attempt cannot push a board past the 120 s timeout, and the baseline raised: 13 boards gain, TokenBoard completes all 241 nets; Issue283 completes 38 to 41 of 58 within the limit instead of 44 without one, as main does within it ([[Benchmarks#a-second-attempt-in-rounds-where-rip-up-falls-short-m5-trx-56]])
+
 **Depends on:** [[TRX-54]], [[TRX-55]]: both remove failures that otherwise look like congestion.

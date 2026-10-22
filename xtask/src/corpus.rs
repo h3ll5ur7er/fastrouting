@@ -9,13 +9,17 @@
 //! with the baseline.
 
 use crate::gate::{Outcome, Record};
-use crate::kicad;
-use anyhow::{Context, Result, ensure};
+use crate::kicad::{self, Kicad};
+use crate::kicad_project::{Project, RULE_FILES, strip_unlocked_copper};
+use anyhow::{Context, Result, anyhow, ensure};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-const DEFAULT_LIST: &str = "corpus/freerouting-fixtures.txt";
+const DEFAULT_LISTS: [&str; 2] = [
+    "corpus/freerouting-fixtures.txt",
+    "corpus/kicad-projects.txt",
+];
 const SOURCE: &str = "https://raw.githubusercontent.com/freerouting/freerouting/master/";
 
 pub fn run(args: &[String]) -> Result<()> {
@@ -23,52 +27,32 @@ pub fn run(args: &[String]) -> Result<()> {
     let freerouting = option(args, "--freerouting");
     let shard = option(args, "--shard").map_or(Ok((1, 1)), |s| shard(&s))?;
     let (root, traxide) = kicad::build_traxide()?;
-    let list = root.join(option(args, "--list").unwrap_or_else(|| DEFAULT_LIST.into()));
+    let lists = option(args, "--list").map_or_else(
+        || DEFAULT_LISTS.iter().map(|list| root.join(list)).collect(),
+        |list| vec![root.join(list)],
+    );
     let folder = root.join("target/corpus");
     std::fs::create_dir_all(folder.join("routed"))?;
-    let text = std::fs::read_to_string(&list).with_context(|| list.display().to_string())?;
+    let mut text = String::new();
+    for list in &lists {
+        text += &std::fs::read_to_string(list).with_context(|| list.display().to_string())?;
+        text += "\n";
+    }
+    let corpus = Corpus {
+        root: &root,
+        folder: &folder,
+        traxide: &traxide,
+        freerouting: freerouting.as_deref(),
+        kicad: Kicad::from_args(args),
+        timeout,
+    };
     let mut rows = Vec::new();
     for board in in_shard(boards(&text), shard) {
-        let file = folder.join(board.replace(['/', ' '], "_"));
-        if !file.exists() {
-            download(board, &file)?;
-        }
-        let name = file
-            .file_stem()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let session = |router: &str| folder.join("routed").join(format!("{name}.{router}.ses"));
-        let mut traxide_run = Command::new(&traxide);
-        traxide_run
-            .arg("route")
-            .arg("--quiet")
-            .arg(&file)
-            .arg("-o")
-            .arg(session("traxide"));
-        let mut row = Row {
-            board: name.clone(),
-            before: judge(&traxide, &file, None).ok(),
-            traxide: attempt(&traxide, &file, traxide_run, &session("traxide"), timeout)?,
-            freerouting: None,
+        let row = match Project::parse(board) {
+            Some(project) => corpus.route_project(&project)?,
+            None => corpus.route_fixture(board)?,
         };
-        if let Some(command) = &freerouting {
-            let mut words = command.split_whitespace();
-            let mut run = Command::new(words.next().context("--freerouting names no command")?);
-            run.args(words)
-                .arg("-de")
-                .arg(&file)
-                .arg("-do")
-                .arg(session("freerouting"))
-                .arg("--gui.enabled=false");
-            row.freerouting = Some(attempt(
-                &traxide,
-                &file,
-                run,
-                &session("freerouting"),
-                timeout,
-            )?);
-        }
-        eprintln!("{}", row.cells());
+        eprintln!("{}", row.cells(row.author.is_some()));
         rows.push(row);
     }
     let record = Record {
@@ -87,6 +71,171 @@ pub fn run(args: &[String]) -> Result<()> {
         std::fs::write(summary, format!("## Corpus\n\n{table}\n"))?;
     }
     Ok(())
+}
+
+/// What routing a board of the corpus takes.
+struct Corpus<'a> {
+    root: &'a Path,
+    folder: &'a Path,
+    traxide: &'a Path,
+    freerouting: Option<&'a str>,
+    kicad: Kicad,
+    timeout: Duration,
+}
+
+impl Corpus<'_> {
+    /// A Specctra design from Freerouting's repository, routed into sessions.
+    fn route_fixture(&self, board: &str) -> Result<Row> {
+        let file = self.folder.join(board.replace(['/', ' '], "_"));
+        if !file.exists() {
+            let url = format!("{SOURCE}{}", board.replace(' ', "%20").replace('+', "%2B"));
+            download(&url, &file)?;
+        }
+        let name = file
+            .file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let session = |router: &str| {
+            self.folder
+                .join("routed")
+                .join(format!("{name}.{router}.ses"))
+        };
+        let judge_session = |session: &Path| {
+            judge(self.traxide, &file, Some(session)).map_err(|why| {
+                quoting_line(&why, &std::fs::read_to_string(session).unwrap_or_default())
+            })
+        };
+        let traxide_session = session("traxide");
+        let traxide_run = traxide_route(self.traxide, &file, &traxide_session, self.timeout);
+        let mut row = Row {
+            board: name.clone(),
+            before: judge(self.traxide, &file, None).ok(),
+            author: None,
+            traxide: attempt(traxide_run, &traxide_session, self.timeout, || {
+                judge_session(&traxide_session)
+            })?,
+            freerouting: None,
+        };
+        if let Some(command) = self.freerouting {
+            let freerouting_session = session("freerouting");
+            row.freerouting = Some(attempt(
+                freerouting_run(command, &file, &freerouting_session)?,
+                &freerouting_session,
+                self.timeout,
+                || judge_session(&freerouting_session),
+            )?);
+        }
+        Ok(row)
+    }
+
+    /// A KiCad project at a commit, stripped of its author's routes: traxide
+    /// routes the board, Freerouting the DSN that KiCad exports of it, and the
+    /// board as committed is judged as its author routed it.
+    fn route_project(&self, project: &Project) -> Result<Row> {
+        let name = project.name();
+        let folder = self
+            .folder
+            .join("projects")
+            .join(format!("{name}-{}", project.commit));
+        std::fs::create_dir_all(&folder)?;
+        let committed = folder.join(format!("{}.kicad_pcb", project.stem()));
+        if !committed.exists() {
+            for extension in RULE_FILES {
+                download_if_present(
+                    &project.url(extension),
+                    &committed.with_extension(extension),
+                )?;
+            }
+            download(&project.url("kicad_pcb"), &committed)?;
+        }
+        let stripped = folder.join("stripped.kicad_pcb");
+        std::fs::write(
+            &stripped,
+            strip_unlocked_copper(&std::fs::read_to_string(&committed)?),
+        )?;
+        for extension in RULE_FILES {
+            let rules = committed.with_extension(extension);
+            if rules.exists() {
+                std::fs::copy(&rules, stripped.with_extension(extension))?;
+            }
+        }
+        let routed = |router: &str| folder.join(format!("{router}.kicad_pcb"));
+        let judge_board = |board: &Path| judge(self.traxide, board, None);
+        let traxide_board = routed("traxide");
+        let traxide_run = traxide_route(self.traxide, &stripped, &traxide_board, self.timeout);
+        let mut row = Row {
+            board: name,
+            before: judge_board(&stripped).ok(),
+            author: Some(judge_board(&committed).map_err(|why| anyhow!(why))?),
+            traxide: attempt(traxide_run, &traxide_board, self.timeout, || {
+                judge_board(&traxide_board)
+            })?,
+            freerouting: None,
+        };
+        if let Some(command) = self.freerouting {
+            row.freerouting = Some(self.freerouting_on_project(command, &folder)?);
+        }
+        Ok(row)
+    }
+
+    /// Freerouting on the DSN that KiCad exports of `FOLDER/stripped.kicad_pcb`,
+    /// its session imported into the board by KiCad, as a user would.
+    fn freerouting_on_project(&self, command: &str, folder: &Path) -> Result<Attempt> {
+        if let Err(why) = self.kicad.export_dsn(self.root, folder, "stripped") {
+            return Ok(Attempt::Failed {
+                why: format!("KiCad exported no DSN: {}", first_line(&why.to_string())),
+            });
+        }
+        let session = folder.join("freerouting.ses");
+        let routed = folder.join("freerouting.kicad_pcb");
+        let run = freerouting_run(command, &folder.join("stripped.dsn"), &session)?;
+        attempt(run, &session, self.timeout, || {
+            self.kicad
+                .import(
+                    self.root,
+                    folder,
+                    "stripped.kicad_pcb",
+                    "freerouting.ses",
+                    "freerouting.kicad_pcb",
+                )
+                .map_err(|why| {
+                    format!(
+                        "KiCad imported no session: {}",
+                        first_line(&why.to_string())
+                    )
+                })?;
+            judge(self.traxide, &routed, None)
+        })
+    }
+}
+
+/// traxide routing `board` into `output`, negotiating for three quarters of
+/// `timeout`: real boards such as TokenBoard, and congested ones that traxide
+/// routes a second time (TRX-56), take longer than the corpus's limit, and a
+/// board stopped at the limit tells the gate nothing, so traxide stops
+/// negotiating early enough to finish within it, with what it routed by then.
+fn traxide_route(traxide: &Path, board: &Path, output: &Path, timeout: Duration) -> Command {
+    let mut run = Command::new(traxide);
+    run.arg("route")
+        .arg("--quiet")
+        .arg(board)
+        .arg("-o")
+        .arg(output)
+        .arg("--time-limit")
+        .arg((timeout * 3 / 4).as_secs().to_string());
+    run
+}
+
+fn freerouting_run(command: &str, design: &Path, session: &Path) -> Result<Command> {
+    let mut words = command.split_whitespace();
+    let mut run = Command::new(words.next().context("--freerouting names no command")?);
+    run.args(words)
+        .arg("-de")
+        .arg(design)
+        .arg("-do")
+        .arg(session)
+        .arg("--gui.enabled=false");
+    Ok(run)
 }
 
 fn boards(list: &str) -> impl Iterator<Item = &str> {
@@ -117,28 +266,48 @@ fn in_shard<'a>(
         .map(|(_, b)| b)
 }
 
-fn download(board: &str, file: &Path) -> Result<()> {
-    let url = format!("{SOURCE}{}", board.replace(' ', "%20").replace('+', "%2B"));
-    let status = Command::new("curl")
+fn download(url: &str, file: &Path) -> Result<()> {
+    ensure!(
+        download_if_present(url, file)?,
+        "downloading {url} failed: not found"
+    );
+    Ok(())
+}
+
+/// Downloads `url` into `file`; false when there is no such file.
+fn download_if_present(url: &str, file: &Path) -> Result<bool> {
+    let output = Command::new("curl")
         .args([
-            "--fail",
             "--silent",
             "--show-error",
             "--location",
+            "--write-out",
+            "%{http_code}",
             "--output",
         ])
         .arg(file)
-        .arg(&url)
-        .status()
+        .arg(url)
+        .output()
         .context("curl")?;
-    ensure!(status.success(), "downloading {url} failed");
-    Ok(())
+    let status = String::from_utf8_lossy(&output.stdout);
+    if status == "404" {
+        let _ = std::fs::remove_file(file);
+        return Ok(false);
+    }
+    ensure!(
+        output.status.success() && status == "200",
+        "downloading {url} failed: {status} {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Ok(true)
 }
 
 struct Row {
     board: String,
     /// The board as it came, before either router.
     before: Option<Judgement>,
+    /// A board committed routed, as its author routed it.
+    author: Option<Judgement>,
     traxide: Attempt,
     freerouting: Option<Attempt>,
 }
@@ -158,16 +327,15 @@ enum Attempt {
     Failed { why: String },
 }
 
-/// Runs a router and judges its session.
+/// Runs a router and, once it wrote `output`, judges what it wrote.
 fn attempt(
-    traxide: &Path,
-    board: &Path,
     mut router: Command,
-    session: &Path,
+    output: &Path,
     timeout: Duration,
+    judge_output: impl FnOnce() -> Result<Judgement, String>,
 ) -> Result<Attempt> {
-    // A session left from an earlier run must not pass for this one's.
-    let _ = std::fs::remove_file(session);
+    // An output left from an earlier run must not pass for this one's.
+    let _ = std::fs::remove_file(output);
     let started = Instant::now();
     let mut child = router
         .stdout(Stdio::null())
@@ -187,16 +355,14 @@ fn attempt(
     let stderr = child.wait_with_output()?.stderr;
     Ok(if !finished {
         Attempt::Stopped { seconds }
-    } else if !session.exists() {
+    } else if !output.exists() {
         Attempt::Failed {
             why: first_line(&String::from_utf8_lossy(&stderr)),
         }
     } else {
-        match judge(traxide, board, Some(session)) {
+        match judge_output() {
             Ok(judgement) => Attempt::Judged { seconds, judgement },
-            Err(why) => Attempt::Failed {
-                why: quoting_line(&why, &std::fs::read_to_string(session).unwrap_or_default()),
-            },
+            Err(why) => Attempt::Failed { why },
         }
     })
 }
@@ -269,40 +435,58 @@ impl Row {
         }
     }
 
-    fn cells(&self) -> String {
+    /// The row's cells, with one for the author's routing when the table
+    /// has that column.
+    fn cells(&self, with_author: bool) -> String {
         let mut cells = vec![self.board.clone(), self.describe(&self.traxide)];
         if let Some(freerouting) = &self.freerouting {
             cells.push(self.describe(freerouting));
+        }
+        if with_author {
+            cells.push(
+                self.author
+                    .map_or_else(|| "—".to_owned(), |author| self.result(author)),
+            );
         }
         format!("| {} |", cells.join(" | "))
     }
 
     /// Time, complete nets, and the rules broken beyond those the board broke.
     fn describe(&self, attempt: &Attempt) -> String {
-        let broken_before = self.before.map_or(0, |b| b.violations);
         match attempt {
-            Attempt::Judged { seconds, judgement } => format!(
-                "{seconds:.1} s, {} of {} nets, {} rules broken",
-                judgement.nets - judgement.incomplete_nets,
-                judgement.nets,
-                judgement.violations.saturating_sub(broken_before)
-            ),
+            Attempt::Judged { seconds, judgement } => {
+                format!("{seconds:.1} s, {}", self.result(*judgement))
+            }
             Attempt::Stopped { seconds } => format!("stopped after {seconds:.0} s"),
             Attempt::Failed { why } => format!("failed: {why}"),
         }
     }
+
+    fn result(&self, judgement: Judgement) -> String {
+        let broken_before = self.before.map_or(0, |b| b.violations);
+        format!(
+            "{} of {} nets, {} rules broken",
+            judgement.nets - judgement.incomplete_nets,
+            judgement.nets,
+            judgement.violations.saturating_sub(broken_before)
+        )
+    }
 }
 
 fn table(rows: &[Row], with_freerouting: bool) -> String {
+    let with_author = rows.iter().any(|row| row.author.is_some());
+    let mut columns = vec!["Board", "traxide"];
+    if with_freerouting {
+        columns.push("Freerouting");
+    }
+    if with_author {
+        columns.push("Routed by its author");
+    }
     let mut lines = vec![
-        if with_freerouting {
-            "| Board | traxide | Freerouting |\n| --- | --- | --- |"
-        } else {
-            "| Board | traxide |\n| --- | --- |"
-        }
-        .to_owned(),
+        format!("| {} |", columns.join(" | ")),
+        format!("|{}", " --- |".repeat(columns.len())),
     ];
-    lines.extend(rows.iter().map(Row::cells));
+    lines.extend(rows.iter().map(|row| row.cells(with_author)));
     lines.push(String::new());
     lines.push(totals("traxide", rows.iter().map(|r| (r, &r.traxide))));
     if with_freerouting {
@@ -411,8 +595,12 @@ mod tests {
                 },
             },
             freerouting: None,
+            author: None,
         };
-        assert_eq!(row.cells(), "| b | 1.0 s, 4 of 4 nets, 0 rules broken |");
+        assert_eq!(
+            row.cells(false),
+            "| b | 1.0 s, 4 of 4 nets, 0 rules broken |"
+        );
         assert_eq!(
             row.outcome(),
             Outcome::Finished {
@@ -421,6 +609,62 @@ mod tests {
                 routed: 4,
                 rules_broken: 0
             }
+        );
+    }
+
+    #[test]
+    fn traxide_negotiates_on_every_board_for_three_quarters_of_the_limit() {
+        let run = traxide_route(
+            Path::new("traxide"),
+            Path::new("board.dsn"),
+            Path::new("board.ses"),
+            Duration::from_secs(120),
+        );
+        let args: Vec<_> = run.get_args().collect();
+        assert_eq!(
+            args,
+            [
+                "route",
+                "--quiet",
+                "board.dsn",
+                "-o",
+                "board.ses",
+                "--time-limit",
+                "90"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_board_committed_routed_shows_its_authors_routing_beside_the_routers() {
+        let judged = |incomplete_nets| Judgement {
+            nets: 9,
+            incomplete_nets,
+            violations: 1,
+        };
+        let row = |board: &str, author| Row {
+            board: board.into(),
+            before: Some(judged(9)),
+            author,
+            traxide: Attempt::Judged {
+                seconds: 2.0,
+                judgement: judged(0),
+            },
+            freerouting: Some(Attempt::Failed { why: "no".into() }),
+        };
+        let table = table(
+            &[row("tokenboard-kb", Some(judged(1))), row("fixture", None)],
+            true,
+        );
+        let lines: Vec<&str> = table.lines().take(4).collect();
+        assert_eq!(
+            lines,
+            [
+                "| Board | traxide | Freerouting | Routed by its author |",
+                "| --- | --- | --- | --- |",
+                "| tokenboard-kb | 2.0 s, 9 of 9 nets, 0 rules broken | failed: no | 8 of 9 nets, 0 rules broken |",
+                "| fixture | 2.0 s, 9 of 9 nets, 0 rules broken | failed: no | — |",
+            ]
         );
     }
 }

@@ -73,7 +73,9 @@ jobs:
         run: gh release download v2.5.0 --repo freerouting/freerouting --pattern '*.jar' --dir freerouting
         env:
           GH_TOKEN: ${{ github.token }}
-      # Boards from Freerouting's bug reports, downloaded at run time (corpus/freerouting-fixtures.txt).
+      # Boards from Freerouting's bug reports (corpus/freerouting-fixtures.txt) and KiCad
+      # projects (corpus/kicad-projects.txt), downloaded at run time. KiCad, in its Docker
+      # image, exports a project's DSN for Freerouting and imports Freerouting's session.
       - name: Route and judge
         run: |
           jar=$(ls freerouting/*.jar | head -n 1)
@@ -83,7 +85,10 @@ jobs:
         if: always()
         with:
           name: corpus-sessions-${{ matrix.shard }}
-          path: target/corpus/routed/
+          path: |
+            target/corpus/routed/
+            target/corpus/projects/*/traxide.*
+            target/corpus/projects/*/freerouting.*
           if-no-files-found: ignore
       # traxide's results, for the gate below.
       - uses: actions/upload-artifact@v4

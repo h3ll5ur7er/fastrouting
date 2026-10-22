@@ -14,13 +14,13 @@ mod search;
 
 use search::NoRoute;
 use std::cmp::Reverse;
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use traxide_contracts::geometry::{Point, Rect, Segment};
 use traxide_contracts::{
-    Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, Obstruction,
-    Plan, Profile, Routes, RoutingResult,
+    Connection, ConnectionId, ConstraintSet, Corridors, Design, Event, LayoutAccess, NetId,
+    Obstruction, Plan, Profile, Routes, RoutingResult,
 };
 use traxide_events::{CancelToken, Publisher};
 
@@ -33,6 +33,9 @@ const SCANNED_PER_BATCH_SLOT: usize = 4;
 /// four and 4 connections more in all, in a tenth less time, half on the
 /// churning boards (TRX-56).
 const STALLED_ROUNDS: usize = 2;
+
+/// Negotiating in rounds ends after this many rounds without fewer overlaps.
+const ROUNDS_WITHOUT_GAIN: usize = 4;
 
 /// How much wider each window of a search that found no way grows.
 const WIDER_WINDOW: i32 = 4;
@@ -96,6 +99,12 @@ impl<'a> Router<'a> {
     /// STALLED_ROUNDS rounds of rip-ups, as many as there are connections each,
     /// have routed no more connections than before, negotiation is going round
     /// in circles: the connections left search without ripping up any other.
+    ///
+    /// Where that leaves connections unrouted, the board is routed a second
+    /// time, settled in rounds first (`settle_in_rounds`), and the attempt that
+    /// completes more nets is kept (`Attempt::standing`): rounds route more on
+    /// congested boards but lose a
+    /// connection on some that rip-up completes, which never pay for them (TRX-56).
     pub fn route_plan(
         &mut self,
         plan: &Plan,
@@ -104,8 +113,32 @@ impl<'a> Router<'a> {
         cancel: &CancelToken,
         events: &impl Publisher<Event>,
     ) -> RoutingResult {
+        let first = self.negotiate(self.fresh(plan), plan, corridors, layout, cancel, events);
+        let best = if first.unrouted.is_empty()
+            || self.finder.profile.max_rip_ups == 0
+            || cancel.is_cancelled()
+            || self.is_past_deadline()
+        {
+            first
+        } else {
+            first.take_out(layout);
+            let mut state = self.fresh(plan);
+            self.settle_in_rounds(&mut state, plan, corridors, layout, cancel, events);
+            let second = self.negotiate(state, plan, corridors, layout, cancel, events);
+            if second.standing(plan) > first.standing(plan) {
+                second
+            } else {
+                second.take_out(layout);
+                first.put_back(layout);
+                first
+            }
+        };
+        best.into_result(plan)
+    }
+
+    fn fresh(&self, plan: &Plan) -> Negotiated {
         let total = plan.connections.len();
-        let mut state = Negotiated {
+        Negotiated {
             routed: vec![None; total],
             rip_ups: vec![0; total],
             queue: (0..total).map(ConnectionId::from_index).collect(),
@@ -113,7 +146,19 @@ impl<'a> Router<'a> {
             may_rip_up: self.finder.profile.max_rip_ups > 0,
             most_routed: 0,
             rip_ups_since_most: 0,
-        };
+        }
+    }
+
+    /// Rip-up and reroute of what `state` holds queued, until nothing is.
+    fn negotiate(
+        &mut self,
+        mut state: Negotiated,
+        plan: &Plan,
+        corridors: Option<&Corridors>,
+        layout: &mut (impl LayoutAccess + Sync),
+        cancel: &CancelToken,
+        events: &impl Publisher<Event>,
+    ) -> Attempt {
         let mut unrouted = Vec::new();
         let (mut hemmed_in, mut exits_taken, mut cut_off) = (Vec::new(), Vec::new(), Vec::new());
         while !state.queue.is_empty() {
@@ -163,26 +208,134 @@ impl<'a> Router<'a> {
                 }
             }
         }
-        let Negotiated { routed, .. } = state;
         unrouted.sort_unstable();
         for pads in [&mut hemmed_in, &mut exits_taken] {
             pads.sort_unstable();
             pads.dedup();
         }
-        let mut routes = Routes::default();
-        for found in routed.into_iter().flatten() {
-            routes.extend(found);
-        }
-        RoutingResult {
-            routes,
-            unrouted: unrouted
-                .into_iter()
-                .map(|id| plan.connections[id.index()])
-                .collect(),
+        Attempt {
+            routed: state.routed,
+            unrouted,
             hemmed_in,
             exits_taken,
             cut_off,
         }
+    }
+
+    /// Negotiated congestion in rounds, PathFinder's way: every connection takes
+    /// a route each round, overlapping others at a price that rises from round
+    /// to round, and history builds up where they meet; the connections that
+    /// overlap are routed again in the next round. When no round brings fewer
+    /// overlaps for ROUNDS_WITHOUT_GAIN rounds, the most overlapping routes are
+    /// taken out until the rest is legal, and left in the queue, with those
+    /// that found no way, for rip-up and reroute to finish: they may rip up
+    /// each other, never the routes the rounds settled.
+    fn settle_in_rounds(
+        &mut self,
+        state: &mut Negotiated,
+        plan: &Plan,
+        corridors: Option<&Corridors>,
+        layout: &mut (impl LayoutAccess + Sync),
+        cancel: &CancelToken,
+        events: &impl Publisher<Event>,
+    ) {
+        let design = self.finder.design;
+        let total = plan.connections.len();
+        let no_rip_ups = vec![0_u32; total];
+        let mut present = self.finder.profile.rip_up_cost;
+        let mut failed = Vec::new();
+        let (mut fewest_overlapping, mut rounds_without_gain) = (usize::MAX, 0);
+        loop {
+            while !state.queue.is_empty() && !cancel.is_cancelled() && !self.is_past_deadline() {
+                let batch = self.next_batch(&mut state.queue, plan, corridors);
+                let negotiation = search::Negotiation {
+                    rip_ups: &no_rip_ups,
+                    history: &state.history,
+                    present: Some(present),
+                };
+                let found = self.find_all(&batch, plan, corridors, layout, Some(negotiation));
+                for (id, found) in batch.iter().copied().zip(found) {
+                    let found = match found {
+                        Ok(found) => Some(found),
+                        Err(NoRoute::Blocked { .. }) => None,
+                        Err(NoRoute::NotFound) => {
+                            let connection = plan.connections[id.index()];
+                            self.find_wider(connection, layout, Some(negotiation))
+                        }
+                    };
+                    match found {
+                        Some(found) => {
+                            layout.add_route(id, &found);
+                            state.routed[id.index()] = Some(found);
+                            let done = state.routed.iter().filter(|r| r.is_some()).count();
+                            events.publish(Event::ConnectionRouted { done, total });
+                        }
+                        None => failed.push(id),
+                    }
+                }
+            }
+            if cancel.is_cancelled() || self.is_past_deadline() {
+                break;
+            }
+            let overlapping: Vec<ConnectionId> = (0..total)
+                .map(ConnectionId::from_index)
+                .filter(|c| {
+                    state.routed[c.index()]
+                        .as_ref()
+                        .is_some_and(|r| !routed_obstructions(layout, r).is_empty())
+                })
+                .collect();
+            if overlapping.is_empty() {
+                break;
+            }
+            if overlapping.len() < fewest_overlapping {
+                (fewest_overlapping, rounds_without_gain) = (overlapping.len(), 0);
+            } else {
+                rounds_without_gain += 1;
+                if rounds_without_gain >= ROUNDS_WITHOUT_GAIN {
+                    break;
+                }
+            }
+            for &id in &overlapping {
+                if let Some(found) = &state.routed[id.index()] {
+                    record_collisions(&mut state.history, design, layout, found);
+                }
+            }
+            for &id in &overlapping {
+                layout.remove_route(id);
+                state.routed[id.index()] = None;
+                state.queue.push_back(id);
+            }
+            present = present.saturating_mul(3) / 2;
+        }
+        // Legal at last: the routes that overlap most go, the rest stay.
+        let mut left = failed;
+        left.extend(state.queue.drain(..));
+        loop {
+            let worst = (0..total)
+                .map(ConnectionId::from_index)
+                .filter_map(|c| {
+                    let overlaps =
+                        routed_obstructions(layout, state.routed[c.index()].as_ref()?).len();
+                    (overlaps > 0).then_some((overlaps, c))
+                })
+                .max();
+            let Some((_, id)) = worst else { break };
+            layout.remove_route(id);
+            state.routed[id.index()] = None;
+            left.push(id);
+        }
+        left.sort_unstable();
+        left.dedup();
+        // The routes the rounds settled stay: the leftovers rip up only each other.
+        let max = self.finder.profile.max_rip_ups;
+        for (rip_ups, routed) in state.rip_ups.iter_mut().zip(&state.routed) {
+            if routed.is_some() {
+                *rip_ups = max;
+            }
+        }
+        state.most_routed = state.routed.iter().filter(|r| r.is_some()).count();
+        state.queue.extend(left);
     }
 
     /// A search in windows grown WIDER_WINDOW times wider each, alone, until one
@@ -432,6 +585,61 @@ impl Finder<'_> {
     }
 }
 
+/// What one way of negotiating routed, and why the rest is not.
+struct Attempt {
+    routed: Vec<Option<Routes>>,
+    unrouted: Vec<ConnectionId>,
+    hemmed_in: Vec<traxide_contracts::PadId>,
+    exits_taken: Vec<traxide_contracts::PadId>,
+    cut_off: Vec<Connection>,
+}
+
+impl Attempt {
+    /// How far it got: nets completed first, as boards are judged by them,
+    /// then connections routed.
+    fn standing(&self, plan: &Plan) -> (usize, usize) {
+        let nets: BTreeSet<NetId> = plan.connections.iter().map(|c| c.net).collect();
+        let incomplete: BTreeSet<NetId> = (plan.connections.iter().zip(&self.routed))
+            .filter(|(_, routed)| routed.is_none())
+            .map(|(connection, _)| connection.net)
+            .collect();
+        let routed = self.routed.iter().filter(|r| r.is_some()).count();
+        (nets.len() - incomplete.len(), routed)
+    }
+
+    fn take_out(&self, layout: &mut impl LayoutAccess) {
+        for (i, routed) in self.routed.iter().enumerate() {
+            if routed.is_some() {
+                layout.remove_route(ConnectionId::from_index(i));
+            }
+        }
+    }
+
+    fn put_back(&self, layout: &mut impl LayoutAccess) {
+        for (i, routed) in self.routed.iter().enumerate() {
+            if let Some(routes) = routed {
+                layout.add_route(ConnectionId::from_index(i), routes);
+            }
+        }
+    }
+
+    fn into_result(self, plan: &Plan) -> RoutingResult {
+        let mut routes = Routes::default();
+        for found in self.routed.into_iter().flatten() {
+            routes.extend(found);
+        }
+        RoutingResult {
+            routes,
+            unrouted: (self.unrouted.into_iter())
+                .map(|id| plan.connections[id.index()])
+                .collect(),
+            hemmed_in: self.hemmed_in,
+            exits_taken: self.exits_taken,
+            cut_off: self.cut_off,
+        }
+    }
+}
+
 /// Where routing stands: the routes so far and what negotiation has learnt.
 struct Negotiated {
     routed: Vec<Option<Routes>>,
@@ -448,6 +656,7 @@ impl Negotiated {
         self.may_rip_up.then_some(search::Negotiation {
             rip_ups: &self.rip_ups,
             history: &self.history,
+            present: None,
         })
     }
 
@@ -588,4 +797,49 @@ fn routed_obstructions(layout: &impl LayoutAccess, routes: &Routes) -> Vec<Conne
     displaced.sort_unstable();
     displaced.dedup();
     displaced
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use traxide_contracts::PadId;
+
+    fn attempt(routed: &[bool]) -> Attempt {
+        Attempt {
+            routed: routed.iter().map(|&r| r.then(Routes::default)).collect(),
+            unrouted: (0..routed.len())
+                .filter(|&i| !routed[i])
+                .map(ConnectionId::from_index)
+                .collect(),
+            hemmed_in: Vec::new(),
+            exits_taken: Vec::new(),
+            cut_off: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_attempt_that_completes_more_nets_stands_higher_than_one_that_routes_more_connections() {
+        let connection = |net| Connection {
+            net: NetId::from_index(net),
+            from: PadId::from_index(0),
+            to: PadId::from_index(1),
+        };
+        // Net 0 has four connections, net 1 one.
+        let plan = Plan {
+            connections: vec![
+                connection(0),
+                connection(0),
+                connection(0),
+                connection(0),
+                connection(1),
+            ],
+        };
+        let net_1_complete = attempt(&[true, false, false, false, true]);
+        let more_connections = attempt(&[true, true, true, false, false]);
+        assert!(net_1_complete.standing(&plan) > more_connections.standing(&plan));
+        assert!(
+            more_connections.standing(&plan)
+                > attempt(&[true, false, false, false, false]).standing(&plan)
+        );
+    }
 }

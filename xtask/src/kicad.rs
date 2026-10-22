@@ -105,6 +105,35 @@ impl Kicad {
         .map(drop)
     }
 
+    /// Exports the saved board `out/BOARD.kicad_pcb` to `out/BOARD.dsn`.
+    pub fn export_dsn(&self, root: &Path, out: &Path, board: &str) -> Result<()> {
+        self.run(
+            root,
+            out,
+            &format!("python3 roundtrip.py dsn {{out}}/{board}.kicad_pcb"),
+        )
+        .map(drop)
+    }
+
+    /// Imports `out/SESSION` into `out/BOARD` and saves the result as `out/ROUTED`.
+    pub fn import(
+        &self,
+        root: &Path,
+        out: &Path,
+        board: &str,
+        session: &str,
+        routed: &str,
+    ) -> Result<()> {
+        self.run(
+            root,
+            out,
+            &format!(
+                "python3 roundtrip.py import {{out}}/{board} {{out}}/{session} {{out}}/{routed}"
+            ),
+        )
+        .map(drop)
+    }
+
     /// Imports `out/SESSION` into the recipe's board as `out/ROUTED.kicad_pcb` and runs KiCad's DRC on it.
     pub fn judge(
         &self,

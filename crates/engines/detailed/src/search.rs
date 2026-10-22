@@ -153,6 +153,9 @@ pub(crate) struct Negotiation<'a> {
     /// How often each connection has been ripped up.
     pub(crate) rip_ups: &'a [u32],
     pub(crate) history: &'a History,
+    /// Negotiating in rounds: what overlapping a routed connection costs this
+    /// round, for each connection overlapped, which may then stay.
+    pub(crate) present: Option<i64>,
 }
 
 pub(crate) struct Search<'a, L> {
@@ -493,6 +496,9 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         match obstruction {
             Obstruction::None => Some(0),
             Obstruction::Fixed => None,
+            Obstruction::Routed(connections) if negotiation.present.is_some() => {
+                Some(negotiation.present? * connections.len() as i64)
+            }
             Obstruction::Routed(connections) => {
                 let rip_ups = negotiation.rip_ups;
                 connections
