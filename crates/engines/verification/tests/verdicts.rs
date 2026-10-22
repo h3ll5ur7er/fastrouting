@@ -438,3 +438,45 @@ fn a_plane_joins_nothing_in_a_window_cut_out_of_it() {
         }]
     );
 }
+
+#[test]
+fn copper_keeps_a_keepouts_clearance_from_it() {
+    use traxide_contracts::KeepoutScope;
+    use traxide_contracts::geometry::{Polygon, Rect, Shape};
+    // As TokenBoard's LED cut-outs come in a DSN: keepouts that ask 0.2 mm.
+    let mut design = board();
+    design.keepouts = vec![traxide_contracts::Keepout {
+        layer: None,
+        shape: Shape::Polygon(Polygon::rectangle(Rect {
+            min: at(9.0, 6.0),
+            max: at(11.0, 9.0),
+        })),
+        scope: KeepoutScope::Everything,
+        clearance: mm(0.2),
+    }];
+    // The track's edge 0.1 mm below the keepout.
+    let close = Routes {
+        tracks: vec![track(
+            &design,
+            "A",
+            0,
+            &[
+                at(2.0, 5.0),
+                at(8.0, 5.0),
+                at(8.0, 5.8),
+                at(12.0, 5.8),
+                at(12.0, 5.0),
+                at(18.0, 5.0),
+            ],
+        )],
+        vias: vec![],
+    };
+    assert!(
+        check(&design, close)
+            .violations
+            .contains(&Violation::Keepout {
+                layer: LayerId(0),
+                item: CopperItem::Track(0)
+            })
+    );
+}

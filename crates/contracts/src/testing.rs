@@ -131,6 +131,7 @@ impl DesignBuilder {
             layer: layer.map(LayerId::from_index),
             shape,
             scope,
+            clearance: 0,
         });
         self
     }

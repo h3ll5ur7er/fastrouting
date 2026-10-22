@@ -128,7 +128,7 @@ fn edge_and_keepout_violations(
         let hits_keepout = design.keepouts.iter().any(|k| {
             k.layer.is_none_or(|l| l == piece.layer)
                 && blocked_by(k.scope)
-                && piece.shape.is_closer_than(&k.shape, 0)
+                && piece.shape.is_closer_than(&k.shape, k.clearance)
         });
         if hits_keepout {
             violations.insert(Violation::Keepout {

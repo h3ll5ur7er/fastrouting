@@ -303,6 +303,7 @@ impl<'a> Reader<'a> {
                 layer: None,
                 shape,
                 scope,
+                clearance: 0,
             });
         } else {
             for &layer in layers {
@@ -310,6 +311,7 @@ impl<'a> Reader<'a> {
                     layer: Some(layer),
                     shape: shape.clone(),
                     scope,
+                    clearance: 0,
                 });
             }
         }
@@ -1068,6 +1070,7 @@ mod tests {
                 // KiCad's default hole clearance, 0.25 mm, all around.
                 shape: Shape::circle(Point::new(6 * MM, 5 * MM), 5 * MM / 2),
                 scope: KeepoutScope::Everything,
+                clearance: 0,
             }]
         );
     }

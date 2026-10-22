@@ -130,6 +130,9 @@ pub struct Keepout {
     pub layer: Option<LayerId>,
     pub shape: Shape,
     pub scope: KeepoutScope,
+    /// How far copper keeps from it: a Specctra keepout asks the clearance as
+    /// copper does, a rule area of KiCad's only that copper stays out.
+    pub clearance: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -186,10 +186,20 @@ impl<'a> DsnReader<'a> {
             }
         }
         let existing = self.wiring(&nets, &padstacks, &mut via_kinds)?;
+        // Freerouting keeps the clearance from keepouts, as from copper.
+        let clearance = rules.design.classes[rules.design.default_class.index()].clearance;
+        let keepouts = [self.keepouts()?, footprint_keepouts]
+            .concat()
+            .into_iter()
+            .map(|keepout| Keepout {
+                clearance,
+                ..keepout
+            })
+            .collect();
         Ok(Design {
             outline: self.outline()?,
             cutout_footprints: Vec::new(),
-            keepouts: [self.keepouts()?, footprint_keepouts].concat(),
+            keepouts,
             planes: self.planes(&nets)?,
             layers: self.layers,
             nets,
@@ -355,6 +365,7 @@ impl<'a> DsnReader<'a> {
                 layer: None,
                 shape,
                 scope,
+                clearance: 0,
             }];
         }
         layers
@@ -363,6 +374,7 @@ impl<'a> DsnReader<'a> {
                 layer: Some(layer),
                 shape: shape.clone(),
                 scope,
+                clearance: 0,
             })
             .collect()
     }

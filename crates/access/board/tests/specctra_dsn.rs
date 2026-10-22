@@ -234,6 +234,15 @@ fn keepouts_of_a_footprint_move_with_it() {
 }
 
 #[test]
+fn a_keepout_keeps_the_designs_default_clearance() {
+    // A Specctra keepout asks the clearance as copper does, as Freerouting
+    // keeps it; the fixture's rule asks 200.1 µm.
+    let design = two_resistors();
+    assert!(!design.keepouts.is_empty());
+    assert!(design.keepouts.iter().all(|k| k.clearance == 200_100));
+}
+
+#[test]
 fn keepouts_of_a_footprint_on_the_back_mirror_with_it() {
     let design = two_resistors();
     // R3 sits on the back, rotated by 90°: the image's (0, 1 mm) lands 1 mm to its left.

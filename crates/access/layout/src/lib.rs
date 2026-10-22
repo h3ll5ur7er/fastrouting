@@ -26,8 +26,8 @@ enum Owner {
         net: NetId,
         connection: ConnectionId,
     },
-    /// Not copper, so no clearance applies: nothing may overlap it.
-    Keepout(KeepoutScope),
+    /// Not copper: copper keeps the keepout's own clearance from it.
+    Keepout(KeepoutScope, i32),
 }
 
 #[derive(Debug, Clone)]
@@ -92,7 +92,11 @@ impl<'a> Layout<'a> {
                 None => design.layer_ids().collect(),
             };
             for layer in layers {
-                layout.insert(layer, Owner::Keepout(keepout.scope), keepout.shape.clone());
+                layout.insert(
+                    layer,
+                    Owner::Keepout(keepout.scope, keepout.clearance),
+                    keepout.shape.clone(),
+                );
             }
         }
         for (layer, net, shape) in copper_of(design, &design.existing) {
@@ -102,7 +106,13 @@ impl<'a> Layout<'a> {
     }
 
     fn insert(&mut self, layer: LayerId, owner: Owner, shape: Shape) -> usize {
-        let bounds = shape.bounds();
+        // A keepout's clearance may exceed the clearance between nets, which
+        // bounds a query's reach: its bounds take it in.
+        let reach = match owner {
+            Owner::Keepout(_, clearance) => clearance,
+            _ => 0,
+        };
+        let bounds = shape.bounds().inflated(reach);
         let id = self.obstacles.len();
         self.obstacles.push(Obstacle {
             owner,
@@ -144,9 +154,9 @@ impl<'a> Layout<'a> {
                     Some(connection),
                     self.rules.clearance(Some(other), Some(net)),
                 ),
-                Owner::Keepout(KeepoutScope::TracksOnly) if item == Item::Via => continue,
-                Owner::Keepout(KeepoutScope::ViasOnly) if item == Item::Track => continue,
-                Owner::Keepout(_) => (None, 0),
+                Owner::Keepout(KeepoutScope::TracksOnly, _) if item == Item::Via => continue,
+                Owner::Keepout(KeepoutScope::ViasOnly, _) if item == Item::Track => continue,
+                Owner::Keepout(_, clearance) => (None, clearance),
             };
             if !shape.is_closer_than(&obstacle.shape, clearance) {
                 continue;
