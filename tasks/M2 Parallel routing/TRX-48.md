@@ -29,6 +29,20 @@ What the flooding searches pay, measured on Issue015 in October 2026: the larges
 
 Tried in October 2026: such a coarse map (1 mm cells, entering a cell with routed copper of other connections costing their rip-up price, vias at their cost, Dijkstra from the target) as a floor under the straight-line estimate. It made things worse: the keyboard took 170 vias instead of 113, Issue015 expanded 20 million states instead of 9, Issue034 lost 10 connections; only Mars-64 gained (74 of 106 instead of 72, half the expansions). Charging every cell that holds routed copper overestimates, as a way can pass beside the copper inside the same cell; a map like this would have to count crossings, not cells.
 
+Tried in October 2026, as the cheapest form of a coarser graph: in open space (`is_open_around`), a search going straight leaps 4 or 8 nodes ahead instead of one, and its single straight step is left out (connections routed, vias, time, nets complete; `--time-limit 90`):
+
+| Board | Steps (today) | Leaps of 4 | Leaps of 8 |
+| --- | --- | --- | --- |
+| keyboard-tkl | 315, 101 vias, 0.96 s | 315, 127 vias, 1.88 s | 315, 113 vias, 1.16 s |
+| Issue015 | 61, 130 vias, 23 s | 61, 133 vias, 28 s | 61, 108 vias, 20 s |
+| Issue034 | 147, 216 vias, 32 s | 147, 243 vias, 67 s | 147, 170 vias, 18 s |
+| Issue110-RelayModule | 88, 84 vias, 25 s | 88, 81 vias, 12 s | 88, 79 vias, 30 s |
+| Mars-64 (Issue102) | 72 nets, 168 vias | 74 nets, 215 vias | 73 nets, 256 vias |
+| Issue066 | 221 of 266 nets | 208 nets | 213 nets |
+| Issue103-Board-Unrouted | 160 of 282 nets | 154 nets | 154 nets |
+
+Rejected: the boards that take the whole limit, the reason for this task, complete fewer nets, and elsewhere it is as often slower as faster. Bends only every 4 or 8 nodes in open space change which routes negotiation finds more than the leaps save. A graph of corners would have to keep a bend possible wherever one matters, not only where the grid of leaps allows it.
+
 Ending negotiation after two rounds without gain left the Mars-64 boards at 62 of 94 nets instead of 71; four rounds route them as completely as before ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]).
 
 Done so far: negotiation that ends when it goes round in circles ([[Benchmarks#negotiation-that-goes-round-in-circles-m2-trx-48]]), far polygon edges passed over at a glance (Issue110 in 40 s instead of 132 s), an indexed outline (three times cheaper expansions on boards with rounded corners) and one search state per node and layer instead of nine (up to 2.5 times faster), [[Benchmarks#one-state-per-node-m2-trx-48]].
