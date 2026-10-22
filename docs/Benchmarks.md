@@ -27,7 +27,7 @@ TokenBoard's custom rule lowers the edge clearance from 0.3 to 0.2 mm at the cut
 | traxide before (main) | 241 of 241 nets, no rule broken | no violation, nothing unconnected |
 | traxide now: 386 of 386 connections, 559 vias, 47 s | 241 of 241 nets, no rule broken | no violation, **1 missing VLED connection** |
 
-The missing connection is a plane join of [[TRX-58]] that the vias of ROW1, SWCLK and SWDIO wall off into an island of the VLED plane on In2.Cu; `traxide check` counts every via inside a plane's outline as joined. The routing before happened not to close that pocket. [[TRX-67]] takes it.
+The missing connection is a plane join of [[TRX-58]] walled off into an island of the VLED plane on In2.Cu: a +3V3 zone of higher priority 0.5 mm south of it, the LED148 cutout north of it, and vias of ROW1 and SWCLK east. The routing before happened not to close that pocket. Since [[TRX-67]], `traxide check` pours each plane around other nets' copper and zones as KiCad does and counts the pad unconnected too (240 of 241 nets), and the corpus's baseline for TokenBoard says so.
 
 ## A real KiCad project: TokenBoard (TRX-64)
 

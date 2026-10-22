@@ -3,7 +3,7 @@
   "boards": {
     "fixtures_Issue006-LPC18XX_43XX_SCH": {
       "outcome": "failed",
-      "why": "line 1: not a Specctra design: expected (pcb …)"
+      "why": "line 1: not a Specctra design: expected (pcb \u2026)"
     },
     "fixtures_Issue015-StackOverflow": {
       "outcome": "finished",
@@ -526,9 +526,9 @@
     },
     "tokenboard-kb": {
       "outcome": "finished",
-      "seconds": 50.1,
+      "seconds": 53.9,
       "nets": 241,
-      "routed": 241,
+      "routed": 240,
       "rules_broken": 0
     }
   }

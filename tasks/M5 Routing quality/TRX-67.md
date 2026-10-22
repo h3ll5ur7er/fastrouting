@@ -16,4 +16,6 @@ Found on TokenBoard while measuring [[TRX-62]]: traxide routed all 241 nets and 
 - [ ] Routing keeps a plane via joined: a via of another net that would cut a plane join off from the rest of the plane costs as much as crossing that join, or the pad is routed again by track
 - [ ] TokenBoard and the corpus's boards with planes: KiCad's DRC with zones refilled finds no missing connection that `traxide check` does not
 
+The whole corpus judged with the fill (October 2026, this machine, 90 s of 120): no board with planes changes but TokenBoard, now 240 of 241 nets where the old check counted 241, as KiCad's DRC finds; its baseline entry is lowered to 240 until routing keeps the join (the item above). The rest moves within what boards routed against the clock vary by from run to run.
+
 **Depends on:** [[TRX-58]]
