@@ -2,7 +2,7 @@
 id: TRX-71
 title: Keep same-net vias the hole-to-hole distance apart
 type: bug
-status: review
+status: done
 assignee: claude
 priority: high
 labels: [detailed-routing, rules, verification]
