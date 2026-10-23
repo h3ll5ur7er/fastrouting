@@ -1,5 +1,6 @@
 use crate::grid::{DIRECTIONS, Grid, Node};
 use crate::history::History;
+use crate::lanes::{self, FreeEnd};
 use crate::path::{self, Step};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -169,6 +170,9 @@ pub(crate) struct Search<'a, L> {
     connection: Connection,
     from: &'a Pad,
     to: &'a Pad,
+    /// How far from its centre the target is reached, at the free ends of its
+    /// lanes, which the estimate must not overshoot.
+    to_reach: i64,
     grid: Grid,
     diagonal: i64,
     /// What crossing routed copper costs; `None` when it may not be crossed at all.
@@ -205,6 +209,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             hole_to_hole: rules.hole_to_hole(),
             from,
             to,
+            to_reach: 0,
             grid: Grid::covering(window, profile.grid_pitch),
             diagonal: Point::new(0, 0)
                 .distance(Point::new(profile.grid_pitch, profile.grid_pitch))
@@ -227,9 +232,27 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     }
 
     pub(crate) fn run(self, scratch: &mut Scratch) -> Result<Vec<Step>, NoRoute> {
-        if let Some(direct) = self.direct_line() {
+        let reach = |pad: &Pad| {
+            lanes::free_ends(self.design, pad)
+                .iter()
+                .map(|end| pad.position.distance(end.at))
+                .max()
+        };
+        let (from_reach, to_reach) = (reach(self.from), reach(self.to));
+        if from_reach.is_none()
+            && to_reach.is_none()
+            && let Some(direct) = self.direct_line()
+        {
             return Ok(direct);
         }
+        let this = Search {
+            to_reach: to_reach.unwrap_or(0),
+            ..self
+        };
+        this.run_both_ways(from_reach.unwrap_or(0), scratch)
+    }
+
+    fn run_both_ways(self, from_reach: i64, scratch: &mut Scratch) -> Result<Vec<Step>, NoRoute> {
         let (from_access, to_access) = (self.access(self.from), self.access(self.to));
         if from_access.is_empty() || to_access.is_empty() {
             return Err(self.blocked(from_access.is_empty(), to_access.is_empty()));
@@ -242,6 +265,7 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
             let backwards = Search {
                 from: self.to,
                 to: self.from,
+                to_reach: from_reach,
                 ..self
             };
             return backwards
@@ -710,7 +734,54 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
     /// position, where that is clear, else to the nearest point of its copper,
     /// as the centre of an edge connector's pad may lie off the board; and
     /// along the pad's axes, for a centre off the grid.
+    ///
+    /// A pad with a lane of the board's wiring is reached at the lane's free
+    /// end too, which leaves no dangling stub.
     fn access(&self, pad: &Pad) -> Vec<Way> {
+        let mut ways = self.ways_onto(pad);
+        for end in lanes::free_ends(self.design, pad) {
+            ways.extend(self.ways_into_free_end(&end));
+        }
+        ways
+    }
+
+    fn ways_into_free_end(&self, end: &FreeEnd) -> Vec<Way> {
+        let around = Rect {
+            min: end.at,
+            max: end.at,
+        };
+        let mut ways = Vec::new();
+        for &layer in &end.layers {
+            if !self.design.layers[layer.index()].routable {
+                continue;
+            }
+            for node in self
+                .grid
+                .nodes_near(around, end.at)
+                .into_iter()
+                .filter(|&n| self.in_corridor(n))
+            {
+                let point = self.grid.point(node);
+                if let Some(extra) = self.track_extra(layer, Segment::new(end.at, point)) {
+                    ways.push(Way {
+                        state: State {
+                            node,
+                            layer: layer.0,
+                            heading: UNSET,
+                        },
+                        cost: end.at.distance(point) + extra,
+                        stub: Stub {
+                            anchor: end.at,
+                            bend: None,
+                        },
+                    });
+                }
+            }
+        }
+        ways
+    }
+
+    fn ways_onto(&self, pad: &Pad) -> Vec<Way> {
         let mut ways = Vec::new();
         for copper in pad
             .copper
@@ -810,6 +881,10 @@ impl<'a, L: LayoutAccess> Search<'a, L> {
         let dy = i64::from(here.y.abs_diff(self.to.position.y));
         let (long, short) = (dx.max(dy), dx.min(dy));
         let octilinear = long - short + short * self.diagonal / i64::from(self.profile.grid_pitch);
+        if self.to_reach > 0 {
+            // A lane may end on any layer, so no via is certain.
+            return (octilinear - self.to_reach).max(0);
+        }
         let via = if self.to.is_on(LayerId(state.layer)) {
             0
         } else {

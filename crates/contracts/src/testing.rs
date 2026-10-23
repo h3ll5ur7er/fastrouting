@@ -53,6 +53,7 @@ impl DesignBuilder {
                 custom: vec![],
             },
             resolution: 0,
+            outline_tolerance: 0,
             warnings: Vec::new(),
         };
         Self { design }.layers(2)

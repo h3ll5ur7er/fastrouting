@@ -212,6 +212,7 @@ impl<'a> DsnReader<'a> {
             existing,
             rules: rules.design,
             resolution: self.resolution_nm,
+            outline_tolerance: 0,
             warnings,
         })
     }

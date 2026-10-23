@@ -9,6 +9,7 @@
 
 mod grid;
 mod history;
+mod lanes;
 mod path;
 mod search;
 

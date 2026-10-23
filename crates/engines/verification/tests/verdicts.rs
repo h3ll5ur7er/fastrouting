@@ -504,3 +504,35 @@ fn vias_closer_than_the_hole_to_hole_distance_are_reported_whatever_their_nets()
         }]
     );
 }
+
+#[test]
+fn copper_keeps_the_edge_clearance_from_where_the_true_edge_may_lie() {
+    // A track exactly the edge clearance from the outline as read, which may
+    // lie up to 2 µm inside the board's true edge, as an arc read as chords.
+    let mut design = board();
+    let tolerance = 2_000;
+    let edge = mm(0.2) + mm(0.2) / 2;
+    let routes = |design: &Design| Routes {
+        tracks: vec![track(
+            design,
+            "A",
+            0,
+            &[
+                at(2.0, 5.0),
+                Point::new(mm(2.0), edge),
+                Point::new(mm(18.0), edge),
+                at(18.0, 5.0),
+            ],
+        )],
+        vias: vec![],
+    };
+    let at_the_edge = |verdict: Verdict| {
+        verdict.violations.contains(&Violation::Edge {
+            layer: LayerId(0),
+            item: CopperItem::Track(0),
+        })
+    };
+    assert!(!at_the_edge(check(&design, routes(&design))));
+    design.outline_tolerance = tolerance;
+    assert!(at_the_edge(check(&design, routes(&design))));
+}
